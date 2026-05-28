@@ -1,0 +1,109 @@
+{
+  "schema_version": "1.0.0",
+  "stage": "STAGE_09_QA",
+  "status": "generated",
+  "project_id": "video_20260528_103000_sunset_beach_girl",
+  "source_brief": "project_brief.draft.example.json",
+  "source_assembly_manifest": "assembly_manifest.example.json",
+  "created_at": "2026-05-28T10:50:00+08:00",
+  "qa_root": "example_qa",
+  "final_video_path": "example_assembly/rough_cut.mp4",
+  "qa_plan_path": "example_qa/qa_plan.md",
+  "qa_checklist_path": "example_qa/qa_checklist.json",
+  "issue_report_path": "example_qa/issue_report.md",
+  "delivery_report_path": "example_qa/delivery_report.md",
+  "delivery_manifest_path": "example_qa/delivery_manifest.json",
+  "asset_index_path": "example_qa/asset_index.json",
+  "qa_review_path": "example_qa/qa_review.md",
+  "qa_checks": [
+    {
+      "check_id": "final_video_evidence",
+      "category": "file_evidence",
+      "description": "最终视频存在且非空",
+      "status": "pass",
+      "severity": "blocker"
+    },
+    {
+      "check_id": "duration_consistency",
+      "category": "timeline",
+      "description": "时长一致性检查",
+      "status": "pass",
+      "severity": "major"
+    },
+    {
+      "check_id": "storyboard_coverage",
+      "category": "story",
+      "description": "分镜覆盖检查",
+      "status": "pass",
+      "severity": "major"
+    },
+    {
+      "check_id": "audio_presence",
+      "category": "audio",
+      "description": "音频交付检查",
+      "status": "pass",
+      "severity": "major"
+    },
+    {
+      "check_id": "subtitle_package",
+      "category": "subtitle",
+      "description": "字幕交付检查",
+      "status": "pass",
+      "severity": "minor"
+    },
+    {
+      "check_id": "delivery_package",
+      "category": "delivery",
+      "description": "交付包完整性检查",
+      "status": "pass",
+      "severity": "blocker"
+    }
+  ],
+  "issue_summary": {
+    "blocker_count": 0,
+    "major_count": 0,
+    "minor_count": 0,
+    "notes": [
+      "example QA passed"
+    ]
+  },
+  "delivery_package": {
+    "root": "example_qa/final_delivery",
+    "files": [
+      {
+        "role": "final_video",
+        "path": "example_qa/final_delivery/rough_cut.mp4",
+        "exists": true,
+        "file_size_bytes": 61
+      },
+      {
+        "role": "delivery_readme",
+        "path": "example_qa/final_delivery/README_DELIVERY.md",
+        "exists": true,
+        "file_size_bytes": 96
+      },
+      {
+        "role": "delivery_report",
+        "path": "example_qa/final_delivery/delivery_report.md",
+        "exists": true,
+        "file_size_bytes": 65
+      },
+      {
+        "role": "asset_index",
+        "path": "example_qa/final_delivery/asset_index.json",
+        "exists": true,
+        "file_size_bytes": 275
+      }
+    ],
+    "ready": true
+  },
+  "self_check": {
+    "final_video_exists": true,
+    "qa_checks_complete": true,
+    "no_blocking_issues": true,
+    "delivery_package_ready": true,
+    "project_complete_ready": true
+  },
+  "allowed_next_stage": "PROJECT_DELIVERED",
+  "errors": []
+}

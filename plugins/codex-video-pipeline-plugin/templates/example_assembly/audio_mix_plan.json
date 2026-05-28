@@ -1,0 +1,25 @@
+{
+  "project_id": "video_20260528_103000_sunset_beach_girl",
+  "audio_tracks": [
+    {
+      "audio_id": "ASM_AUD_VOICEOVER_S001",
+      "audio_type": "voiceover",
+      "source_audio_id": "AUD_VOICEOVER_S001",
+      "audio_path": "templates/example_audio/voice/S001_voiceover.wav",
+      "start_sec": 0,
+      "duration_sec": 5,
+      "volume": -6,
+      "notes": "example"
+    },
+    {
+      "audio_id": "ASM_AUD_MUSIC_BGM_MAIN",
+      "audio_type": "music",
+      "source_audio_id": "AUD_MUSIC_BGM_MAIN",
+      "audio_path": "templates/example_audio/music/BGM_MAIN.wav",
+      "start_sec": 0,
+      "duration_sec": 30,
+      "volume": -18,
+      "notes": "example"
+    }
+  ]
+}

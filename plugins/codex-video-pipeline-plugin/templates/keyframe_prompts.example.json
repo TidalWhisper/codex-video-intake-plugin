@@ -1,0 +1,252 @@
+{
+  "schema_version": "0.5.0",
+  "stage": "STAGE_04_KEYFRAME_PROMPTS",
+  "status": "draft",
+  "project_id": "video_20260528_103000_sunset_beach_girl",
+  "source_brief": "video_projects/video_20260528_103000_sunset_beach_girl/00_intake/project_brief.locked.json",
+  "source_script": "video_projects/video_20260528_103000_sunset_beach_girl/01_script/script.json",
+  "source_storyboard": "video_projects/video_20260528_103000_sunset_beach_girl/02_storyboard/storyboard.json",
+  "source_character_bible": "video_projects/video_20260528_103000_sunset_beach_girl/03_characters/character_bible.json",
+  "prompt_language": "English generation prompts with Chinese review notes",
+  "visual_strategy": {
+    "keyframe_mode": "start_and_end_keyframes_per_shot",
+    "video_mode": "image_to_video_per_shot",
+    "continuity_strategy": "reuse character consistency prompts and adjacent-shot transition requirements"
+  },
+  "shot_prompts": [
+    {
+      "shot_id": "S001",
+      "source_shot_ref": "video_projects/video_20260528_103000_sunset_beach_girl/02_storyboard/storyboard.json#S001",
+      "duration_sec": 5,
+      "characters": [
+        "CHAR_001"
+      ],
+      "scene_summary": "落日海滩：女孩沿着潮线缓慢向前走。",
+      "start_keyframe_prompt": "cinematic realistic film still, wide shot, slow tracking, 落日海滩, 女孩位于画面右侧三分线，远处海平线与落日占据背景。, the same young woman in her early 20s with long black hair and a light summer dress, warm sunset beach lighting, 安静、轻微低落, vertical 9:16 composition",
+      "end_keyframe_prompt": "cinematic realistic continuation of S001, 女孩沿着潮线缓慢向前走。, same young woman with identical face, long black hair and light summer dress, same sunset beach environment, emotionally restrained 安静、轻微低落, warm golden hour light",
+      "motion_prompt": "女孩沿着潮线缓慢向前走。; gentle natural motion, slow cinematic pacing, stable camera, subtle sea breeze, preserve character identity and clothing, keep the sunset direction consistent",
+      "camera_prompt": "wide shot, slow tracking",
+      "lighting_prompt": "warm golden sunset light, soft rim light, natural beach reflections, low contrast cinematic shadows",
+      "style_prompt": "realistic cinematic healing short film, low saturation warm color grade, natural skin texture, restrained emotion",
+      "consistency_prompt": "CHAR_001: a young woman in her early 20s, long black hair, light summer dress, soft melancholic expression, consistent face and clothing, walking alone on a sunset beach",
+      "negative_prompt": "low resolution, watermark, logo, subtitles, text artifacts, duplicate person, extra limbs, deformed hands, distorted face, inconsistent clothing, changed hairstyle, unrealistic skin, flicker, warped background",
+      "image_generation_notes": "Generate start/end keyframes for S001; preserve composition and emotional intent from storyboard.",
+      "video_generation_notes": "Generate a 5-second I2V clip; prioritize stable character identity, slow movement, and scene continuity.",
+      "dependencies": {
+        "reference_images": [
+          "03_characters/reference_images/CHAR_001_primary.png"
+        ],
+        "previous_shot_id": null,
+        "next_shot_id": "S002"
+      }
+    },
+    {
+      "shot_id": "S002",
+      "source_shot_ref": "video_projects/video_20260528_103000_sunset_beach_girl/02_storyboard/storyboard.json#S002",
+      "duration_sec": 5,
+      "characters": [
+        "CHAR_001"
+      ],
+      "scene_summary": "落日海滩：女孩停下，看向远处海面。",
+      "start_keyframe_prompt": "cinematic realistic film still, medium shot, 落日海滩, 镜头从侧面捕捉女孩停下脚步，晚霞映在脸上。, the same young woman in her early 20s with long black hair and a light summer dress, warm sunset beach lighting, 迷茫、沉思, vertical 9:16 composition",
+      "end_keyframe_prompt": "cinematic realistic continuation of S002, 女孩停下，看向远处海面。, same young woman with identical face, long black hair and light summer dress, same sunset beach environment, emotionally restrained 迷茫、沉思, warm golden hour light",
+      "motion_prompt": "女孩停下，看向远处海面。; gentle natural motion, slow cinematic pacing, stable camera, subtle sea breeze, preserve character identity and clothing, keep the sunset direction consistent",
+      "camera_prompt": "medium shot",
+      "lighting_prompt": "warm golden sunset light, soft rim light, natural beach reflections, low contrast cinematic shadows",
+      "style_prompt": "realistic cinematic healing short film, low saturation warm color grade, natural skin texture, restrained emotion",
+      "consistency_prompt": "CHAR_001: a young woman in her early 20s, long black hair, light summer dress, soft melancholic expression, consistent face and clothing, walking alone on a sunset beach",
+      "negative_prompt": "low resolution, watermark, logo, subtitles, text artifacts, duplicate person, extra limbs, deformed hands, distorted face, inconsistent clothing, changed hairstyle, unrealistic skin, flicker, warped background",
+      "image_generation_notes": "Generate start/end keyframes for S002; preserve composition and emotional intent from storyboard.",
+      "video_generation_notes": "Generate a 5-second I2V clip; prioritize stable character identity, slow movement, and scene continuity.",
+      "dependencies": {
+        "reference_images": [
+          "03_characters/reference_images/CHAR_001_primary.png"
+        ],
+        "previous_shot_id": "S001",
+        "next_shot_id": "S003"
+      }
+    },
+    {
+      "shot_id": "S003",
+      "source_shot_ref": "video_projects/video_20260528_103000_sunset_beach_girl/02_storyboard/storyboard.json#S003",
+      "duration_sec": 5,
+      "characters": [
+        "CHAR_001"
+      ],
+      "scene_summary": "沙滩近景：女孩低头，看见贝壳。",
+      "start_keyframe_prompt": "cinematic realistic film still, close-up, 沙滩近景, 沙面上的贝壳被潮水轻轻推到女孩脚边。, the same young woman in her early 20s with long black hair and a light summer dress, warm sunset beach lighting, 被触动, vertical 9:16 composition",
+      "end_keyframe_prompt": "cinematic realistic continuation of S003, 女孩低头，看见贝壳。, same young woman with identical face, long black hair and light summer dress, same sunset beach environment, emotionally restrained 被触动, warm golden hour light",
+      "motion_prompt": "女孩低头，看见贝壳。; gentle natural motion, slow cinematic pacing, stable camera, subtle sea breeze, preserve character identity and clothing, keep the sunset direction consistent",
+      "camera_prompt": "close-up",
+      "lighting_prompt": "warm golden sunset light, soft rim light, natural beach reflections, low contrast cinematic shadows",
+      "style_prompt": "realistic cinematic healing short film, low saturation warm color grade, natural skin texture, restrained emotion",
+      "consistency_prompt": "CHAR_001: a young woman in her early 20s, long black hair, light summer dress, soft melancholic expression, consistent face and clothing, walking alone on a sunset beach",
+      "negative_prompt": "low resolution, watermark, logo, subtitles, text artifacts, duplicate person, extra limbs, deformed hands, distorted face, inconsistent clothing, changed hairstyle, unrealistic skin, flicker, warped background",
+      "image_generation_notes": "Generate start/end keyframes for S003; preserve composition and emotional intent from storyboard.",
+      "video_generation_notes": "Generate a 5-second I2V clip; prioritize stable character identity, slow movement, and scene continuity.",
+      "dependencies": {
+        "reference_images": [
+          "03_characters/reference_images/CHAR_001_primary.png"
+        ],
+        "previous_shot_id": "S002",
+        "next_shot_id": "S004"
+      }
+    },
+    {
+      "shot_id": "S004",
+      "source_shot_ref": "video_projects/video_20260528_103000_sunset_beach_girl/02_storyboard/storyboard.json#S004",
+      "duration_sec": 5,
+      "characters": [
+        "CHAR_001"
+      ],
+      "scene_summary": "沙滩近景：她把贝壳握在手心。",
+      "start_keyframe_prompt": "cinematic realistic film still, insert shot / hand close-up, 沙滩近景, 女孩的手轻轻拾起贝壳，夕阳光落在指尖。, the same young woman in her early 20s with long black hair and a light summer dress, warm sunset beach lighting, 缓慢释怀, vertical 9:16 composition",
+      "end_keyframe_prompt": "cinematic realistic continuation of S004, 她把贝壳握在手心。, same young woman with identical face, long black hair and light summer dress, same sunset beach environment, emotionally restrained 缓慢释怀, warm golden hour light",
+      "motion_prompt": "她把贝壳握在手心。; gentle natural motion, slow cinematic pacing, stable camera, subtle sea breeze, preserve character identity and clothing, keep the sunset direction consistent",
+      "camera_prompt": "insert shot / hand close-up",
+      "lighting_prompt": "warm golden sunset light, soft rim light, natural beach reflections, low contrast cinematic shadows",
+      "style_prompt": "realistic cinematic healing short film, low saturation warm color grade, natural skin texture, restrained emotion",
+      "consistency_prompt": "CHAR_001: a young woman in her early 20s, long black hair, light summer dress, soft melancholic expression, consistent face and clothing, walking alone on a sunset beach",
+      "negative_prompt": "low resolution, watermark, logo, subtitles, text artifacts, duplicate person, extra limbs, deformed hands, distorted face, inconsistent clothing, changed hairstyle, unrealistic skin, flicker, warped background",
+      "image_generation_notes": "Generate start/end keyframes for S004; preserve composition and emotional intent from storyboard.",
+      "video_generation_notes": "Generate a 5-second I2V clip; prioritize stable character identity, slow movement, and scene continuity.",
+      "dependencies": {
+        "reference_images": [
+          "03_characters/reference_images/CHAR_001_primary.png"
+        ],
+        "previous_shot_id": "S003",
+        "next_shot_id": "S005"
+      }
+    },
+    {
+      "shot_id": "S005",
+      "source_shot_ref": "video_projects/video_20260528_103000_sunset_beach_girl/02_storyboard/storyboard.json#S005",
+      "duration_sec": 5,
+      "characters": [
+        "CHAR_001"
+      ],
+      "scene_summary": "落日海滩：她深呼吸，情绪从低落变得平静。",
+      "start_keyframe_prompt": "cinematic realistic film still, close-up, 落日海滩, 女孩抬头，眼中有微光，嘴角出现很轻的笑。, the same young woman in her early 20s with long black hair and a light summer dress, warm sunset beach lighting, 释怀、温柔, vertical 9:16 composition",
+      "end_keyframe_prompt": "cinematic realistic continuation of S005, 她深呼吸，情绪从低落变得平静。, same young woman with identical face, long black hair and light summer dress, same sunset beach environment, emotionally restrained 释怀、温柔, warm golden hour light",
+      "motion_prompt": "她深呼吸，情绪从低落变得平静。; gentle natural motion, slow cinematic pacing, stable camera, subtle sea breeze, preserve character identity and clothing, keep the sunset direction consistent",
+      "camera_prompt": "close-up",
+      "lighting_prompt": "warm golden sunset light, soft rim light, natural beach reflections, low contrast cinematic shadows",
+      "style_prompt": "realistic cinematic healing short film, low saturation warm color grade, natural skin texture, restrained emotion",
+      "consistency_prompt": "CHAR_001: a young woman in her early 20s, long black hair, light summer dress, soft melancholic expression, consistent face and clothing, walking alone on a sunset beach",
+      "negative_prompt": "low resolution, watermark, logo, subtitles, text artifacts, duplicate person, extra limbs, deformed hands, distorted face, inconsistent clothing, changed hairstyle, unrealistic skin, flicker, warped background",
+      "image_generation_notes": "Generate start/end keyframes for S005; preserve composition and emotional intent from storyboard.",
+      "video_generation_notes": "Generate a 5-second I2V clip; prioritize stable character identity, slow movement, and scene continuity.",
+      "dependencies": {
+        "reference_images": [
+          "03_characters/reference_images/CHAR_001_primary.png"
+        ],
+        "previous_shot_id": "S004",
+        "next_shot_id": "S006"
+      }
+    },
+    {
+      "shot_id": "S006",
+      "source_shot_ref": "video_projects/video_20260528_103000_sunset_beach_girl/02_storyboard/storyboard.json#S006",
+      "duration_sec": 5,
+      "characters": [
+        "CHAR_001"
+      ],
+      "scene_summary": "落日海滩远景：她沿着海边继续前行，身影逐渐融入晚霞。",
+      "start_keyframe_prompt": "cinematic realistic film still, wide shot, back view, 落日海滩远景, 女孩背对镜头继续向前走，落日与海面形成剪影。, the same young woman in her early 20s with long black hair and a light summer dress, warm sunset beach lighting, 希望、重新出发, vertical 9:16 composition",
+      "end_keyframe_prompt": "cinematic realistic continuation of S006, 她沿着海边继续前行，身影逐渐融入晚霞。, same young woman with identical face, long black hair and light summer dress, same sunset beach environment, emotionally restrained 希望、重新出发, warm golden hour light",
+      "motion_prompt": "她沿着海边继续前行，身影逐渐融入晚霞。; gentle natural motion, slow cinematic pacing, stable camera, subtle sea breeze, preserve character identity and clothing, keep the sunset direction consistent",
+      "camera_prompt": "wide shot, back view",
+      "lighting_prompt": "warm golden sunset light, soft rim light, natural beach reflections, low contrast cinematic shadows",
+      "style_prompt": "realistic cinematic healing short film, low saturation warm color grade, natural skin texture, restrained emotion",
+      "consistency_prompt": "CHAR_001: a young woman in her early 20s, long black hair, light summer dress, soft melancholic expression, consistent face and clothing, walking alone on a sunset beach",
+      "negative_prompt": "low resolution, watermark, logo, subtitles, text artifacts, duplicate person, extra limbs, deformed hands, distorted face, inconsistent clothing, changed hairstyle, unrealistic skin, flicker, warped background",
+      "image_generation_notes": "Generate start/end keyframes for S006; preserve composition and emotional intent from storyboard.",
+      "video_generation_notes": "Generate a 5-second I2V clip; prioritize stable character identity, slow movement, and scene continuity.",
+      "dependencies": {
+        "reference_images": [
+          "03_characters/reference_images/CHAR_001_primary.png"
+        ],
+        "previous_shot_id": "S005",
+        "next_shot_id": null
+      }
+    }
+  ],
+  "transition_prompts": [
+    {
+      "transition_id": "T001",
+      "from_shot_id": "S001",
+      "to_shot_id": "S002",
+      "transition_type": "match cut to medium shot",
+      "transition_motion_prompt": "Transition from S001 to S002 using match cut to medium shot, preserving the same girl, same beach location, sunset direction, clothing, hair movement, and emotional progression.",
+      "continuity_requirements": [
+        "same character face and hair",
+        "same light summer dress",
+        "same sunset beach environment",
+        "consistent emotional arc between adjacent shots"
+      ]
+    },
+    {
+      "transition_id": "T002",
+      "from_shot_id": "S002",
+      "to_shot_id": "S003",
+      "transition_type": "slow push-in",
+      "transition_motion_prompt": "Transition from S002 to S003 using slow push-in, preserving the same girl, same beach location, sunset direction, clothing, hair movement, and emotional progression.",
+      "continuity_requirements": [
+        "same character face and hair",
+        "same light summer dress",
+        "same sunset beach environment",
+        "consistent emotional arc between adjacent shots"
+      ]
+    },
+    {
+      "transition_id": "T003",
+      "from_shot_id": "S003",
+      "to_shot_id": "S004",
+      "transition_type": "cut on action",
+      "transition_motion_prompt": "Transition from S003 to S004 using cut on action, preserving the same girl, same beach location, sunset direction, clothing, hair movement, and emotional progression.",
+      "continuity_requirements": [
+        "same character face and hair",
+        "same light summer dress",
+        "same sunset beach environment",
+        "consistent emotional arc between adjacent shots"
+      ]
+    },
+    {
+      "transition_id": "T004",
+      "from_shot_id": "S004",
+      "to_shot_id": "S005",
+      "transition_type": "fade through sunlight",
+      "transition_motion_prompt": "Transition from S004 to S005 using fade through sunlight, preserving the same girl, same beach location, sunset direction, clothing, hair movement, and emotional progression.",
+      "continuity_requirements": [
+        "same character face and hair",
+        "same light summer dress",
+        "same sunset beach environment",
+        "consistent emotional arc between adjacent shots"
+      ]
+    },
+    {
+      "transition_id": "T005",
+      "from_shot_id": "S005",
+      "to_shot_id": "S006",
+      "transition_type": "slow fade",
+      "transition_motion_prompt": "Transition from S005 to S006 using slow fade, preserving the same girl, same beach location, sunset direction, clothing, hair movement, and emotional progression.",
+      "continuity_requirements": [
+        "same character face and hair",
+        "same light summer dress",
+        "same sunset beach environment",
+        "consistent emotional arc between adjacent shots"
+      ]
+    }
+  ],
+  "global_negative_prompt": "low resolution, watermark, logo, subtitles, text artifacts, duplicate person, extra limbs, deformed hands, distorted face, inconsistent clothing, changed hairstyle, unrealistic skin, flicker, warped background",
+  "self_check": {
+    "matches_locked_brief": true,
+    "matches_script": true,
+    "matches_storyboard": true,
+    "uses_character_consistency": true,
+    "covers_all_storyboard_shots": true,
+    "ready_for_image_generation": true,
+    "notes": []
+  },
+  "allowed_next_stage": null
+}

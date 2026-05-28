@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Stage 09 QA Manifest",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "stage",
+    "status",
+    "project_id",
+    "source_brief",
+    "source_assembly_manifest",
+    "final_video_path",
+    "qa_checks",
+    "delivery_package",
+    "issue_summary",
+    "self_check",
+    "allowed_next_stage"
+  ],
+  "properties": {
+    "stage": {
+      "const": "STAGE_09_QA"
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "in_progress",
+        "generated",
+        "confirmed"
+      ]
+    },
+    "qa_checks": {
+      "type": "array"
+    },
+    "delivery_package": {
+      "type": "object"
+    },
+    "self_check": {
+      "type": "object"
+    }
+  }
+}

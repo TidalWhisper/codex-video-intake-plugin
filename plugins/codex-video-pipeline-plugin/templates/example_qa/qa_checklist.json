@@ -1,0 +1,47 @@
+{
+  "project_id": "video_20260528_103000_sunset_beach_girl",
+  "checks": [
+    {
+      "check_id": "final_video_evidence",
+      "category": "file_evidence",
+      "description": "最终视频存在且非空",
+      "status": "pass",
+      "severity": "blocker"
+    },
+    {
+      "check_id": "duration_consistency",
+      "category": "timeline",
+      "description": "时长一致性检查",
+      "status": "pass",
+      "severity": "major"
+    },
+    {
+      "check_id": "storyboard_coverage",
+      "category": "story",
+      "description": "分镜覆盖检查",
+      "status": "pass",
+      "severity": "major"
+    },
+    {
+      "check_id": "audio_presence",
+      "category": "audio",
+      "description": "音频交付检查",
+      "status": "pass",
+      "severity": "major"
+    },
+    {
+      "check_id": "subtitle_package",
+      "category": "subtitle",
+      "description": "字幕交付检查",
+      "status": "pass",
+      "severity": "minor"
+    },
+    {
+      "check_id": "delivery_package",
+      "category": "delivery",
+      "description": "交付包完整性检查",
+      "status": "pass",
+      "severity": "blocker"
+    }
+  ]
+}

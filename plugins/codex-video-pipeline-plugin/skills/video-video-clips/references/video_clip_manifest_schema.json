@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Stage 06 Video Clip Manifest",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "stage",
+    "status",
+    "project_id",
+    "source_brief",
+    "source_storyboard",
+    "source_keyframe_prompts",
+    "source_keyframe_image_manifest",
+    "video_provider_strategy",
+    "output_root",
+    "clips_dir",
+    "jobs",
+    "summary",
+    "self_check",
+    "allowed_next_stage"
+  ],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "stage": {"const": "STAGE_06_VIDEO_CLIPS"},
+    "status": {"enum": ["draft", "in_progress", "generated", "confirmed"]},
+    "project_id": {"type": "string"},
+    "jobs": {"type": "array"}
+  }
+}

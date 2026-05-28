@@ -1,0 +1,44 @@
+{
+  "schema_version": "0.6.0",
+  "stage": "STAGE_05_KEYFRAME_IMAGES",
+  "status": "draft|confirmed",
+  "project_id": "string",
+  "source_brief": "path",
+  "source_keyframe_prompts": "path",
+  "image_provider_strategy": {
+    "primary": "openai_image|comfyui|manual|placeholder",
+    "fallback": [
+      "comfyui",
+      "manual"
+    ]
+  },
+  "jobs": [
+    {
+      "image_id": "IMG_S001_START",
+      "shot_id": "S001",
+      "frame_role": "start|end",
+      "prompt": "string",
+      "negative_prompt": "string",
+      "output_path": "path",
+      "status": "pending|succeeded|failed|skipped",
+      "provider": "string",
+      "evidence": {
+        "file_path": "path",
+        "file_exists": false,
+        "file_size_bytes": 0
+      }
+    }
+  ],
+  "summary": {
+    "shot_count": 0,
+    "expected_image_count": 0,
+    "generated_image_count": 0
+  },
+  "self_check": {
+    "covers_all_keyframe_prompts": false,
+    "has_start_and_end_for_each_shot": false,
+    "all_required_images_exist": false,
+    "ready_for_video_clip_generation": false
+  },
+  "allowed_next_stage": "STAGE_06_VIDEO_CLIPS|null"
+}

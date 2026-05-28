@@ -1,0 +1,30 @@
+{
+  "project_id": "video_20260528_103000_sunset_beach_girl",
+  "status": "generated",
+  "files": [
+    {
+      "role": "final_video",
+      "path": "example_qa/final_delivery/rough_cut.mp4",
+      "exists": true,
+      "file_size_bytes": 61
+    },
+    {
+      "role": "delivery_readme",
+      "path": "example_qa/final_delivery/README_DELIVERY.md",
+      "exists": true,
+      "file_size_bytes": 96
+    },
+    {
+      "role": "delivery_report",
+      "path": "example_qa/final_delivery/delivery_report.md",
+      "exists": true,
+      "file_size_bytes": 65
+    },
+    {
+      "role": "asset_index",
+      "path": "example_qa/final_delivery/asset_index.json",
+      "exists": true,
+      "file_size_bytes": 275
+    }
+  ]
+}

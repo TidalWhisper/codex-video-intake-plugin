@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Stage 03 Character Bible",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "stage",
+    "status",
+    "project_id",
+    "source_brief",
+    "source_script",
+    "source_storyboard",
+    "characters",
+    "reference_image_required",
+    "self_check",
+    "allowed_next_stage"
+  ]
+}

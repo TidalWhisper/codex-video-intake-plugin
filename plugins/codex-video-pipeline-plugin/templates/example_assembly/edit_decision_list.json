@@ -1,0 +1,12 @@
+{
+  "project_id": "video_20260528_103000_sunset_beach_girl",
+  "events": [
+    {
+      "event_id": "EDL_001",
+      "shot_id": "S001",
+      "timeline_in_sec": 0,
+      "timeline_out_sec": 5,
+      "duration_sec": 5
+    }
+  ]
+}

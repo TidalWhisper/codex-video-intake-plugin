@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Codex Video Intake State",
+  "type": "object",
+  "required": ["stage", "status", "current_question", "answers", "missing_required_fields"],
+  "properties": {
+    "stage": {"const": "STAGE_00_INTAKE"},
+    "status": {"enum": ["collecting", "draft_ready", "locked"]},
+    "current_question": {"type": "integer", "minimum": 1, "maximum": 9},
+    "answers": {"type": "object"},
+    "missing_required_fields": {"type": "array", "items": {"type": "string"}},
+    "updated_at": {"type": "string"}
+  }
+}

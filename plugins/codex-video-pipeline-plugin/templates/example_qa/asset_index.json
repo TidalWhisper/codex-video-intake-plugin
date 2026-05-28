@@ -1,0 +1,12 @@
+{
+  "project_id": "video_20260528_103000_sunset_beach_girl",
+  "assets": [
+    {
+      "role": "final_video",
+      "path": "example_qa/final_delivery/rough_cut.mp4",
+      "exists": true,
+      "file_size_bytes": 61
+    }
+  ],
+  "generated_at": "2026-05-28T10:50:00+08:00"
+}

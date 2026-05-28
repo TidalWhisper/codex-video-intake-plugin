@@ -1,0 +1,47 @@
+{
+  "schema_version": "0.4.0",
+  "stage": "STAGE_03_CHARACTER_BIBLE",
+  "status": "draft",
+  "project_id": "video_20260528_103000_sunset_beach_girl",
+  "source_brief": "video_projects/video_20260528_103000_sunset_beach_girl/00_intake/project_brief.locked.json",
+  "source_script": "video_projects/video_20260528_103000_sunset_beach_girl/01_script/script.json",
+  "source_storyboard": "video_projects/video_20260528_103000_sunset_beach_girl/02_storyboard/storyboard.json",
+  "characters": [
+    {
+      "character_id": "CHAR_001",
+      "name": "海边女孩",
+      "role": "main",
+      "age": "20岁出头",
+      "gender_presentation": "female",
+      "appearance": {
+        "face": "清秀自然，略带忧郁感",
+        "hair": "黑色长发，被海风轻轻吹动",
+        "body": "身形纤细，动作轻缓",
+        "clothing": "浅色夏季长裙",
+        "accessories": "无明显复杂饰品"
+      },
+      "personality": "安静、敏感、内敛，但内心有力量",
+      "emotional_arc": [
+        "孤独",
+        "回忆",
+        "释怀",
+        "平静"
+      ],
+      "voice_profile": {
+        "needed": true,
+        "suggested_voice": "年轻女性，温柔、克制、轻微伤感"
+      },
+      "visual_consistency_prompt": "a young woman in her early 20s, walking alone on a sunset beach, soft melancholic expression, long black hair, light summer dress, cinematic warm sunset lighting",
+      "negative_consistency_prompt": "different face, different hairstyle, heavy makeup, old age, childlike face, inconsistent clothing, extra people"
+    }
+  ],
+  "reference_image_required": true,
+  "self_check": {
+    "matches_locked_brief": true,
+    "matches_script": true,
+    "matches_storyboard": true,
+    "ready_for_keyframe_stage": true,
+    "notes": []
+  },
+  "allowed_next_stage": null
+}

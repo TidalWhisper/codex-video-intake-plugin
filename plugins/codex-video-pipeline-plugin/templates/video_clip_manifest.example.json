@@ -1,0 +1,81 @@
+{
+  "schema_version": "0.7.0",
+  "stage": "STAGE_06_VIDEO_CLIPS",
+  "status": "confirmed",
+  "project_id": "video_20260528_103000_sunset_beach_girl",
+  "source_brief": "project_brief.locked.json",
+  "source_storyboard": "storyboard.json",
+  "source_keyframe_prompts": "keyframe_prompts.json",
+  "source_keyframe_image_manifest": "keyframe_image_manifest.json",
+  "created_at": "2026-05-28T11:10:00+08:00",
+  "video_provider_strategy": {
+    "primary": "placeholder_test_video_generator",
+    "fallback": [
+      "manual"
+    ],
+    "execution_mode": "example",
+    "clip_duration_sec_range": [
+      5,
+      15
+    ]
+  },
+  "output_root": "example_video_clips",
+  "clips_dir": "example_video_clips",
+  "jobs": [
+    {
+      "clip_id": "CLIP_S001",
+      "shot_id": "S001",
+      "source_storyboard_ref": "storyboard.json#S001",
+      "source_prompt_ref": "keyframe_prompts.json#S001",
+      "source_keyframes": {
+        "start": "example_keyframe_images/S001_start.png",
+        "end": "example_keyframe_images/S001_end.png"
+      },
+      "source_keyframe_image_ids": {
+        "start": "IMG_S001_START",
+        "end": "IMG_S001_END"
+      },
+      "motion_prompt": "gentle natural motion, slow cinematic pacing, stable camera, subtle sea breeze",
+      "transition_in_prompt": "",
+      "transition_out_prompt": "match cut to next shot",
+      "negative_prompt": "flicker, warped face, inconsistent clothing, distorted motion",
+      "consistency_prompt": "same young woman, same sunset beach, same clothing",
+      "camera_prompt": "wide shot, slow tracking",
+      "style_prompt": "warm healing cinematic realism",
+      "duration_sec": 5,
+      "fps": 24,
+      "aspect_ratio": "9:16",
+      "resolution": "1080P",
+      "provider_priority": [
+        "placeholder_test_video_generator"
+      ],
+      "provider": "placeholder_test_video_generator",
+      "status": "succeeded",
+      "seed": 1,
+      "output_path": "example_video_clips/S001.mp4",
+      "evidence": {
+        "file_path": "example_video_clips/S001.mp4",
+        "file_exists": true,
+        "file_size_bytes": 54,
+        "created_at": "2026-05-28T11:10:00+08:00"
+      },
+      "errors": [],
+      "notes": "example placeholder video clip"
+    }
+  ],
+  "summary": {
+    "shot_count": 1,
+    "expected_clip_count": 1,
+    "generated_clip_count": 1,
+    "failed_clip_count": 0,
+    "total_duration_sec": 5
+  },
+  "self_check": {
+    "covers_all_storyboard_shots": true,
+    "has_source_start_and_end_keyframes_for_each_shot": true,
+    "all_required_clips_exist": true,
+    "ready_for_audio_stage": true,
+    "notes": []
+  },
+  "allowed_next_stage": "STAGE_07_AUDIO"
+}

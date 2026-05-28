@@ -1,0 +1,37 @@
+# Copy to config/providers.yaml and edit locally.
+# Do not commit secrets.
+
+project_root: "./video_projects"
+
+openai_image:
+  enabled: false
+  provider_name: "openai_gpt_image2"
+  model: "gpt-image-2"
+  api_key_env: "OPENAI_API_KEY"
+  output_format: "png"
+  timeout_seconds: 180
+  retry_count: 2
+
+comfyui:
+  enabled: false
+  base_url: "http://127.0.0.1:8188"
+  timeout_seconds: 600
+  retry_count: 1
+  output_dir: ""  # optional; auto-detect from /history when possible
+
+stage05_keyframe_images:
+  provider_priority:
+    - "openai_gpt_image2"
+    - "comfyui_txt2img"
+  fallback_on_failure: true
+
+stage06_video_clips:
+  provider_priority:
+    - "comfyui_ltx_i2v"
+  clip_duration_sec_min: 5
+  clip_duration_sec_max: 15
+  fps: 24
+
+stage07_audio:
+  voice_provider: "comfyui_indextts2"
+  music_provider: "local_library_or_comfyui"

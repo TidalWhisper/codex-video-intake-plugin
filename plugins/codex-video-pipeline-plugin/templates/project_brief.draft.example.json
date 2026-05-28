@@ -1,0 +1,42 @@
+{
+  "schema_version": "0.3.0",
+  "project_id": "video_20260528_103000_sunset_beach_girl",
+  "project_dir": "video_projects/video_20260528_103000_sunset_beach_girl",
+  "stage": "STAGE_00_INTAKE",
+  "status": "draft",
+  "confirmed_by_user": false,
+  "required_fields_complete": true,
+  "missing_required_fields": [],
+  "source": "Created from user-supplied Stage 00 intake answers.",
+  "user_answers": {
+    "idea": "一位20岁出头的女孩在落日余辉的海滩边散步",
+    "target_duration": "B",
+    "genre": "G",
+    "style": "I",
+    "visual_spec": "A2",
+    "characters": "A",
+    "voice": "B",
+    "music": "B",
+    "final_output": "C"
+  },
+  "normalized": {
+    "idea": "一位20岁出头的女孩在落日余辉的海滩边散步",
+    "target_duration_sec": 30,
+    "target_duration_label": "30秒",
+    "genre": "治愈",
+    "style": "温暖治愈",
+    "aspect_ratio": "9:16",
+    "aspect_ratio_label": "9:16 竖屏",
+    "resolution": "1080P",
+    "resolution_label": "1080P",
+    "characters_mode": "有固定主角/人物",
+    "characters_required": true,
+    "voice_mode": "只需要旁白",
+    "voice_required": true,
+    "music_mode": "需要",
+    "music_required": true,
+    "final_output": "剧本 + 分镜 + 关键帧提示词"
+  },
+  "allowed_next_stage": null,
+  "created_at": "2026-05-28T10:30:00+08:00"
+}

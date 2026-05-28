@@ -1,0 +1,91 @@
+{
+  "schema_version": "0.9.0",
+  "stage": "STAGE_08_ASSEMBLY",
+  "status": "generated",
+  "project_id": "video_20260528_103000_sunset_beach_girl",
+  "source_brief": "project_brief.locked.json",
+  "source_storyboard": "storyboard.json",
+  "source_video_clip_manifest": "video_clip_manifest.json",
+  "source_audio_manifest": "audio_manifest.json",
+  "created_at": "2026-05-28T10:40:00+08:00",
+  "assembly_provider_strategy": {
+    "primary": "ffmpeg",
+    "fallback": [
+      "manual"
+    ],
+    "execution_mode": "example"
+  },
+  "output_root": "templates/example_assembly",
+  "rough_cut_dir": "templates/example_assembly",
+  "temp_dir": "templates/example_assembly/temp",
+  "concat_list_path": "templates/example_assembly/ffmpeg_concat_list.txt",
+  "edit_decision_list_path": "templates/example_assembly/edit_decision_list.json",
+  "audio_mix_plan_path": "templates/example_assembly/audio_mix_plan.json",
+  "subtitle_path": "templates/example_assembly/subtitles.srt",
+  "final_output_path": "templates/example_assembly/rough_cut.mp4",
+  "timeline": [
+    {
+      "shot_id": "S001",
+      "source_clip_id": "CLIP_S001",
+      "clip_path": "templates/example_video_clips/S001.mp4",
+      "start_sec": 0,
+      "duration_sec": 5,
+      "transition_in": "cut",
+      "transition_out": "cut",
+      "notes": "example"
+    }
+  ],
+  "audio_tracks": [
+    {
+      "audio_id": "ASM_AUD_VOICEOVER_S001",
+      "audio_type": "voiceover",
+      "source_audio_id": "AUD_VOICEOVER_S001",
+      "audio_path": "templates/example_audio/voice/S001_voiceover.wav",
+      "start_sec": 0,
+      "duration_sec": 5,
+      "volume": -6,
+      "notes": "example"
+    },
+    {
+      "audio_id": "ASM_AUD_MUSIC_BGM_MAIN",
+      "audio_type": "music",
+      "source_audio_id": "AUD_MUSIC_BGM_MAIN",
+      "audio_path": "templates/example_audio/music/BGM_MAIN.wav",
+      "start_sec": 0,
+      "duration_sec": 30,
+      "volume": -18,
+      "notes": "example"
+    }
+  ],
+  "subtitle_tracks": [
+    {
+      "subtitle_id": "SUB_MAIN",
+      "path": "templates/example_assembly/subtitles.srt",
+      "format": "srt",
+      "language": "zh-CN",
+      "burn_in": false
+    }
+  ],
+  "ffmpeg_commands": [],
+  "evidence": {
+    "file_path": "templates/example_assembly/rough_cut.mp4",
+    "file_exists": true,
+    "file_size_bytes": 61,
+    "created_at": "2026-05-28T10:41:00+08:00"
+  },
+  "summary": {
+    "timeline_clip_count": 1,
+    "audio_track_count": 2,
+    "rough_cut_duration_sec": 5
+  },
+  "self_check": {
+    "has_timeline_from_confirmed_clips": true,
+    "has_audio_mix_plan": true,
+    "has_edit_decision_list": true,
+    "has_final_output_file": true,
+    "ready_for_qa_stage": true,
+    "notes": []
+  },
+  "errors": [],
+  "allowed_next_stage": "STAGE_09_QA"
+}

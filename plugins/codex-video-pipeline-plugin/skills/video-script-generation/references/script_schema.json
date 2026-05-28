@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Stage 01 Script JSON",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "stage",
+    "status",
+    "project_id",
+    "source_brief",
+    "title",
+    "logline",
+    "theme",
+    "characters",
+    "settings",
+    "duration_plan",
+    "script",
+    "self_check",
+    "allowed_next_stage"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string"
+    },
+    "stage": {
+      "const": "STAGE_01_SCRIPT_GENERATION"
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "confirmed"
+      ]
+    },
+    "project_id": {
+      "type": "string"
+    },
+    "source_brief": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "logline": {
+      "type": "string"
+    },
+    "theme": {
+      "type": "string"
+    },
+    "characters": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "settings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "duration_plan": {
+      "type": "object"
+    },
+    "script": {
+      "type": "object"
+    },
+    "self_check": {
+      "type": "object"
+    },
+    "allowed_next_stage": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}

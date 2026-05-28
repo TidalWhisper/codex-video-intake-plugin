@@ -1,0 +1,56 @@
+# Copy to config/workflow_node_mapping.yaml and edit based on your exported ComfyUI API workflows.
+
+workflows:
+  txt2img_keyframe:
+    file: "workflows/comfyui/txt2img_keyframe.workflow_api.json"
+    nodes:
+      positive_prompt:
+        node_id: "REPLACE_ME"
+        input_name: "text"
+      negative_prompt:
+        node_id: "REPLACE_ME"
+        input_name: "text"
+      seed:
+        node_id: "REPLACE_ME"
+        input_name: "seed"
+      width:
+        node_id: "REPLACE_ME"
+        input_name: "width"
+      height:
+        node_id: "REPLACE_ME"
+        input_name: "height"
+
+  i2v_ltx:
+    file: "workflows/comfyui/i2v_ltx.workflow_api.json"
+    nodes:
+      start_image:
+        node_id: "REPLACE_ME"
+        input_name: "image"
+      end_image:
+        node_id: "REPLACE_ME"
+        input_name: "image"
+      motion_prompt:
+        node_id: "REPLACE_ME"
+        input_name: "text"
+      seed:
+        node_id: "REPLACE_ME"
+        input_name: "seed"
+      frame_count:
+        node_id: "REPLACE_ME"
+        input_name: "frames"
+      fps:
+        node_id: "REPLACE_ME"
+        input_name: "fps"
+
+  indextts2:
+    file: "workflows/comfyui/indextts2.workflow_api.json"
+    nodes:
+      text:
+        node_id: "REPLACE_ME"
+        input_name: "text"
+      speaker_reference:
+        node_id: "REPLACE_ME"
+        input_name: "audio"
+      emotion:
+        node_id: "REPLACE_ME"
+        input_name: "emotion"

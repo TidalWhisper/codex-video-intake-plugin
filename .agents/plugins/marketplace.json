@@ -1,0 +1,20 @@
+{
+  "name": "local-codex-video-plugins",
+  "interface": {
+    "displayName": "Local Codex Video Plugins"
+  },
+  "plugins": [
+    {
+      "name": "codex-video-pipeline-plugin",
+      "source": {
+        "source": "local",
+        "path": "./plugins/codex-video-pipeline-plugin"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

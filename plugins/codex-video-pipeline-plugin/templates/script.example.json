@@ -1,0 +1,66 @@
+{
+  "schema_version": "0.3.0",
+  "stage": "STAGE_01_SCRIPT_GENERATION",
+  "status": "draft",
+  "project_id": "video_20260528_103000_sunset_beach_girl",
+  "source_brief": "video_projects/video_20260528_103000_sunset_beach_girl/00_intake/project_brief.locked.json",
+  "title": "落日之后",
+  "logline": "一个年轻女孩在落日海滩散步，在海浪与晚霞中与过去告别。",
+  "theme": "释怀、成长、重新出发",
+  "characters": [
+    {
+      "name": "女孩",
+      "age": "20岁出头",
+      "role": "主角"
+    }
+  ],
+  "settings": [
+    "落日余晖下的海滩"
+  ],
+  "duration_plan": {
+    "target_duration_sec": 30,
+    "target_duration_label": "30秒",
+    "beats": [
+      {
+        "start": "00:00",
+        "end": "00:06",
+        "summary": "女孩独自走在海滩边"
+      },
+      {
+        "start": "00:06",
+        "end": "00:14",
+        "summary": "她停下脚步看向海面"
+      },
+      {
+        "start": "00:14",
+        "end": "00:23",
+        "summary": "她把一枚贝壳握在手心"
+      },
+      {
+        "start": "00:23",
+        "end": "00:30",
+        "summary": "她在落日中继续向前走"
+      }
+    ]
+  },
+  "script": {
+    "format": "screenplay",
+    "voice_mode": "只需要旁白",
+    "music_mode": "需要",
+    "sections": [
+      {
+        "time": "00:00-00:06",
+        "visual": "落日余晖洒在海面，女孩沿着潮线缓慢前行。",
+        "voiceover": "有些告别，不一定要说出口。"
+      }
+    ]
+  },
+  "self_check": {
+    "matches_locked_brief": true,
+    "duration_fits": true,
+    "genre_style_fits": true,
+    "ready_for_storyboard": true,
+    "notes": []
+  },
+  "allowed_next_stage": null
+}

@@ -1,0 +1,36 @@
+{
+  "schema_version": "0.9.0",
+  "stage": "STAGE_08_ASSEMBLY",
+  "status": "draft|in_progress|generated|confirmed",
+  "project_id": "video_...",
+  "source_brief": ".../project_brief.locked.json",
+  "source_storyboard": ".../storyboard.json",
+  "source_video_clip_manifest": ".../video_clip_manifest.json",
+  "source_audio_manifest": ".../audio_manifest.json",
+  "assembly_provider_strategy": {
+    "primary": "ffmpeg",
+    "fallback": ["manual"],
+    "execution_mode": "provider_or_manual"
+  },
+  "output_root": "08_assembly",
+  "rough_cut_dir": "08_assembly/rough_cut",
+  "temp_dir": "08_assembly/temp",
+  "concat_list_path": "08_assembly/ffmpeg_concat_list.txt",
+  "edit_decision_list_path": "08_assembly/edit_decision_list.json",
+  "audio_mix_plan_path": "08_assembly/audio_mix_plan.json",
+  "subtitle_path": "08_assembly/subtitles.srt",
+  "final_output_path": "08_assembly/rough_cut/rough_cut.mp4",
+  "timeline": [],
+  "audio_tracks": [],
+  "subtitle_tracks": [],
+  "ffmpeg_commands": [],
+  "evidence": {
+    "file_path": "08_assembly/rough_cut/rough_cut.mp4",
+    "file_exists": false,
+    "file_size_bytes": 0,
+    "created_at": null
+  },
+  "summary": {},
+  "self_check": {},
+  "allowed_next_stage": null
+}

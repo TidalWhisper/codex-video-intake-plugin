@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Codex Video Project Brief - Stage 00 Intake",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "project_dir",
+    "project_id",
+    "stage",
+    "status",
+    "confirmed_by_user",
+    "required_fields_complete",
+    "missing_required_fields",
+    "source",
+    "normalized"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "Plugin/schema version, e.g. 0.2.0"
+    },
+    "project_id": {
+      "type": "string"
+    },
+    "stage": {
+      "const": "STAGE_00_INTAKE"
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "locked"
+      ]
+    },
+    "confirmed_by_user": {
+      "type": "boolean"
+    },
+    "required_fields_complete": {
+      "type": "boolean"
+    },
+    "missing_required_fields": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "source": {
+      "type": "string"
+    },
+    "user_answers": {
+      "type": "object"
+    },
+    "normalized": {
+      "type": "object",
+      "required": [
+        "idea",
+        "target_duration_sec",
+        "target_duration_label",
+        "genre",
+        "style",
+        "aspect_ratio",
+        "aspect_ratio_label",
+        "resolution",
+        "resolution_label",
+        "characters_mode",
+        "characters_required",
+        "voice_mode",
+        "voice_required",
+        "music_mode",
+        "music_required",
+        "final_output"
+      ],
+      "properties": {
+        "idea": {
+          "type": "string"
+        },
+        "target_duration_sec": {
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "target_duration_label": {
+          "type": "string"
+        },
+        "genre": {
+          "type": "string"
+        },
+        "style": {
+          "type": "string"
+        },
+        "aspect_ratio": {
+          "type": "string"
+        },
+        "aspect_ratio_label": {
+          "type": "string"
+        },
+        "characters_mode": {
+          "type": "string"
+        },
+        "characters_required": {
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "voice_mode": {
+          "type": "string"
+        },
+        "voice_required": {
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "music_mode": {
+          "type": "string"
+        },
+        "music_required": {
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "final_output": {
+          "type": "string"
+        },
+        "resolution": {
+          "type": "string"
+        },
+        "resolution_label": {
+          "type": "string"
+        }
+      }
+    },
+    "allowed_next_stage": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "created_at": {
+      "type": "string"
+    },
+    "locked_at": {
+      "type": "string"
+    },
+    "project_dir": {
+      "type": "string"
+    }
+  }
+}

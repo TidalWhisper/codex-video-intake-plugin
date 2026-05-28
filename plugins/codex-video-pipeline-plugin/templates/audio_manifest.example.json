@@ -1,0 +1,123 @@
+{
+  "schema_version": "0.8.0",
+  "stage": "STAGE_07_AUDIO",
+  "status": "generated",
+  "project_id": "video_20260528_103000_sunset_beach_girl",
+  "source_brief": "video_projects/video_20260528_103000_sunset_beach_girl/00_intake/project_brief.locked.json",
+  "source_script": "video_projects/video_20260528_103000_sunset_beach_girl/01_script/script.json",
+  "source_storyboard": "video_projects/video_20260528_103000_sunset_beach_girl/02_storyboard/storyboard.json",
+  "source_character_bible": "video_projects/video_20260528_103000_sunset_beach_girl/03_characters/character_bible.json",
+  "source_video_clip_manifest": "video_projects/video_20260528_103000_sunset_beach_girl/06_video_clips/video_clip_manifest.json",
+  "created_at": "2026-05-28T10:30:00+08:00",
+  "requirements": {
+    "voice_required": true,
+    "music_required": true,
+    "voice_mode": "只需要旁白",
+    "music_mode": "需要",
+    "include_voiceover": true,
+    "include_dialogue": false,
+    "target_duration_sec": 30
+  },
+  "voice_provider_strategy": {
+    "primary": "indextts2",
+    "fallback": [
+      "manual"
+    ],
+    "execution_mode": "provider_or_manual"
+  },
+  "music_provider_strategy": {
+    "primary": "local_music_library",
+    "fallback": [
+      "comfyui_music",
+      "manual"
+    ],
+    "execution_mode": "provider_or_manual"
+  },
+  "output_root": "templates/example_audio",
+  "voice_dir": "templates/example_audio/voice",
+  "music_dir": "templates/example_audio/music",
+  "jobs": [
+    {
+      "audio_id": "AUD_VOICEOVER_S001",
+      "audio_type": "voiceover",
+      "shot_id": "S001",
+      "source_storyboard_ref": "storyboard.json#S001",
+      "source_script_ref": "script.json",
+      "speaker_id": "NARRATOR",
+      "speaker_name": "旁白",
+      "text": "有些告别，不一定要说出口。",
+      "emotion": "安静、轻微低落",
+      "voice_profile": {
+        "suggested_voice": "年轻女性，温柔、克制、轻微伤感"
+      },
+      "target_start": "00:00",
+      "target_end": "00:05",
+      "duration_sec": 5,
+      "provider_priority": [
+        "indextts2",
+        "manual"
+      ],
+      "provider": "placeholder_test_audio_generator",
+      "status": "succeeded",
+      "output_path": "templates/example_audio/voice/S001_voiceover.wav",
+      "evidence": {
+        "file_path": "templates/example_audio/voice/S001_voiceover.wav",
+        "file_exists": true,
+        "file_size_bytes": 3244,
+        "created_at": "2026-05-28T10:31:00+08:00"
+      },
+      "errors": [],
+      "notes": ""
+    },
+    {
+      "audio_id": "AUD_MUSIC_BGM_MAIN",
+      "audio_type": "music",
+      "shot_id": null,
+      "source_storyboard_ref": "storyboard.json",
+      "source_script_ref": "script.json",
+      "speaker_id": null,
+      "speaker_name": null,
+      "text": "",
+      "music_prompt": "轻柔钢琴与海浪环境声，温暖治愈，适合落日海滩短片",
+      "emotion": "整体背景音乐",
+      "voice_profile": {},
+      "target_start": "00:00",
+      "target_end": null,
+      "duration_sec": 30,
+      "provider_priority": [
+        "local_music_library",
+        "comfyui_music",
+        "manual"
+      ],
+      "provider": "placeholder_test_audio_generator",
+      "status": "succeeded",
+      "output_path": "templates/example_audio/music/BGM_MAIN.wav",
+      "evidence": {
+        "file_path": "templates/example_audio/music/BGM_MAIN.wav",
+        "file_exists": true,
+        "file_size_bytes": 3244,
+        "created_at": "2026-05-28T10:31:00+08:00"
+      },
+      "errors": [],
+      "notes": ""
+    }
+  ],
+  "summary": {
+    "expected_voice_count": 1,
+    "generated_voice_count": 1,
+    "expected_music_count": 1,
+    "generated_music_count": 1,
+    "required_audio_count": 2,
+    "generated_audio_count": 2,
+    "total_voice_duration_sec": 5,
+    "target_total_duration_sec": 30
+  },
+  "self_check": {
+    "has_voice_tracks_for_required_lines": true,
+    "has_music_when_required": true,
+    "all_required_audio_files_exist": true,
+    "ready_for_assembly_stage": true,
+    "notes": []
+  },
+  "allowed_next_stage": "STAGE_08_ASSEMBLY"
+}

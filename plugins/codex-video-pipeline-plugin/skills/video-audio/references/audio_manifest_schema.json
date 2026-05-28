@@ -1,0 +1,29 @@
+{
+  "stage": "STAGE_07_AUDIO",
+  "required_top_level_keys": [
+    "schema_version",
+    "stage",
+    "status",
+    "project_id",
+    "requirements",
+    "voice_provider_strategy",
+    "music_provider_strategy",
+    "jobs",
+    "summary",
+    "self_check",
+    "allowed_next_stage"
+  ],
+  "required_job_keys": [
+    "audio_id",
+    "audio_type",
+    "shot_id",
+    "text",
+    "provider_priority",
+    "provider",
+    "status",
+    "output_path",
+    "evidence",
+    "errors"
+  ],
+  "notes": "Final mode requires every required audio job to have status=succeeded and an existing non-empty audio file."
+}
