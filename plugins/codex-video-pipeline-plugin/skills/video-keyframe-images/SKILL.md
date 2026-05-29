@@ -11,6 +11,8 @@ You are the Stage 05 keyframe image production controller for the Codex video pi
 
 This skill is normally called by `$video-production-pipeline` after the user confirms Stage 04. The user should not need to call this skill manually unless recovering or rerunning Stage 05.
 
+Before changing any Stage 05 ComfyUI style route, use `$video-keyframe-style-selection` and read `config/stage05_style_profiles.example.yaml`.
+
 ## Inputs
 
 Read only from the current project folder:
@@ -83,6 +85,59 @@ Preferred production provider order:
 1. OpenAI image generation, when configured and available
 2. Local ComfyUI txt2img/img2img workflow, when configured and available
 3. Manual placement of externally generated images into 05_images/keyframes/
+```
+
+OpenAI production entrypoint:
+
+```bash
+python scripts/providers/run_openai_gpt_image2.py \
+  <project_dir>/05_images/keyframe_image_manifest.json
+```
+
+This runner refreshes `05_images/openai_image_requests.json`, calls the OpenAI Images API with the configured model, writes files into `05_images/keyframes/`, and updates `keyframe_image_manifest.json`.
+
+ComfyUI txt2img fallback entrypoint:
+
+```bash
+python scripts/providers/run_comfyui_txt2img.py \
+  <project_dir>/05_images/keyframe_image_manifest.json
+```
+
+This runner reads `config/workflow_node_mapping.yaml`, loads the mapped `txt2img_keyframe.workflow_api.json`, injects prompt and image-size fields, submits the ComfyUI workflow, copies the resulting image files into `05_images/keyframes/`, and updates `keyframe_image_manifest.json`.
+
+Stage 05 ComfyUI txt2img now supports a minimal 4-route workflow split:
+
+```text
+realistic
+anime
+guofeng
+stylized
+```
+
+Current validated local stacks:
+
+- `realistic` → `Qwen 2512`
+- `anime` → `Zimage`
+- `guofeng` → `Qwen 2512 + qwen_image_gufeng LoRA`
+- `stylized` → `Qwen 2512 + illustration-1.0-qwen-image LoRA`
+
+Default behavior is auto-routing from the locked brief style plus Stage 04 prompt hints:
+
+- `realistic` → `txt2img_keyframe_realistic`
+- `anime` → `txt2img_keyframe_anime`
+- `guofeng` → `txt2img_keyframe_guofeng`
+- `stylized` → `txt2img_keyframe_stylized`
+
+The generated `keyframe_image_manifest.json` records both `style_family` and `comfyui_workflow_name` for every job.
+
+Do not assume these four routes are production-ready only because four workflow files exist. The route is only acceptable when the selected model stack is actually appropriate for that style family and a real smoke render exists.
+
+If you must force a single workflow for all jobs, pass it explicitly:
+
+```bash
+python scripts/providers/run_comfyui_txt2img.py \
+  <project_dir>/05_images/keyframe_image_manifest.json \
+  --workflow-name txt2img_keyframe_anime
 ```
 
 5. After image files exist, sync evidence:

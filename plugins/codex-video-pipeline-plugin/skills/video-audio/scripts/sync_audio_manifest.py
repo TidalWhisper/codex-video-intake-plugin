@@ -3,8 +3,26 @@
 from __future__ import annotations
 import argparse
 import json
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
+
+KNOWN_PLUGIN_ROOT_CHILDREN = {
+    "video_projects",
+    "templates",
+    "config",
+    "workflows",
+    "skills",
+    "scripts",
+    "tests",
+    "docs",
+    "prompts",
+}
+
+ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT / "scripts"))
+from pipeline_blueprints import next_stage_after  # noqa: E402
+from pipeline_core.project_state import update_project_manifest_for_stage  # noqa: E402
 
 
 def resolve(base: Path, raw: str) -> Path:
@@ -12,7 +30,34 @@ def resolve(base: Path, raw: str) -> Path:
     if p.is_absolute():
         return p
     if p.exists():
-        return p
+        return p.resolve()
+    special_roots: list[Path] = []
+    plugin_root = next(
+        (anchor.resolve() for anchor in [base.parent, *base.parents] if anchor.name == "codex-video-pipeline-plugin"),
+        None,
+    )
+    repo_root = plugin_root.parent.parent.resolve() if plugin_root and plugin_root.parent.name == "plugins" else None
+    if p.parts:
+        first = p.parts[0].lower()
+        if first == "plugins" and repo_root is not None:
+            special_roots.append(repo_root)
+        elif first in KNOWN_PLUGIN_ROOT_CHILDREN and plugin_root is not None:
+            special_roots.append(plugin_root)
+    anchors: list[Path] = []
+    seen: set[str] = set()
+    for anchor in [*special_roots, Path.cwd(), base.parent, *base.parents]:
+        key = str(anchor.resolve()).lower()
+        if key not in seen:
+            anchors.append(anchor)
+            seen.add(key)
+    for anchor in anchors:
+        candidate = (anchor / p).resolve()
+        if candidate.exists():
+            return candidate
+    for anchor in anchors:
+        candidate = (anchor / p).resolve()
+        if candidate.parent.exists():
+            return candidate
     return (base.parent / p).resolve()
 
 
@@ -23,6 +68,7 @@ def main() -> int:
     args = parser.parse_args()
     path = Path(args.manifest_json)
     data = json.loads(path.read_text(encoding="utf-8"))
+    routing = data.get("routing") if isinstance(data.get("routing"), dict) else {"legacy_mode": True}
     generated_voice = generated_music = generated_total = failed = 0
     voice_jobs = music_jobs = 0
     for job in data.get("jobs") or []:
@@ -73,9 +119,19 @@ def main() -> int:
     all_audio = generated_total == len(jobs) and (len(jobs) > 0 or (not req.get("voice_required") and not req.get("music_required")))
     self_check["all_required_audio_files_exist"] = all_audio
     self_check["ready_for_assembly_stage"] = all_audio
+    data["status"] = "generated" if all_audio else ("in_progress" if generated_total > 0 else "draft")
     data["updated_at"] = datetime.now(timezone.utc).isoformat()
     if all_audio:
-        data["allowed_next_stage"] = "STAGE_08_ASSEMBLY"
+        data["allowed_next_stage"] = next_stage_after("STAGE_07_AUDIO", routing, "STAGE_08_ASSEMBLY")
+        update_project_manifest_for_stage(
+            path,
+            current_stage="STAGE_07_AUDIO_CONFIRMED",
+            allowed_next_stage=data["allowed_next_stage"],
+            flags={"audio_confirmed": True},
+            status="active",
+        )
+    else:
+        data["allowed_next_stage"] = None
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"AUDIO MANIFEST SYNCED: {path}")
     print(f"GENERATED_AUDIO: {generated_total}")

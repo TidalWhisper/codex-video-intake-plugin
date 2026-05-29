@@ -1,0 +1,36 @@
+{
+  "11": {
+    "inputs": {
+      "filename_prefix": "audio/ComfyUI",
+      "audioUI": "",
+      "audio": [
+        "14",
+        0
+      ]
+    },
+    "class_type": "SaveAudio",
+    "_meta": {
+      "title": "Save Audio (FLAC)"
+    }
+  },
+  "14": {
+    "inputs": {
+      "lyrics": "**Lyrics:**\n[Intro: Melancholic Guzheng solo, wind blowing sound effects]\n\n[Verse 1: Traditional flute, narrative and steady]\n易水寒，白衣映残阳\n易水寒，此去路正长\n渐离击筑，声声碎肝肠\n壮士一诺，生死两茫茫\n\n[Pre-Chorus: Increasing drum beats, tense atmosphere]\n图穷匕见，寒光照秦殿\n方寸之间，乾坤欲变\n不为封侯，只为燕云愿\n这一步，便是万丈深渊\n\n[Chorus: Grand orchestral strings, emotional peak]\n刺秦！刺不破这万古的冰冷\n逆行！逆不了这乱世的浮沉\n纵使血溅长阶，魂断孤城\n亦要在史册，刻下不屈的身影\n风萧萧兮，壮士一去不复还\n\n[Verse 2: Fast-paced Pipa, urgent rhythm]\n绕柱走，惊雷起，剑影乱\n血色染，英雄泪，终遗憾\n虎狼之师，围困这孤胆\n那一掷，断了谁的江山\n\n[Bridge: Heavy percussion, dramatic tension]\n成败何足论？\n唯有这一腔热血，尚有余温\n千载后，谁在易水河畔\n再听那，不愿屈服的灵魂\n\n[Chorus: High energy, emotional peak]\n刺秦！刺不破这万古的冰冷\n逆行！逆不了这乱世的浮沉\n纵使血溅长阶，魂断孤城\n亦要在史册，刻下不屈的身影\n风萧萧兮，壮士一去不复还\n\n[Outro: Fading Erhu, lonely and desolate]\n易水依旧流，不见故人归\n残阳如血，空留一曲悲歌\n（风声渐弱...）",
+      "tags": "**Global Tags:**\nChinese Folk, Epic, Tragic, Cinematic, Guzheng, Pipa, Erhu, Heavy Drums, Slow to Fast, 85 BPM",
+      "version": "RL-oss-3B-20260123",
+      "codec_version": "oss-20260123",
+      "seed": 198694400842242,
+      "max_audio_length_seconds": 50,
+      "topk": 1,
+      "temperature": 1.5,
+      "cfg_scale": 1.5,
+      "keep_model_loaded": true,
+      "offload_mode": "auto",
+      "quantize_4bit": false
+    },
+    "class_type": "HeartMuLa_Generate",
+    "_meta": {
+      "title": "HeartMuLa Music Generator"
+    }
+  }
+}

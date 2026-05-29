@@ -79,6 +79,12 @@
     "generated_image_count": 2,
     "failed_image_count": 0
   },
+  "quality_signals": {
+    "intent_route_matches_strategy": true,
+    "style_route_matches_strategy": true,
+    "consistency_prompts_present": true,
+    "quality_targets_defined": true
+  },
   "self_check": {
     "covers_all_keyframe_prompts": true,
     "has_start_and_end_for_each_shot": true,

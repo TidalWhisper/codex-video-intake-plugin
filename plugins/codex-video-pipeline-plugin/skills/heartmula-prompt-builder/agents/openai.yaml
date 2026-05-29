@@ -1,0 +1,4 @@
+interface:
+  display_name: "HeartMuLa Prompt Builder"
+  short_description: "Build fixed-format HeartMuLa prompts"
+  default_prompt: "Use $heartmula-prompt-builder to turn story or lyrics into fixed-format HeartMuLa Global Tags + Lyrics output."

@@ -43,7 +43,22 @@ def resolve_path(base_json: Path, raw: Any) -> Path | None:
     if p.is_absolute():
         return p
     if p.exists():
-        return p
+        return p.resolve()
+    anchors: list[Path] = []
+    seen: set[str] = set()
+    for anchor in [Path.cwd(), base_json.parent, *base_json.parents]:
+        key = str(anchor.resolve()).lower()
+        if key not in seen:
+            anchors.append(anchor)
+            seen.add(key)
+    for anchor in anchors:
+        candidate = (anchor / p).resolve()
+        if candidate.exists():
+            return candidate
+    for anchor in anchors:
+        candidate = (anchor / p).resolve()
+        if candidate.parent.exists():
+            return candidate
     return (base_json.parent / p).resolve()
 
 
@@ -158,6 +173,14 @@ def validate(data: dict[str, Any], path: Path | None = None, mode: str = "final"
         for key in ["covers_all_storyboard_shots", "has_source_start_and_end_keyframes_for_each_shot", "all_required_clips_exist", "ready_for_audio_stage"]:
             if self_check.get(key) is not True:
                 errors.append(f"self_check.{key} must be true in final mode")
+    quality_signals = data.get("quality_signals")
+    if mode == "final":
+        if not isinstance(quality_signals, dict):
+            errors.append("quality_signals must be an object in final mode")
+        else:
+            for key in ["intent_route_matches_strategy", "continuity_sources_present", "performance_prompts_present", "quality_targets_defined"]:
+                if quality_signals.get(key) is not True:
+                    errors.append(f"quality_signals.{key} must be true in final mode")
     if mode == "draft" and jobs:
         warnings.append("draft video clip manifest contains planned jobs; final mode still requires generated clip files")
     return not errors, errors, warnings

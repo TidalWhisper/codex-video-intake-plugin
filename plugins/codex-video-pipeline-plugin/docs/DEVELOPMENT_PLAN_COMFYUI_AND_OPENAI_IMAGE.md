@@ -2,7 +2,7 @@
 
 包内版本：1.1.2
 
-目标：在现有 Stage 00-09 闭环基础上，把 Stage 05-07 从 placeholder 生产升级为真实 provider 生产。
+目标：在现有 Stage 00-09 闭环和已接入 provider runner 的基础上，完成本机真实环境验证、失败恢复强化和端到端稳定化。
 
 ## 一、当前基线
 
@@ -18,14 +18,17 @@
 - Stage 07：配音与背景音乐框架与 manifest 校验
 - Stage 08：粗剪合成 / FFmpeg 自动合成框架
 - Stage 09：质量检查与交付框架
+- provider 配置读取与健康检查
+- OpenAI GPT Image 2 图片生成 runner
+- ComfyUI txt2img / LTX I2V / IndexTTS2 / Music runners
+- Stage 05 → Stage 09 provider-backed 自动化测试
 
-当前未完成：
+当前仍未完全闭环：
 
-- GPT Image 2 真实调用
-- ComfyUI 真实工作流调用
-- LTX I2V 真实视频生成
-- IndexTTS2 真实配音生成
-- 音乐生成真实后端
+- 用户本机真实 workflow_api.json 与节点映射稳定沉淀
+- 用户本机 OpenAI / ComfyUI / FFmpeg 环境最终验收
+- 最小真实项目案例跑通并保留足够证据
+- fallback、失败恢复、重试和交付细节继续强化
 
 ## 二、开发总原则
 
@@ -38,7 +41,7 @@
 
 ## 三、建议版本路线
 
-### v1.2.0：Provider 配置与健康检查
+### 已完成基线：Provider 配置与健康检查
 
 新增：
 
@@ -56,7 +59,7 @@
 - 能检查 OpenAI API key 是否存在。
 - 不生成任何真实素材。
 
-### v1.3.0：OpenAI GPT Image 2 Stage 05 接入
+### 已完成基线：OpenAI GPT Image 2 Stage 05 接入
 
 新增：
 
@@ -78,7 +81,7 @@
 - final validator 通过。
 - 失败时 manifest 中记录 provider_error。
 
-### v1.4.0：ComfyUI txt2img Stage 05 fallback 接入
+### 已完成基线：ComfyUI txt2img Stage 05 fallback 接入
 
 新增：
 
@@ -98,7 +101,7 @@
 - 能定位输出图片并复制到项目目录。
 - final validator 通过。
 
-### v1.5.0：ComfyUI LTX I2V Stage 06 接入
+### 已完成基线：ComfyUI LTX I2V Stage 06 接入
 
 新增：
 
@@ -118,14 +121,15 @@
 - mp4 文件真实存在，大小大于 0。
 - `video_clip_manifest.json` final 校验通过。
 
-### v1.6.0：IndexTTS2 / 音乐 Stage 07 接入
+### 已完成基线：IndexTTS2 / 音乐 Stage 07 接入
 
 新增：
 
 - `scripts/providers/run_comfyui_indextts2.py`
 - `scripts/providers/run_comfyui_music.py`
 - `workflows/comfyui/indextts2.workflow_api.json`
-- `workflows/comfyui/music_generation.workflow_api.json`
+- `workflows/comfyui/HeartMuLa_workflow_fixed_importable.json`
+- `workflows/comfyui/AceStep_Music_Workflow.json`
 
 改造：
 
@@ -140,7 +144,7 @@
 - 需要背景音乐时 music 文件真实存在。
 - `audio_manifest.json` final 校验通过。
 
-### v1.7.0：Stage 08 FFmpeg 实战增强
+### 当前重点：Stage 08 FFmpeg 与 Stage 09 交付稳定化
 
 目标：从 placeholder/基础合成升级成更可靠的粗剪生成。
 
@@ -157,7 +161,7 @@
 - `assembly_manifest.json` 记录 ffmpeg 命令、返回码、stderr 摘要。
 - 失败时不能进入 Stage 09。
 
-### v1.8.0：全链路真实 E2E
+### 当前重点：全链路真实本机 E2E
 
 目标：从一个简单创意到粗剪交付，至少跑通一个真实本地案例。
 
@@ -179,12 +183,10 @@
    - `docs/PROVIDER_INTEGRATION_CONTRACTS.md`
    - `docs/COMFYUI_WORKFLOW_EXPORT_GUIDE.md`
 2. 执行 `prompts/codex/00-master-task-comfyui-openai-image.md`。
-3. 从 provider 配置和健康检查开始。
-4. 再接 GPT Image 2。
-5. 再接 ComfyUI txt2img。
-6. 再接 LTX I2V。
-7. 再接 IndexTTS2 和音乐。
-8. 每一步都跑 `run_all_tests.cmd`。
+3. 先跑本机前置检查和 provider health。
+4. 再用最小真实项目验证 Stage 05-09。
+5. 针对失败点补强 fallback、重试和交付稳定性。
+6. 每一步都跑 `run_all_tests.cmd`。
 
 ## 五、禁止事项
 

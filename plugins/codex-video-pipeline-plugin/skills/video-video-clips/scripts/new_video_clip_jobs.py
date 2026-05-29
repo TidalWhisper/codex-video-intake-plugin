@@ -10,10 +10,17 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT / "scripts"))
+from pipeline_core.pipeline_blueprints import routing_from_brief  # noqa: E402
+from pipeline_core.project_state import load_json_file  # noqa: E402
+from pipeline_core.quality_contracts import build_quality_contract, build_stage_quality_targets  # noqa: E402
+from pipeline_core.requirement_compiler import compile_requirements, requested_output_allows_stage, stage_meets_requested_output  # noqa: E402
+
 
 def load_json(path: Path) -> dict:
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        return load_json_file(path)
     except FileNotFoundError:
         raise SystemExit(f"ERROR: file not found: {path}")
     except json.JSONDecodeError as exc:
@@ -27,7 +34,22 @@ def resolve_path(base_json: Path, raw: str | None) -> Path | None:
     if p.is_absolute():
         return p
     if p.exists():
-        return p
+        return p.resolve()
+    anchors: list[Path] = []
+    seen: set[str] = set()
+    for anchor in [Path.cwd(), base_json.parent, *base_json.parents]:
+        key = str(anchor.resolve()).lower()
+        if key not in seen:
+            anchors.append(anchor)
+            seen.add(key)
+    for anchor in anchors:
+        candidate = (anchor / p).resolve()
+        if candidate.exists():
+            return candidate
+    for anchor in anchors:
+        candidate = (anchor / p).resolve()
+        if candidate.parent.exists():
+            return candidate
     return (base_json.parent / p).resolve()
 
 
@@ -82,6 +104,7 @@ def request_record(job: dict, provider: str) -> dict:
         "start_keyframe_path": job["source_keyframes"]["start"],
         "end_keyframe_path": job["source_keyframes"]["end"],
         "motion_prompt": job["motion_prompt"],
+        "performance_prompt": job.get("performance_prompt"),
         "negative_prompt": job["negative_prompt"],
         "duration_sec": job["duration_sec"],
         "fps": job["fps"],
@@ -93,6 +116,8 @@ def request_record(job: dict, provider: str) -> dict:
 
 
 def main(argv: list[str]) -> int:
+    allow_beyond_scope = "--allow-beyond-requested-scope" in argv
+    argv = [arg for arg in argv if arg != "--allow-beyond-requested-scope"]
     if len(argv) != 6:
         print("Usage: python new_video_clip_jobs.py <locked_brief.json> <storyboard.json> <keyframe_prompts.json> <keyframe_image_manifest.json> <video_clip_manifest.json>", file=sys.stderr)
         return 2
@@ -110,6 +135,10 @@ def main(argv: list[str]) -> int:
     if brief.get("status") != "locked" or brief.get("confirmed_by_user") is not True:
         print("ERROR: brief must be locked and confirmed_by_user=true", file=sys.stderr)
         return 1
+    compiled = compile_requirements(brief)
+    if not allow_beyond_scope and not requested_output_allows_stage("STAGE_06", compiled):
+        print("ERROR: requested output scope does not allow Stage 06. Re-run with --allow-beyond-requested-scope to override.", file=sys.stderr)
+        return 1
     if prompts.get("stage") != "STAGE_04_KEYFRAME_PROMPTS":
         print("ERROR: keyframe_prompts.stage must be STAGE_04_KEYFRAME_PROMPTS", file=sys.stderr)
         return 1
@@ -122,8 +151,14 @@ def main(argv: list[str]) -> int:
 
     project_id = brief.get("project_id") or prompts.get("project_id") or image_manifest.get("project_id") or out_path.parents[1].name
     aspect, resolution, fps = parse_visual_spec(brief)
+    quality_contract = build_quality_contract(brief, compiled)
+    quality_targets = build_stage_quality_targets("STAGE_06", quality_contract)
+    provider_priority = list((compiled.get("provider_preferences") or {}).get("stage06_provider_priority") or ["comfyui_ltx_i2v", "manual"])
     clips_dir = out_path.parent / "clips"
     clips_dir.mkdir(parents=True, exist_ok=True)
+    storyboard_ref = str(storyboard_path).replace("\\", "/")
+    prompts_ref = str(prompts_path).replace("\\", "/")
+    routing = routing_from_brief(brief)
 
     images = image_lookup(image_manifest)
     story = storyboard_lookup(storyboard)
@@ -150,8 +185,8 @@ def main(argv: list[str]) -> int:
         jobs.append({
             "clip_id": clip_id,
             "shot_id": shot_id,
-            "source_storyboard_ref": f"{str(storyboard_path).replace('\\', '/') }#{shot_id}",
-            "source_prompt_ref": f"{str(prompts_path).replace('\\', '/') }#{shot_id}",
+            "source_storyboard_ref": f"{storyboard_ref}#{shot_id}",
+            "source_prompt_ref": f"{prompts_ref}#{shot_id}",
             "source_keyframes": {
                 "start": str(start_path).replace("\\", "/"),
                 "end": str(end_path).replace("\\", "/")
@@ -161,17 +196,20 @@ def main(argv: list[str]) -> int:
                 "end": end_job.get("image_id")
             },
             "motion_prompt": shot_prompt.get("motion_prompt") or "",
+            "performance_prompt": shot_prompt.get("performance_prompt") or "",
+            "dialogue_delivery_prompt": shot_prompt.get("dialogue_delivery_prompt") or "",
             "transition_in_prompt": "",
             "transition_out_prompt": "",
             "negative_prompt": shot_prompt.get("negative_prompt") or prompts.get("global_negative_prompt") or "",
             "consistency_prompt": shot_prompt.get("consistency_prompt") or "",
             "camera_prompt": shot_prompt.get("camera_prompt") or "",
             "style_prompt": shot_prompt.get("style_prompt") or "",
+            "character_ids": shot_prompt.get("characters") or [],
             "duration_sec": duration,
             "fps": fps,
             "aspect_ratio": aspect,
             "resolution": resolution,
-            "provider_priority": ["comfyui_ltx_i2v", "manual"],
+            "provider_priority": provider_priority,
             "provider": None,
             "status": "pending",
             "seed": None,
@@ -197,6 +235,10 @@ def main(argv: list[str]) -> int:
         "source_keyframe_image_manifest": str(image_manifest_path).replace("\\", "/"),
         "created_at": datetime.now(timezone.utc).isoformat(),
         "video_provider_strategy": provider_strategy_from_brief(brief),
+        "compiled_requirements": compiled,
+        "quality_contract": quality_contract,
+        "quality_targets": quality_targets,
+        "routing": routing,
         "output_root": str(out_path.parent).replace("\\", "/"),
         "clips_dir": str(clips_dir).replace("\\", "/"),
         "jobs": jobs,
@@ -206,6 +248,12 @@ def main(argv: list[str]) -> int:
             "generated_clip_count": sum(1 for j in jobs if j["evidence"]["file_exists"]),
             "failed_clip_count": 0,
             "total_duration_sec": sum(float(j.get("duration_sec") or 0) for j in jobs)
+        },
+        "quality_signals": {
+            "intent_route_matches_strategy": routing.get("legacy_mode") or requested_output_allows_stage("STAGE_06", compiled),
+            "continuity_sources_present": all(bool((j.get("source_keyframes") or {}).get("start")) and bool((j.get("source_keyframes") or {}).get("end")) for j in jobs),
+            "performance_prompts_present": all(bool(j.get("performance_prompt") or j.get("motion_prompt")) for j in jobs),
+            "quality_targets_defined": bool(quality_targets),
         },
         "self_check": {
             "covers_all_storyboard_shots": len(jobs) == len(storyboard.get("shots") or []),

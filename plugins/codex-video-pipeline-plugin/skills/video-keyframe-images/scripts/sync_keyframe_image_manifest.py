@@ -6,13 +6,35 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+import sys
+
+ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT / "scripts"))
+from pipeline_blueprints import next_stage_after  # noqa: E402
+from pipeline_core.project_state import update_project_manifest_for_stage  # noqa: E402
+
 
 def resolve(base: Path, raw: str) -> Path:
     p = Path(raw)
     if p.is_absolute():
         return p
     if p.exists():
-        return p
+        return p.resolve()
+    anchors: list[Path] = []
+    seen: set[str] = set()
+    for anchor in [Path.cwd(), base.parent, *base.parents]:
+        key = str(anchor.resolve()).lower()
+        if key not in seen:
+            anchors.append(anchor)
+            seen.add(key)
+    for anchor in anchors:
+        candidate = (anchor / p).resolve()
+        if candidate.exists():
+            return candidate
+    for anchor in anchors:
+        candidate = (anchor / p).resolve()
+        if candidate.parent.exists():
+            return candidate
     return (base.parent / p).resolve()
 
 
@@ -23,6 +45,7 @@ def main() -> int:
     args = parser.parse_args()
     path = Path(args.manifest_json)
     data = json.loads(path.read_text(encoding="utf-8"))
+    routing = data.get("routing") if isinstance(data.get("routing"), dict) else {"legacy_mode": True}
     generated = 0
     failed = 0
     for job in data.get("jobs") or []:
@@ -60,9 +83,19 @@ def main() -> int:
     self_check["ready_for_video_clip_generation"] = all_exist
     self_check["covers_all_keyframe_prompts"] = bool(data.get("jobs"))
     self_check["has_start_and_end_for_each_shot"] = all({"start", "end"} == {j.get("frame_role") for j in data.get("jobs") or [] if j.get("shot_id") == sid} for sid in shots)
+    data["status"] = "generated" if all_exist else ("in_progress" if generated > 0 else "draft")
     data["updated_at"] = datetime.now(timezone.utc).isoformat()
     if all_exist:
-        data["allowed_next_stage"] = "STAGE_06_VIDEO_CLIPS"
+        data["allowed_next_stage"] = next_stage_after("STAGE_05_KEYFRAME_IMAGES", routing, "STAGE_06_VIDEO_CLIPS")
+        update_project_manifest_for_stage(
+            path,
+            current_stage="STAGE_05_KEYFRAME_IMAGES_CONFIRMED",
+            allowed_next_stage=data["allowed_next_stage"],
+            flags={"keyframe_images_confirmed": True},
+            status="active",
+        )
+    else:
+        data["allowed_next_stage"] = None
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"KEYFRAME IMAGE MANIFEST SYNCED: {path}")
     print(f"GENERATED_IMAGES: {generated}")

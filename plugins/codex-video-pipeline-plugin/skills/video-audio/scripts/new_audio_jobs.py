@@ -11,10 +11,17 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT / "scripts"))
+from pipeline_core.pipeline_blueprints import routing_from_brief  # noqa: E402
+from pipeline_core.project_state import load_json_file  # noqa: E402
+from pipeline_core.quality_contracts import build_quality_contract, build_stage_quality_targets  # noqa: E402
+from pipeline_core.requirement_compiler import compile_requirements, requested_output_allows_stage, stage_meets_requested_output  # noqa: E402
+
 
 def load_json(path: Path) -> dict:
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        return load_json_file(path)
     except FileNotFoundError:
         raise SystemExit(f"ERROR: file not found: {path}")
     except json.JSONDecodeError as exc:
@@ -34,12 +41,50 @@ def is_truthy(v) -> bool:
     return bool(v)
 
 
+MUSIC_PROFILE_ALIASES = {
+    "song": "song",
+    "vocal": "song",
+    "lyrics": "song",
+    "instrumental": "instrumental",
+    "pure_music": "instrumental",
+    "underscore": "underscore",
+    "bgm": "underscore",
+}
+
+SONG_PROFILE_HINTS = ("歌词", "演唱", "人声", "主唱", "歌曲", "主题曲", "song", "vocal", "lyrics")
+INSTRUMENTAL_PROFILE_HINTS = ("纯音乐", "纯器乐", "器乐", "instrumental", "pure music", "no vocal")
+UNDERSCORE_PROFILE_HINTS = ("配乐", "铺底", "背景", "bgm", "underscore", "score")
+
+
+def normalize_music_profile(value) -> str:
+    raw = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+    return MUSIC_PROFILE_ALIASES.get(raw, "")
+
+
+def infer_music_profile(*values) -> str:
+    joined = " ".join(str(value or "") for value in values).lower()
+    if any(keyword in joined for keyword in SONG_PROFILE_HINTS):
+        return "song"
+    if any(keyword in joined for keyword in INSTRUMENTAL_PROFILE_HINTS):
+        return "instrumental"
+    if any(keyword in joined for keyword in UNDERSCORE_PROFILE_HINTS):
+        return "underscore"
+    return "underscore"
+
+
 def parse_requirements(brief: dict) -> dict:
     n = norm(brief)
     voice_mode = str(n.get("voice_mode") or brief.get("voice_mode") or "")
     music_mode = str(n.get("music_mode") or brief.get("music_mode") or "")
     voice_required = is_truthy(n.get("voice_required", brief.get("voice_required", False)))
     music_required = is_truthy(n.get("music_required", brief.get("music_required", False)))
+    explicit_music_profile = (
+        normalize_music_profile(n.get("music_profile"))
+        or normalize_music_profile(brief.get("music_profile"))
+        or normalize_music_profile(n.get("acestep_profile"))
+        or normalize_music_profile(brief.get("acestep_profile"))
+    )
+    music_profile = explicit_music_profile or infer_music_profile(music_mode)
     include_voiceover = voice_required and ("旁白" in voice_mode or "voiceover" in voice_mode.lower() or not voice_mode)
     include_dialogue = voice_required and ("对白" in voice_mode or "dialogue" in voice_mode.lower())
     return {
@@ -47,6 +92,7 @@ def parse_requirements(brief: dict) -> dict:
         "music_required": music_required,
         "voice_mode": voice_mode,
         "music_mode": music_mode,
+        "music_profile": music_profile,
         "include_voiceover": include_voiceover,
         "include_dialogue": include_dialogue,
         "target_duration_sec": n.get("target_duration_sec") or brief.get("target_duration_sec") or 0,
@@ -64,6 +110,7 @@ def character_voice_profile(character_bible: dict) -> dict:
             "name": ch.get("name") or cid,
             "voice_profile": ch.get("voice_profile") or {},
             "emotional_arc": ch.get("emotional_arc") or [],
+            "performance_profile": ch.get("performance_profile") or {},
         }
     if not profiles:
         profiles["NARRATOR"] = {"character_id": "NARRATOR", "name": "旁白", "voice_profile": {"suggested_voice": "清晰、自然、贴合影片情绪"}, "emotional_arc": []}
@@ -88,13 +135,44 @@ def job_id(kind: str, shot_id: str, index: int | None = None) -> str:
     return f"AUD_{kind.upper()}_{shot_id}_{index:03d}"
 
 
-def parse_dialogue_lines(raw: str) -> list[str]:
+def parse_dialogue_lines(raw: str) -> list[dict]:
     raw = safe_text(raw)
     if not raw:
         return []
     # Split common separators but keep simple single-line dialogue intact.
     parts = [p.strip() for p in re.split(r"[\n；;]+", raw) if p.strip()]
-    return parts or [raw]
+    lines = parts or [raw]
+    result = []
+    for line in lines:
+        speaker_hint = ""
+        text = line
+        if "：" in line:
+            prefix, suffix = line.split("：", 1)
+            if suffix.strip():
+                speaker_hint = prefix.strip()
+                text = suffix.strip()
+        elif ":" in line:
+            prefix, suffix = line.split(":", 1)
+            if suffix.strip():
+                speaker_hint = prefix.strip()
+                text = suffix.strip()
+        result.append({"speaker_hint": speaker_hint, "text": text})
+    return result
+
+
+def pick_speaker_profile(speaker_hint: str, profiles: dict, narrator: dict) -> dict:
+    hint = safe_text(speaker_hint).lower()
+    if hint:
+        for profile in profiles.values():
+            name = safe_text(profile.get("name")).lower()
+            if not name:
+                continue
+            if hint == name or hint in name or name in hint:
+                return profile
+    for profile in profiles.values():
+        if profile.get("character_id") != "NARRATOR":
+            return profile
+    return narrator
 
 
 def request_record(job: dict, provider: str) -> dict:
@@ -104,9 +182,12 @@ def request_record(job: dict, provider: str) -> dict:
         "audio_type": job["audio_type"],
         "shot_id": job.get("shot_id"),
         "provider": provider,
+        "speaker_hint": job.get("speaker_hint"),
         "text": job.get("text"),
         "music_prompt": job.get("music_prompt"),
+        "music_profile": job.get("music_profile"),
         "emotion": job.get("emotion"),
+        "performance_prompt": job.get("performance_prompt"),
         "target_start": job.get("target_start"),
         "target_end": job.get("target_end"),
         "duration_sec": job.get("duration_sec"),
@@ -116,6 +197,8 @@ def request_record(job: dict, provider: str) -> dict:
 
 
 def main(argv: list[str]) -> int:
+    allow_beyond_scope = "--allow-beyond-requested-scope" in argv
+    argv = [arg for arg in argv if arg != "--allow-beyond-requested-scope"]
     if len(argv) != 7:
         print("Usage: python new_audio_jobs.py <locked_brief.json> <script.json> <storyboard.json> <character_bible.json> <video_clip_manifest.json> <audio_manifest.json>", file=sys.stderr)
         return 2
@@ -135,6 +218,10 @@ def main(argv: list[str]) -> int:
     if brief.get("status") != "locked" or brief.get("confirmed_by_user") is not True:
         print("ERROR: brief must be locked and confirmed_by_user=true", file=sys.stderr)
         return 1
+    compiled = compile_requirements(brief)
+    if not allow_beyond_scope and not requested_output_allows_stage("STAGE_07", compiled):
+        print("ERROR: requested output scope does not allow Stage 07. Re-run with --allow-beyond-requested-scope to override.", file=sys.stderr)
+        return 1
     if clip_manifest.get("stage") != "STAGE_06_VIDEO_CLIPS":
         print("ERROR: video_clip_manifest.stage must be STAGE_06_VIDEO_CLIPS", file=sys.stderr)
         return 1
@@ -143,6 +230,11 @@ def main(argv: list[str]) -> int:
         return 1
 
     requirements = parse_requirements(brief)
+    routing = routing_from_brief(brief)
+    quality_contract = build_quality_contract(brief, compiled)
+    quality_targets = build_stage_quality_targets("STAGE_07", quality_contract)
+    voice_provider_priority = list((compiled.get("provider_preferences") or {}).get("stage07_voice_provider_priority") or ["indextts2", "manual"])
+    music_provider_priority = list((compiled.get("provider_preferences") or {}).get("stage07_music_provider_priority") or ["comfyui_music", "local_music_library", "manual"])
     project_id = brief.get("project_id") or storyboard.get("project_id") or clip_manifest.get("project_id") or out_path.parents[1].name
     voice_dir = out_path.parent / "voice"
     music_dir = out_path.parent / "music"
@@ -152,6 +244,8 @@ def main(argv: list[str]) -> int:
     profiles = character_voice_profile(character_bible)
     narrator = pick_narrator_profile(profiles)
     jobs = []
+    storyboard_ref = str(storyboard_path).replace("\\", "/")
+    script_ref = str(script_path).replace("\\", "/")
 
     if requirements["voice_required"]:
         for shot in storyboard.get("shots") or []:
@@ -172,17 +266,18 @@ def main(argv: list[str]) -> int:
                         "audio_id": job_id("voiceover", shot_id),
                         "audio_type": "voiceover",
                         "shot_id": shot_id,
-                        "source_storyboard_ref": f"{str(storyboard_path).replace('\\', '/') }#{shot_id}",
-                        "source_script_ref": str(script_path).replace("\\", "/"),
+                        "source_storyboard_ref": f"{storyboard_ref}#{shot_id}",
+                        "source_script_ref": script_ref,
                         "speaker_id": narrator.get("character_id") or "NARRATOR",
                         "speaker_name": narrator.get("name") or "旁白",
                         "text": vo,
                         "emotion": emotion,
                         "voice_profile": narrator.get("voice_profile") or {},
+                        "performance_prompt": narrator.get("performance_profile") or {},
                         "target_start": shot.get("start"),
                         "target_end": shot.get("end"),
                         "duration_sec": duration,
-                        "provider_priority": ["indextts2", "manual"],
+                        "provider_priority": voice_provider_priority,
                         "provider": None,
                         "status": "pending",
                         "output_path": str(out).replace("\\", "/"),
@@ -192,22 +287,25 @@ def main(argv: list[str]) -> int:
                     })
             if requirements["include_dialogue"]:
                 for idx, line in enumerate(parse_dialogue_lines(shot.get("dialogue")), start=1):
+                    speaker = pick_speaker_profile(line.get("speaker_hint") or "", profiles, narrator)
                     out = voice_dir / f"{shot_id}_dialogue_{idx:03d}.wav"
                     jobs.append({
                         "audio_id": job_id("dialogue", shot_id, idx),
                         "audio_type": "dialogue",
                         "shot_id": shot_id,
-                        "source_storyboard_ref": f"{str(storyboard_path).replace('\\', '/') }#{shot_id}",
-                        "source_script_ref": str(script_path).replace("\\", "/"),
-                        "speaker_id": "CHAR_001",
-                        "speaker_name": "角色对白",
-                        "text": line,
+                        "source_storyboard_ref": f"{storyboard_ref}#{shot_id}",
+                        "source_script_ref": script_ref,
+                        "speaker_id": speaker.get("character_id") or "CHAR_001",
+                        "speaker_name": speaker.get("name") or "角色对白",
+                        "speaker_hint": line.get("speaker_hint") or "",
+                        "text": line.get("text") or "",
                         "emotion": emotion,
-                        "voice_profile": next(iter(profiles.values())).get("voice_profile") or {},
+                        "voice_profile": speaker.get("voice_profile") or {},
+                        "performance_prompt": speaker.get("performance_profile") or {},
                         "target_start": shot.get("start"),
                         "target_end": shot.get("end"),
                         "duration_sec": duration,
-                        "provider_priority": ["indextts2", "manual"],
+                        "provider_priority": voice_provider_priority,
                         "provider": None,
                         "status": "pending",
                         "output_path": str(out).replace("\\", "/"),
@@ -225,8 +323,8 @@ def main(argv: list[str]) -> int:
             "audio_id": "AUD_MUSIC_BGM_MAIN",
             "audio_type": "music",
             "shot_id": None,
-            "source_storyboard_ref": str(storyboard_path).replace("\\", "/"),
-            "source_script_ref": str(script_path).replace("\\", "/"),
+            "source_storyboard_ref": storyboard_ref,
+            "source_script_ref": script_ref,
             "speaker_id": None,
             "speaker_name": None,
             "text": "",
@@ -236,7 +334,8 @@ def main(argv: list[str]) -> int:
             "target_start": "00:00",
             "target_end": None,
             "duration_sec": float(target_duration or 0),
-            "provider_priority": ["local_music_library", "comfyui_music", "manual"],
+            "music_profile": requirements["music_profile"],
+            "provider_priority": music_provider_priority,
             "provider": None,
             "status": "pending",
             "output_path": str(out).replace("\\", "/"),
@@ -259,8 +358,18 @@ def main(argv: list[str]) -> int:
         "source_video_clip_manifest": str(clip_manifest_path).replace("\\", "/"),
         "created_at": datetime.now(timezone.utc).isoformat(),
         "requirements": requirements,
-        "voice_provider_strategy": {"primary": "indextts2", "fallback": ["manual"], "execution_mode": "provider_or_manual"},
-        "music_provider_strategy": {"primary": "local_music_library", "fallback": ["comfyui_music", "manual"], "execution_mode": "provider_or_manual"},
+        "compiled_requirements": compiled,
+        "quality_contract": quality_contract,
+        "quality_targets": quality_targets,
+        "routing": routing,
+        "voice_provider_strategy": {"primary": voice_provider_priority[0], "fallback": voice_provider_priority[1:], "execution_mode": "provider_or_manual"},
+        "music_provider_strategy": {
+            "primary": music_provider_priority[0] if music_provider_priority else "manual",
+            "fallback": music_provider_priority[1:] if len(music_provider_priority) > 1 else [],
+            "execution_mode": "provider_or_manual",
+            "default_profile": requirements["music_profile"],
+            "prompt_builder": "acestep",
+        },
         "output_root": str(out_path.parent).replace("\\", "/"),
         "voice_dir": str(voice_dir).replace("\\", "/"),
         "music_dir": str(music_dir).replace("\\", "/"),
@@ -274,6 +383,12 @@ def main(argv: list[str]) -> int:
             "generated_audio_count": sum(1 for j in jobs if j["evidence"]["file_exists"]),
             "total_voice_duration_sec": sum(float(j.get("duration_sec") or 0) for j in voice_jobs),
             "target_total_duration_sec": requirements.get("target_duration_sec") or storyboard.get("target_duration_sec") or 0,
+        },
+        "quality_signals": {
+            "intent_route_matches_strategy": routing.get("legacy_mode") or requested_output_allows_stage("STAGE_07", compiled),
+            "voice_direction_present": all(bool(j.get("voice_profile")) or bool(j.get("performance_prompt")) for j in voice_jobs) if voice_jobs else True,
+            "music_profile_matches_strategy": (not music_jobs) or all(j.get("music_profile") == requirements["music_profile"] for j in music_jobs),
+            "quality_targets_defined": bool(quality_targets),
         },
         "self_check": {
             "has_voice_tracks_for_required_lines": (not requirements["voice_required"]) or bool(voice_jobs),
@@ -295,6 +410,7 @@ def main(argv: list[str]) -> int:
         f"Project: `{project_id}`\n\n"
         f"Voice required: {requirements['voice_required']} ({requirements['voice_mode']})\n\n"
         f"Music required: {requirements['music_required']} ({requirements['music_mode']})\n\n"
+        f"AceStep music profile: {requirements['music_profile']}\n\n"
         f"Expected voice jobs: {len(voice_jobs)}\n\n"
         f"Expected music jobs: {len(music_jobs)}\n\n"
         "Do not mark Stage 07 complete until `audio_manifest.json` passes final validation.\n",

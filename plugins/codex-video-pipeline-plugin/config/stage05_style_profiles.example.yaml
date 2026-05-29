@@ -1,0 +1,54 @@
+style_profiles:
+  realistic:
+    status: approved
+    suitability_class: native-fit
+    workflow_name: txt2img_keyframe_realistic
+    workflow_file: workflows/comfyui/txt2img_keyframe_realistic.workflow_api.json
+    model_stack:
+      diffusion_model: Qwen/qwen_image_2512_fp8_e4m3fn.safetensors
+      clip: Qwen2.5/qwen_2.5_vl_7b_fp8_scaled.safetensors
+      vae: Qwen/qwen_image_vae.safetensors
+      loras: []
+    smoke_sample: video_projects/style_family_smoke_20260529_realistic/05_images/keyframes/S001_start.png
+    review_note: General Qwen image stack is acceptable for realistic route on this machine.
+
+  anime:
+    status: provisional
+    suitability_class: adapted-fit
+    workflow_name: txt2img_keyframe_anime
+    workflow_file: workflows/comfyui/txt2img_keyframe_anime.workflow_api.json
+    model_stack:
+      diffusion_model: Zimage/z_image_turbo_bf16.safetensors
+      clip: Zimage/qwen_3_4b.safetensors
+      vae: Zimage/ae.safetensors
+      loras: []
+    smoke_sample: video_projects/style_family_smoke_20260529_anime/05_images/keyframes/S001_start.png
+    review_note: Routed to a dedicated Zimage stack and smoke-tested locally. Usable anime output is now distinct from realistic, but composition control still needs more tuning before calling it the final best anime route.
+
+  guofeng:
+    status: approved
+    suitability_class: adapted-fit
+    workflow_name: txt2img_keyframe_guofeng
+    workflow_file: workflows/comfyui/txt2img_keyframe_guofeng.workflow_api.json
+    model_stack:
+      diffusion_model: Qwen/qwen_image_2512_fp8_e4m3fn.safetensors
+      clip: Qwen2.5/qwen_2.5_vl_7b_fp8_scaled.safetensors
+      vae: Qwen/qwen_image_vae.safetensors
+      loras:
+      - qwen-image/qwen_image_gufeng.safetensors
+    smoke_sample: video_projects/style_family_smoke_20260529_guofeng/05_images/keyframes/S001_start.png
+    review_note: Qwen base plus guofeng LoRA produced a clearly distinct ink-wash route in local smoke renders and is acceptable as the current Stage 05 guofeng production path on this machine.
+
+  stylized:
+    status: approved
+    suitability_class: adapted-fit
+    workflow_name: txt2img_keyframe_stylized
+    workflow_file: workflows/comfyui/txt2img_keyframe_stylized.workflow_api.json
+    model_stack:
+      diffusion_model: Qwen/qwen_image_2512_fp8_e4m3fn.safetensors
+      clip: Qwen2.5/qwen_2.5_vl_7b_fp8_scaled.safetensors
+      vae: Qwen/qwen_image_vae.safetensors
+      loras:
+      - qwen-image/illustration-1.0-qwen-image.safetensors
+    smoke_sample: video_projects/style_family_smoke_20260529_stylized/05_images/keyframes/S001_start.png
+    review_note: Qwen base plus illustration LoRA now produces a readable concept-art/illustration route with visible faces and strong color design, fixing the earlier overly dark output.

@@ -11,6 +11,13 @@ import zlib
 from datetime import datetime, timezone
 from pathlib import Path
 
+import sys
+
+ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT / "scripts"))
+from pipeline_blueprints import next_stage_after  # noqa: E402
+from pipeline_core.project_state import update_project_manifest_for_stage  # noqa: E402
+
 
 def png_bytes(width: int, height: int, color: tuple[int, int, int]) -> bytes:
     def chunk(tag: bytes, data: bytes) -> bytes:
@@ -32,6 +39,7 @@ def main() -> int:
     args = parser.parse_args()
     path = Path(args.manifest_json)
     data = json.loads(path.read_text(encoding="utf-8"))
+    routing = data.get("routing") if isinstance(data.get("routing"), dict) else {"legacy_mode": True}
     for job in data.get("jobs") or []:
         if not isinstance(job, dict):
             continue
@@ -60,15 +68,25 @@ def main() -> int:
         "shot_count": len({j.get("shot_id") for j in data.get("jobs") or [] if isinstance(j, dict) and j.get("shot_id")})
     })
     data.setdefault("self_check", {})
+    all_generated = generated == expected and expected > 0
     data["self_check"].update({
         "covers_all_keyframe_prompts": True,
         "has_start_and_end_for_each_shot": True,
-        "all_required_images_exist": generated == expected and expected > 0,
-        "ready_for_video_clip_generation": generated == expected and expected > 0,
+        "all_required_images_exist": all_generated,
+        "ready_for_video_clip_generation": all_generated,
     })
-    data["allowed_next_stage"] = "STAGE_06_VIDEO_CLIPS" if generated == expected and expected > 0 else None
+    data["status"] = "generated" if all_generated else ("in_progress" if generated > 0 else "draft")
+    data["allowed_next_stage"] = next_stage_after("STAGE_05_KEYFRAME_IMAGES", routing, "STAGE_06_VIDEO_CLIPS") if all_generated else None
     data["updated_at"] = datetime.now(timezone.utc).isoformat()
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    if all_generated:
+        update_project_manifest_for_stage(
+            path,
+            current_stage="STAGE_05_KEYFRAME_IMAGES_CONFIRMED",
+            allowed_next_stage=data["allowed_next_stage"],
+            flags={"keyframe_images_confirmed": True},
+            status="active",
+        )
     print(f"PLACEHOLDER KEYFRAME IMAGES GENERATED: {generated}/{expected}")
     print(f"MANIFEST UPDATED: {path}")
     return 0

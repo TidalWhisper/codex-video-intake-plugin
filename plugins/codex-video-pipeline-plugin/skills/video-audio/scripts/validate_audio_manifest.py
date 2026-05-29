@@ -10,6 +10,18 @@ import re
 from pathlib import Path
 from typing import Any
 
+KNOWN_PLUGIN_ROOT_CHILDREN = {
+    "video_projects",
+    "templates",
+    "config",
+    "workflows",
+    "skills",
+    "scripts",
+    "tests",
+    "docs",
+    "prompts",
+}
+
 REQUIRED_TOP = [
     "schema_version", "stage", "status", "project_id", "source_brief", "source_script", "source_storyboard",
     "source_character_bible", "source_video_clip_manifest", "requirements", "voice_provider_strategy", "music_provider_strategy",
@@ -36,6 +48,26 @@ def is_blank(v: Any) -> bool:
     return v is None or (isinstance(v, str) and not v.strip())
 
 
+def detect_audio_container(path: Path) -> str | None:
+    try:
+        header = path.read_bytes()[:16]
+    except OSError:
+        return None
+    if len(header) >= 12 and header[:4] == b"RIFF" and header[8:12] == b"WAVE":
+        return "wav"
+    if header[:4] == b"fLaC":
+        return "flac"
+    if header[:4] == b"OggS":
+        return "ogg"
+    if header[:3] == b"ID3":
+        return "mp3"
+    if len(header) >= 2 and header[0] == 0xFF and (header[1] & 0xE0) == 0xE0:
+        return "mp3_or_aac"
+    if len(header) >= 8 and header[4:8] == b"ftyp":
+        return "mp4_family"
+    return None
+
+
 def resolve_path(base_json: Path, raw: Any) -> Path | None:
     if not isinstance(raw, str) or not raw.strip():
         return None
@@ -43,7 +75,34 @@ def resolve_path(base_json: Path, raw: Any) -> Path | None:
     if p.is_absolute():
         return p
     if p.exists():
-        return p
+        return p.resolve()
+    special_roots: list[Path] = []
+    plugin_root = next(
+        (anchor.resolve() for anchor in [base_json.parent, *base_json.parents] if anchor.name == "codex-video-pipeline-plugin"),
+        None,
+    )
+    repo_root = plugin_root.parent.parent.resolve() if plugin_root and plugin_root.parent.name == "plugins" else None
+    if p.parts:
+        first = p.parts[0].lower()
+        if first == "plugins" and repo_root is not None:
+            special_roots.append(repo_root)
+        elif first in KNOWN_PLUGIN_ROOT_CHILDREN and plugin_root is not None:
+            special_roots.append(plugin_root)
+    anchors: list[Path] = []
+    seen: set[str] = set()
+    for anchor in [*special_roots, Path.cwd(), base_json.parent, *base_json.parents]:
+        key = str(anchor.resolve()).lower()
+        if key not in seen:
+            anchors.append(anchor)
+            seen.add(key)
+    for anchor in anchors:
+        candidate = (anchor / p).resolve()
+        if candidate.exists():
+            return candidate
+    for anchor in anchors:
+        candidate = (anchor / p).resolve()
+        if candidate.parent.exists():
+            return candidate
     return (base_json.parent / p).resolve()
 
 
@@ -131,6 +190,11 @@ def validate(data: dict[str, Any], path: Path | None = None, mode: str = "final"
                 if size <= 0:
                     errors.append(f"jobs[{idx}] audio file is empty: {resolved}")
                 else:
+                    detected_container = detect_audio_container(resolved)
+                    if resolved.suffix.lower() == ".wav" and detected_container not in {None, "wav"}:
+                        errors.append(
+                            f"jobs[{idx}] audio file has .wav extension but detected container is {detected_container}: {resolved}"
+                        )
                     generated_total += 1
                     if audio_type in {"voiceover", "dialogue"}:
                         generated_voice += 1
@@ -171,6 +235,14 @@ def validate(data: dict[str, Any], path: Path | None = None, mode: str = "final"
         for key in checks:
             if self_check.get(key) is not True:
                 errors.append(f"self_check.{key} must be true in final mode")
+    quality_signals = data.get("quality_signals")
+    if mode == "final":
+        if not isinstance(quality_signals, dict):
+            errors.append("quality_signals must be an object in final mode")
+        else:
+            for key in ["intent_route_matches_strategy", "voice_direction_present", "music_profile_matches_strategy", "quality_targets_defined"]:
+                if quality_signals.get(key) is not True:
+                    errors.append(f"quality_signals.{key} must be true in final mode")
     if mode == "draft" and jobs:
         warnings.append("draft audio manifest contains planned jobs; final mode still requires generated audio files")
     return not errors, errors, warnings

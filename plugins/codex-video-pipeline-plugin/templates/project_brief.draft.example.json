@@ -16,7 +16,7 @@
     "visual_spec": "A2",
     "characters": "A",
     "voice": "B",
-    "music": "B",
+    "music": "B3",
     "final_output": "C"
   },
   "normalized": {
@@ -34,6 +34,7 @@
     "voice_mode": "只需要旁白",
     "voice_required": true,
     "music_mode": "需要",
+    "music_profile": "underscore",
     "music_required": true,
     "final_output": "剧本 + 分镜 + 关键帧提示词"
   },

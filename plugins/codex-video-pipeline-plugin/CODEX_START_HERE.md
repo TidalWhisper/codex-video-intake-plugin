@@ -33,21 +33,21 @@
 
 ```text
 Codex CLI 专用的视频生产流水线插件
-= Stage 00-09 完整流程框架
++ Stage 00-09 完整流程框架
 + 状态机
 + 每阶段 manifest / validator
-+ placeholder 测试脚本
-+ 后续 GPT Image 2 / ComfyUI / LTX / IndexTTS2 接入计划
++ provider 配置与健康检查
++ OpenAI GPT Image 2 / ComfyUI txt2img / LTX I2V / IndexTTS2 / Music runners
++ Stage 05-09 provider-backed 自动化测试链路
 ```
 
 它当前还不是：
 
 ```text
-已经真实调用 GPT Image 2 的图片生成插件
-已经真实调用 ComfyUI 文生图的插件
-已经真实调用 ComfyUI LTX I2V 的视频生成插件
-已经真实调用 IndexTTS2 的配音插件
-已经完整接入你本机 FFmpeg 生产参数的最终版插件
+已经在任意机器上零配置即可跑通的生产插件
+仓库内自带真实可运行 ComfyUI workflow_api.json 的插件
+已经完成本机 OpenAI / ComfyUI / FFmpeg 真实环境最终验收的插件
+已经沉淀稳定真实项目样例并提交为仓库基线的插件
 ```
 
 ## 2. 当前已经完成的 Stage
@@ -66,6 +66,7 @@ Stage 09：质量检查与交付框架
 ```
 
 注意：Stage 05-09 已经有 manifest、validator、placeholder 测试，但真实 provider 还要继续接入。
+注意：当前代码已经包含真实 provider runner，并有 provider-backed 自动化测试；尚未完全闭环的是本机真实环境配置、workflow 导出和最小真实 E2E 验证。
 
 ## 3. 用户正常使用入口
 
@@ -175,8 +176,8 @@ prompts/codex/00-master-task-comfyui-openai-image.md
 当前最应该做的是：
 
 ```text
-先做 GPT Image 2 / OpenAI Images API provider 的真实接入，作为 Stage 05 首选出图方式。
-同时做 ComfyUI core client，为 txt2img fallback 和 LTX I2V 做准备。
+先核对并整理 provider 已接入代码、测试和文档的一致性。
+再基于本机真实 workflow / providers.yaml / node mapping 做 Stage 05-09 最小真实冒烟验证。
 ```
 
-不要一上来就直接改 LTX I2V。先把 provider 配置、健康检查、manifest 写回、失败证据、测试闭环立住。
+不要跳过本机前置检查。先跑 provider health、local prereqs 和最小真实项目，再继续做增强或扩展。

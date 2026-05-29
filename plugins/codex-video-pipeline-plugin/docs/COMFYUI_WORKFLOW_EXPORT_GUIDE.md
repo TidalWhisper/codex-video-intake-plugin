@@ -26,7 +26,8 @@ ComfyUI 工作流强依赖用户本机环境：
 workflows/comfyui/txt2img_keyframe.workflow_api.json
 workflows/comfyui/i2v_ltx.workflow_api.json
 workflows/comfyui/indextts2.workflow_api.json
-workflows/comfyui/music_generation.workflow_api.json
+workflows/comfyui/HeartMuLa_workflow_fixed_importable.json
+workflows/comfyui/AceStep_Music_Workflow.json
 ```
 
 ## 三、节点映射

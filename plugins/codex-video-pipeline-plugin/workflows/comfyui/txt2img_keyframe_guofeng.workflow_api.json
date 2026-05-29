@@ -1,0 +1,218 @@
+{
+  "1": {
+    "inputs": {
+      "unet_name": "Qwen\\qwen_image_2512_fp8_e4m3fn.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "Load Guofeng UNet"
+    }
+  },
+  "2": {
+    "inputs": {
+      "clip_name": "Qwen2.5\\qwen_2.5_vl_7b_fp8_scaled.safetensors",
+      "type": "qwen_image",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "Load Guofeng CLIP"
+    }
+  },
+  "3": {
+    "inputs": {
+      "vae_name": "Qwen\\qwen_image_vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "Load Guofeng VAE"
+    }
+  },
+  "4": {
+    "inputs": {
+      "model": [
+        "1",
+        0
+      ],
+      "clip": [
+        "2",
+        0
+      ],
+      "lora_name": "qwen-image\\qwen_image_gufeng.safetensors",
+      "strength_model": 0.95,
+      "strength_clip": 0.9
+    },
+    "class_type": "LoraLoader",
+    "_meta": {
+      "title": "Load Guofeng LoRA"
+    }
+  },
+  "5": {
+    "inputs": {
+      "model": [
+        "4",
+        0
+      ],
+      "shift": 3.5
+    },
+    "class_type": "ModelSamplingAuraFlow",
+    "_meta": {
+      "title": "Model Sampling AuraFlow"
+    }
+  },
+  "10": {
+    "inputs": {
+      "text": "guofeng cinematic keyframe",
+      "clip": [
+        "4",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "User Positive Prompt"
+    }
+  },
+  "11": {
+    "inputs": {
+      "text": "Chinese guofeng ink wash illustration, shanshui mood, xieyi brushwork, rice paper texture, elegant flowing hanfu silhouette, poetic mist, restrained mineral colors, refined linework, classical atmosphere, illustration not photography",
+      "clip": [
+        "4",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "Guofeng Style Anchor"
+    }
+  },
+  "12": {
+    "inputs": {
+      "conditioning_1": [
+        "10",
+        0
+      ],
+      "conditioning_2": [
+        "11",
+        0
+      ]
+    },
+    "class_type": "ConditioningCombine",
+    "_meta": {
+      "title": "Combine Positive Conditioning"
+    }
+  },
+  "13": {
+    "inputs": {
+      "text": "low quality, blurry, deformed, duplicate subject, extra limbs, bad anatomy, text, watermark, logo",
+      "clip": [
+        "4",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "User Negative Prompt"
+    }
+  },
+  "14": {
+    "inputs": {
+      "text": "photorealistic DSLR portrait, glossy fashion editorial, hard flash, modern city streetwear, cyberpunk neon, anime cel shading, western oil painting, 3D render, heavy metallic armor, plastic skin, text banner, watermark",
+      "clip": [
+        "4",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "Guofeng Negative Anchor"
+    }
+  },
+  "15": {
+    "inputs": {
+      "conditioning_1": [
+        "13",
+        0
+      ],
+      "conditioning_2": [
+        "14",
+        0
+      ]
+    },
+    "class_type": "ConditioningCombine",
+    "_meta": {
+      "title": "Combine Negative Conditioning"
+    }
+  },
+  "20": {
+    "inputs": {
+      "width": 1024,
+      "height": 1024,
+      "batch_size": 1
+    },
+    "class_type": "EmptySD3LatentImage",
+    "_meta": {
+      "title": "Empty Latent Image"
+    }
+  },
+  "30": {
+    "inputs": {
+      "model": [
+        "5",
+        0
+      ],
+      "seed": 147258369,
+      "steps": 22,
+      "cfg": 3.2,
+      "sampler_name": "res_multistep",
+      "scheduler": "sgm_uniform",
+      "positive": [
+        "12",
+        0
+      ],
+      "negative": [
+        "15",
+        0
+      ],
+      "latent_image": [
+        "20",
+        0
+      ],
+      "denoise": 1.0
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "Guofeng Sampler"
+    }
+  },
+  "40": {
+    "inputs": {
+      "samples": [
+        "30",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "Decode Image"
+    }
+  },
+  "60": {
+    "inputs": {
+      "images": [
+        "40",
+        0
+      ],
+      "filename_prefix": "video/keyframes/qwen_keyframe_guofeng"
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  }
+}

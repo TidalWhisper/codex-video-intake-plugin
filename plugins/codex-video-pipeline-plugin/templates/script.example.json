@@ -47,6 +47,7 @@
     "format": "screenplay",
     "voice_mode": "只需要旁白",
     "music_mode": "需要",
+    "music_profile": "underscore",
     "sections": [
       {
         "time": "00:00-00:06",

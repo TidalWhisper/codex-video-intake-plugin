@@ -166,7 +166,7 @@ Question 4: video style.
 Question 5: visual spec: aspect ratio + resolution.
 Question 6: fixed characters.
 Question 7: voice.
-Question 8: background music.
+Question 8: background music, including `song` / `instrumental` / `underscore` when music is needed.
 Question 9: final output.
 
 Do not show future questions unless the user asks for the full list.
@@ -492,6 +492,15 @@ The image package must:
 4. Record file evidence in `keyframe_image_manifest.json` for every required image.
 5. Never claim an image is generated unless its file exists and has non-zero size.
 
+For the local ComfyUI txt2img path, Stage 05 now uses a minimal style-family router:
+
+- `realistic`
+- `anime`
+- `guofeng`
+- `stylized`
+
+When the workflow name is left at the default `txt2img_keyframe`, the runner should auto-route each job through the mapped style-family workflow recorded in `keyframe_image_manifest.json`.
+
 Scaffold jobs:
 
 ```bash
@@ -659,9 +668,22 @@ The audio package must:
 
 1. Create voiceover/dialogue jobs according to `project_brief.locked.json` and storyboard/script text.
 2. Create background music jobs when Stage 00 says music is required.
-3. Prefer IndexTTS2 for voice, local music library or ComfyUI music workflow for music, then manual placement.
+3. Prefer IndexTTS2 for voice, and prefer AceStep via local ComfyUI for music, then `local_music_library`, then manual placement.
 4. Record file evidence in `audio_manifest.json` for every required voice/music file.
 5. Never claim audio is generated unless files exist and have non-zero size.
+
+When Stage 07 music uses the default AceStep workflow:
+
+1. Call `$acestep-prompt-builder` first.
+2. Set `music_profile` before prompt construction:
+   - `song` for lyric-led vocal tracks
+   - `instrumental` for pure music with no vocals
+   - `underscore` for background BGM, and treat this as the Stage 07 default
+3. Produce workflow-ready `tags`, `lyrics`, `bpm`, `language`, `keyscale`, and `timesignature`.
+4. Feed those fields into `AceStep_Music_Workflow.json` through `run_comfyui_music.py`.
+5. Keep duration outside the prompt-builder output; continue to map duration from the Stage 07 music job into the workflow `duration` and latent `seconds`.
+
+If Stage 07 explicitly switches to `HeartMuLa_workflow_fixed_importable.json`, call `$heartmula-prompt-builder` instead before constructing the workflow payload.
 
 Scaffold jobs:
 
@@ -696,7 +718,7 @@ Stage 07 配音与背景音乐包已生成。
 A. 音频可以，后续进入 Stage 08 粗剪合成
 B. 重生成某一句旁白/对白
 C. 调整某个角色的音色/情绪
-D. 调整背景音乐风格/节奏/音量
+D. 调整背景音乐模式（song / instrumental / underscore）或风格/节奏/音量
 E. 改用 IndexTTS2 / ComfyUI / 本地音乐库 / 手动音频重新生成
 F. 重新生成 Stage 07 音频包
 ```

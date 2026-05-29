@@ -93,7 +93,7 @@ The first-layer required fields are:
 5. `visual_spec`: output aspect ratio and basic resolution. Required.
 6. `characters`: whether fixed characters appear. Required.
 7. `voice`: whether voiceover/dialogue is needed. Required.
-8. `music`: whether background music is needed. Required.
+8. `music`: whether background music is needed, and if needed whether it should be `song`, `instrumental`, or `underscore`. Required.
 9. `final_output`: final desired output form. Required.
 
 Use the option list from `references/first_layer_options.md`.
@@ -320,10 +320,12 @@ Ask:
 
 问题 8：是否需要背景音乐？
 A. 不需要
-B. 需要
+B1. 需要，歌曲（song）
+B2. 需要，纯音乐（instrumental）
+B3. 需要，背景配乐（underscore）
 C. 由模型根据题材自动建议
 
-请回复 A-C。
+请回复 A / B1 / B2 / B3 / C。
 ```
 
 ### Question 9: final_output
@@ -381,6 +383,7 @@ python skills/video-project-intake/scripts/validate_project_brief.py <project_di
 6. 固定主角/人物：...
 7. 配音：...
 8. 背景音乐：...
+   如果选择需要，必须明确是 `song` / `instrumental` / `underscore` 中哪一种。
 9. 最终输出：...
 
 请选择：

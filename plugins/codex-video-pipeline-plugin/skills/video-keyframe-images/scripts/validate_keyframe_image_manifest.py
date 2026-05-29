@@ -41,9 +41,23 @@ def resolve_path(base_json: Path, raw: Any) -> Path | None:
     p = Path(raw)
     if p.is_absolute():
         return p
-    # Prefer path as written relative to current working tree, but fall back to manifest folder.
     if p.exists():
-        return p
+        return p.resolve()
+    anchors: list[Path] = []
+    seen: set[str] = set()
+    for anchor in [Path.cwd(), base_json.parent, *base_json.parents]:
+        key = str(anchor.resolve()).lower()
+        if key not in seen:
+            anchors.append(anchor)
+            seen.add(key)
+    for anchor in anchors:
+        candidate = (anchor / p).resolve()
+        if candidate.exists():
+            return candidate
+    for anchor in anchors:
+        candidate = (anchor / p).resolve()
+        if candidate.parent.exists():
+            return candidate
     return (base_json.parent / p).resolve()
 
 
@@ -57,8 +71,8 @@ def validate(data: dict[str, Any], path: Path | None = None, mode: str = "final"
             errors.append(f"missing top-level key: {key}")
     if data.get("stage") != "STAGE_05_KEYFRAME_IMAGES":
         errors.append("stage must be STAGE_05_KEYFRAME_IMAGES")
-    if data.get("status") not in {"draft", "confirmed"}:
-        errors.append("status must be draft or confirmed")
+    if data.get("status") not in {"draft", "in_progress", "generated", "confirmed"}:
+        errors.append("status must be draft, in_progress, generated, or confirmed")
     for key in ["project_id", "source_brief", "source_keyframe_prompts", "output_root", "keyframes_dir"]:
         if is_blank(data.get(key)):
             errors.append(f"{key} must not be blank")
@@ -157,6 +171,14 @@ def validate(data: dict[str, Any], path: Path | None = None, mode: str = "final"
         for key in ["covers_all_keyframe_prompts", "has_start_and_end_for_each_shot", "all_required_images_exist", "ready_for_video_clip_generation"]:
             if self_check.get(key) is not True:
                 errors.append(f"self_check.{key} must be true in final mode")
+    quality_signals = data.get("quality_signals")
+    if mode == "final":
+        if not isinstance(quality_signals, dict):
+            errors.append("quality_signals must be an object in final mode")
+        else:
+            for key in ["intent_route_matches_strategy", "style_route_matches_strategy", "consistency_prompts_present", "quality_targets_defined"]:
+                if quality_signals.get(key) is not True:
+                    errors.append(f"quality_signals.{key} must be true in final mode")
     return not errors, errors, warnings
 
 

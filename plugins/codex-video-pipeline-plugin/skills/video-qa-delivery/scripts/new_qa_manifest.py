@@ -11,10 +11,29 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT / "scripts"))
+from pipeline_core.pipeline_blueprints import routing_from_brief  # noqa: E402
+from pipeline_core.project_state import load_json_file  # noqa: E402
+from pipeline_core.quality_contracts import build_quality_contract, build_qa_checks  # noqa: E402
+from pipeline_core.requirement_compiler import compile_requirements, requested_output_allows_stage  # noqa: E402
+
+KNOWN_PLUGIN_ROOT_CHILDREN = {
+    "video_projects",
+    "templates",
+    "config",
+    "workflows",
+    "skills",
+    "scripts",
+    "tests",
+    "docs",
+    "prompts",
+}
+
 
 def load_json(path: Path) -> dict[str, Any]:
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        return load_json_file(path)
     except FileNotFoundError:
         raise SystemExit(f"ERROR: file not found: {path}")
     except json.JSONDecodeError as exc:
@@ -38,11 +57,40 @@ def resolve_path(base_json: Path, raw: Any) -> Path | None:
         return p
     if p.exists():
         return p.resolve()
+    special_roots: list[Path] = []
+    plugin_root = next(
+        (anchor.resolve() for anchor in [base_json.parent, *base_json.parents] if anchor.name == "codex-video-pipeline-plugin"),
+        None,
+    )
+    repo_root = plugin_root.parent.parent.resolve() if plugin_root and plugin_root.parent.name == "plugins" else None
+    if p.parts:
+        first = p.parts[0].lower()
+        if first == "plugins" and repo_root is not None:
+            special_roots.append(repo_root)
+        elif first in KNOWN_PLUGIN_ROOT_CHILDREN and plugin_root is not None:
+            special_roots.append(plugin_root)
+    anchors: list[Path] = []
+    seen: set[str] = set()
+    for anchor in [*special_roots, Path.cwd(), base_json.parent, *base_json.parents]:
+        key = str(anchor.resolve()).lower()
+        if key not in seen:
+            anchors.append(anchor)
+            seen.add(key)
+    for anchor in anchors:
+        candidate = (anchor / p).resolve()
+        if candidate.exists():
+            return candidate
+    for anchor in anchors:
+        candidate = (anchor / p).resolve()
+        if candidate.parent.exists():
+            return candidate
     return (base_json.parent / p).resolve()
 
 
 def main(argv: list[str] | None = None) -> int:
     argv = argv or sys.argv
+    allow_beyond_scope = "--allow-beyond-requested-scope" in argv
+    argv = [arg for arg in argv if arg != "--allow-beyond-requested-scope"]
     if len(argv) != 4:
         print("Usage: python new_qa_manifest.py <locked_brief.json> <assembly_manifest.json> <qa_manifest.json>", file=sys.stderr)
         return 2
@@ -55,6 +103,10 @@ def main(argv: list[str] | None = None) -> int:
 
     if brief.get("status") != "locked" or brief.get("confirmed_by_user") is not True:
         print("ERROR: brief must be locked and confirmed_by_user=true", file=sys.stderr)
+        return 1
+    compiled = compile_requirements(brief)
+    if not allow_beyond_scope and not requested_output_allows_stage("STAGE_09", compiled):
+        print("ERROR: requested output scope does not allow Stage 09. Re-run with --allow-beyond-requested-scope to override.", file=sys.stderr)
         return 1
     if assembly.get("stage") != "STAGE_08_ASSEMBLY":
         print("ERROR: assembly_manifest.stage must be STAGE_08_ASSEMBLY", file=sys.stderr)
@@ -72,6 +124,8 @@ def main(argv: list[str] | None = None) -> int:
     qa_dir = out_path.parent
     delivery_dir = qa_dir / "final_delivery"
     delivery_dir.mkdir(parents=True, exist_ok=True)
+    routing = routing_from_brief(brief)
+    quality_contract = build_quality_contract(brief, compiled)
 
     qa_plan = qa_dir / "qa_plan.md"
     qa_checklist = qa_dir / "qa_checklist.json"
@@ -81,14 +135,7 @@ def main(argv: list[str] | None = None) -> int:
     asset_index = qa_dir / "asset_index.json"
     qa_review = qa_dir / "qa_review.md"
 
-    checks = [
-        {"check_id": "final_video_evidence", "category": "file_evidence", "description": "最终粗剪视频文件存在且非空", "status": "pending", "severity": "blocker"},
-        {"check_id": "duration_consistency", "category": "timeline", "description": "粗剪时长与分镜/片段时长基本一致", "status": "pending", "severity": "major"},
-        {"check_id": "storyboard_coverage", "category": "story", "description": "所有关键分镜均在粗剪时间线中出现", "status": "pending", "severity": "major"},
-        {"check_id": "audio_presence", "category": "audio", "description": "需要配音/音乐时音频轨已纳入交付说明", "status": "pending", "severity": "major"},
-        {"check_id": "subtitle_package", "category": "subtitle", "description": "字幕文件或字幕说明已归档", "status": "pending", "severity": "minor"},
-        {"check_id": "delivery_package", "category": "delivery", "description": "最终交付包文件齐全", "status": "pending", "severity": "blocker"},
-    ]
+    checks = build_qa_checks(brief, compiled, quality_contract)
 
     qa_plan.write_text(f"# Stage 09 QA 计划\n\n- 项目：{project_id}\n- 输入粗剪：{rel(final_video)}\n- 目标：检查粗剪证据、归档交付包、生成问题清单和交付说明。\n", encoding="utf-8")
     write_json(qa_checklist, {"project_id": project_id, "checks": checks})
@@ -106,6 +153,9 @@ def main(argv: list[str] | None = None) -> int:
         "source_brief": rel(brief_path),
         "source_assembly_manifest": rel(assembly_path),
         "created_at": datetime.now(timezone.utc).isoformat(),
+        "routing": routing,
+        "compiled_requirements": compiled,
+        "quality_contract": quality_contract,
         "qa_root": rel(qa_dir),
         "final_video_path": rel(final_video),
         "qa_plan_path": rel(qa_plan),

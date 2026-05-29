@@ -1,0 +1,4 @@
+interface:
+  display_name: "AceStep Prompt Builder"
+  short_description: "Build AceStep tags and lyrics"
+  default_prompt: "Use $acestep-prompt-builder to convert a story, music brief, or draft lyrics into AceStep tags, lyrics, bpm, language, keyscale, and timesignature."

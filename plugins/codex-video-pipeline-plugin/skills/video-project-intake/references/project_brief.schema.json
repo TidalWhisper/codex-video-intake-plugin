@@ -66,6 +66,7 @@
         "voice_mode",
         "voice_required",
         "music_mode",
+        "music_profile",
         "music_required",
         "final_output"
       ],
@@ -113,6 +114,9 @@
           ]
         },
         "music_mode": {
+          "type": "string"
+        },
+        "music_profile": {
           "type": "string"
         },
         "music_required": {

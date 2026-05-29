@@ -19,28 +19,125 @@ workflows:
       height:
         node_id: "REPLACE_ME"
         input_name: "height"
+      output_image:
+        node_id: "REPLACE_ME"
+        input_name: "images"
 
-  i2v_ltx:
-    file: "workflows/comfyui/i2v_ltx.workflow_api.json"
+  txt2img_keyframe_realistic:
+    file: "workflows/comfyui/txt2img_keyframe_realistic.workflow_api.json"
     nodes:
-      start_image:
+      positive_prompt:
         node_id: "REPLACE_ME"
-        input_name: "image"
-      end_image:
-        node_id: "REPLACE_ME"
-        input_name: "image"
-      motion_prompt:
+        input_name: "text"
+      negative_prompt:
         node_id: "REPLACE_ME"
         input_name: "text"
       seed:
         node_id: "REPLACE_ME"
         input_name: "seed"
+      width:
+        node_id: "REPLACE_ME"
+        input_name: "width"
+      height:
+        node_id: "REPLACE_ME"
+        input_name: "height"
+      output_image:
+        node_id: "REPLACE_ME"
+        input_name: "images"
+
+  txt2img_keyframe_anime:
+    file: "workflows/comfyui/txt2img_keyframe_anime.workflow_api.json"
+    nodes:
+      positive_prompt:
+        node_id: "REPLACE_ME"
+        input_name: "text"
+      negative_prompt:
+        node_id: "REPLACE_ME"
+        input_name: "text"
+      seed:
+        node_id: "REPLACE_ME"
+        input_name: "seed"
+      width:
+        node_id: "REPLACE_ME"
+        input_name: "width"
+      height:
+        node_id: "REPLACE_ME"
+        input_name: "height"
+      output_image:
+        node_id: "REPLACE_ME"
+        input_name: "images"
+
+  txt2img_keyframe_guofeng:
+    file: "workflows/comfyui/txt2img_keyframe_guofeng.workflow_api.json"
+    nodes:
+      positive_prompt:
+        node_id: "REPLACE_ME"
+        input_name: "text"
+      negative_prompt:
+        node_id: "REPLACE_ME"
+        input_name: "text"
+      seed:
+        node_id: "REPLACE_ME"
+        input_name: "seed"
+      width:
+        node_id: "REPLACE_ME"
+        input_name: "width"
+      height:
+        node_id: "REPLACE_ME"
+        input_name: "height"
+      output_image:
+        node_id: "REPLACE_ME"
+        input_name: "images"
+
+  txt2img_keyframe_stylized:
+    file: "workflows/comfyui/txt2img_keyframe_stylized.workflow_api.json"
+    nodes:
+      positive_prompt:
+        node_id: "REPLACE_ME"
+        input_name: "text"
+      negative_prompt:
+        node_id: "REPLACE_ME"
+        input_name: "text"
+      seed:
+        node_id: "REPLACE_ME"
+        input_name: "seed"
+      width:
+        node_id: "REPLACE_ME"
+        input_name: "width"
+      height:
+        node_id: "REPLACE_ME"
+        input_name: "height"
+      output_image:
+        node_id: "REPLACE_ME"
+        input_name: "images"
+
+  i2v_ltx:
+    file: "workflows/comfyui/i2v_ltx.workflow_api.json"
+    nodes:
+      start_image:
+        node_id: "7"
+        input_name: "image"
+      positive_prompt:
+        node_id: "3"
+        input_name: "text"
+      negative_prompt:
+        node_id: "4"
+        input_name: "text"
+      seed:
+        node_id: "15"
+        input_name: "noise_seed"
       frame_count:
-        node_id: "REPLACE_ME"
-        input_name: "frames"
+        node_id: "23"
+        input_name: "value"
       fps:
-        node_id: "REPLACE_ME"
-        input_name: "fps"
+        node_id: "24"
+        input_name: "value"
+      width:
+        node_id: "8"
+        input_name: "width"
+      height:
+        node_id: "8"
+        input_name: "height"
 
   indextts2:
     file: "workflows/comfyui/indextts2.workflow_api.json"
@@ -54,3 +151,81 @@ workflows:
       emotion:
         node_id: "REPLACE_ME"
         input_name: "emotion"
+
+  music_generation:
+    file: "workflows/comfyui/AceStep_Music_Workflow.json"
+    nodes:
+      lyrics:
+        node_id: "REPLACE_ME"
+        input_name: "lyrics"
+      tags:
+        node_id: "REPLACE_ME"
+        input_name: "tags"
+      seed:
+        node_id: "REPLACE_ME"
+        input_name: "value"
+      duration_sec:
+        node_id: "REPLACE_ME"
+        input_name: "duration"
+      latent_seconds:
+        node_id: "REPLACE_ME"
+        input_name: "seconds"
+      bpm:
+        node_id: "REPLACE_ME"
+        input_name: "bpm"
+      language:
+        node_id: "REPLACE_ME"
+        input_name: "language"
+      keyscale:
+        node_id: "REPLACE_ME"
+        input_name: "keyscale"
+      timesignature:
+        node_id: "REPLACE_ME"
+        input_name: "timesignature"
+
+  music_generation_heartmula:
+    file: "workflows/comfyui/HeartMuLa_workflow_fixed_importable.json"
+    nodes:
+      lyrics:
+        node_id: "REPLACE_ME"
+        input_name: "lyrics"
+      tags:
+        node_id: "REPLACE_ME"
+        input_name: "tags"
+      seed:
+        node_id: "REPLACE_ME"
+        input_name: "seed"
+      max_audio_length_seconds:
+        node_id: "REPLACE_ME"
+        input_name: "max_audio_length_seconds"
+
+  music_generation_acestep:
+    file: "workflows/comfyui/AceStep_Music_Workflow.json"
+    nodes:
+      lyrics:
+        node_id: "REPLACE_ME"
+        input_name: "lyrics"
+      tags:
+        node_id: "REPLACE_ME"
+        input_name: "tags"
+      seed:
+        node_id: "REPLACE_ME"
+        input_name: "value"
+      duration_sec:
+        node_id: "REPLACE_ME"
+        input_name: "duration"
+      latent_seconds:
+        node_id: "REPLACE_ME"
+        input_name: "seconds"
+      bpm:
+        node_id: "REPLACE_ME"
+        input_name: "bpm"
+      language:
+        node_id: "REPLACE_ME"
+        input_name: "language"
+      keyscale:
+        node_id: "REPLACE_ME"
+        input_name: "keyscale"
+      timesignature:
+        node_id: "REPLACE_ME"
+        input_name: "timesignature"

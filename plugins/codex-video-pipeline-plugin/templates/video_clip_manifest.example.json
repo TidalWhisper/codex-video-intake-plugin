@@ -70,6 +70,12 @@
     "failed_clip_count": 0,
     "total_duration_sec": 5
   },
+  "quality_signals": {
+    "intent_route_matches_strategy": true,
+    "continuity_sources_present": true,
+    "performance_prompts_present": true,
+    "quality_targets_defined": true
+  },
   "self_check": {
     "covers_all_storyboard_shots": true,
     "has_source_start_and_end_keyframes_for_each_shot": true,

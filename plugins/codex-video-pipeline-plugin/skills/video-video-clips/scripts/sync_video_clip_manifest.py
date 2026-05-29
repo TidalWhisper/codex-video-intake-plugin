@@ -6,13 +6,35 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+import sys
+
+ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT / "scripts"))
+from pipeline_blueprints import next_stage_after  # noqa: E402
+from pipeline_core.project_state import update_project_manifest_for_stage  # noqa: E402
+
 
 def resolve(base: Path, raw: str) -> Path:
     p = Path(raw)
     if p.is_absolute():
         return p
     if p.exists():
-        return p
+        return p.resolve()
+    anchors: list[Path] = []
+    seen: set[str] = set()
+    for anchor in [Path.cwd(), base.parent, *base.parents]:
+        key = str(anchor.resolve()).lower()
+        if key not in seen:
+            anchors.append(anchor)
+            seen.add(key)
+    for anchor in anchors:
+        candidate = (anchor / p).resolve()
+        if candidate.exists():
+            return candidate
+    for anchor in anchors:
+        candidate = (anchor / p).resolve()
+        if candidate.parent.exists():
+            return candidate
     return (base.parent / p).resolve()
 
 
@@ -23,7 +45,22 @@ def resolve_from_source(base_json: Path, raw: str | None) -> Path | None:
     if p.is_absolute():
         return p
     if p.exists():
-        return p
+        return p.resolve()
+    anchors: list[Path] = []
+    seen: set[str] = set()
+    for anchor in [Path.cwd(), base_json.parent, *base_json.parents]:
+        key = str(anchor.resolve()).lower()
+        if key not in seen:
+            anchors.append(anchor)
+            seen.add(key)
+    for anchor in anchors:
+        candidate = (anchor / p).resolve()
+        if candidate.exists():
+            return candidate
+    for anchor in anchors:
+        candidate = (anchor / p).resolve()
+        if candidate.parent.exists():
+            return candidate
     return (base_json.parent / p).resolve()
 
 
@@ -34,6 +71,7 @@ def main() -> int:
     args = parser.parse_args()
     path = Path(args.manifest_json)
     data = json.loads(path.read_text(encoding="utf-8"))
+    routing = data.get("routing") if isinstance(data.get("routing"), dict) else {"legacy_mode": True}
     generated = 0
     failed = 0
     source_ok = 0
@@ -80,9 +118,19 @@ def main() -> int:
     self_check["ready_for_audio_stage"] = all_clips
     self_check["has_source_start_and_end_keyframes_for_each_shot"] = source_ok == len(jobs) and bool(jobs)
     self_check.setdefault("covers_all_storyboard_shots", bool(jobs))
+    data["status"] = "generated" if all_clips else ("in_progress" if generated > 0 else "draft")
     data["updated_at"] = datetime.now(timezone.utc).isoformat()
     if all_clips:
-        data["allowed_next_stage"] = "STAGE_07_AUDIO"
+        data["allowed_next_stage"] = next_stage_after("STAGE_06_VIDEO_CLIPS", routing, "STAGE_07_AUDIO")
+        update_project_manifest_for_stage(
+            path,
+            current_stage="STAGE_06_VIDEO_CLIPS_CONFIRMED",
+            allowed_next_stage=data["allowed_next_stage"],
+            flags={"video_clips_confirmed": True},
+            status="active",
+        )
+    else:
+        data["allowed_next_stage"] = None
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"VIDEO CLIP MANIFEST SYNCED: {path}")
     print(f"GENERATED_CLIPS: {generated}")

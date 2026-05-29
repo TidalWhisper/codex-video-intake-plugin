@@ -81,8 +81,24 @@ Preferred provider order:
 
 ```text
 Voice: IndexTTS2 via local ComfyUI / local IndexTTS2 API → manual placement
-Music: local library → ComfyUI music workflow → manual placement
+Music: AceStep via local ComfyUI → local library → manual placement
 ```
+
+If the selected ComfyUI music workflow is `AceStep_Music_Workflow.json`, use `$acestep-prompt-builder` before preparing Stage 07 music inputs.
+
+AceStep is not a plain one-line music prompt workflow. Before calling it:
+
+- set Stage 07 `music_profile` first:
+  - `song`: vocal song with lyrics
+  - `instrumental`: pure music without vocals
+  - `underscore`: background-first BGM, default for `BGM_MAIN`
+- emit workflow-ready `tags`, `lyrics`, `bpm`, `language`, `keyscale`, and `timesignature`
+- keep `tags` as caption-style control text with compact metadata tags
+- keep lyrics under section tags such as `[intro]`, `[verse]`, `[pre-chorus]`, `[chorus]`, `[bridge]`, and `[outro]`
+- for `instrumental` and `underscore`, keep those sections but write instrumental cue text instead of sung lines
+- keep duration outside the prompt builder and continue to map duration from the Stage 07 job into the workflow `duration` field
+
+If the selected ComfyUI music workflow is `HeartMuLa_workflow_fixed_importable.json`, use `$heartmula-prompt-builder` instead.
 
 5. After audio files exist, sync evidence:
 
@@ -121,7 +137,7 @@ Stage 07 配音与背景音乐包已生成。
 A. 音频可以，后续进入 Stage 08 粗剪合成
 B. 重生成某一句旁白/对白
 C. 调整某个角色的音色/情绪
-D. 调整背景音乐风格/节奏/音量
+D. 调整背景音乐模式（song / instrumental / underscore）或风格/节奏/音量
 E. 改用 IndexTTS2 / ComfyUI / 本地音乐库 / 手动音频重新生成
 F. 重新生成 Stage 07 音频包
 ```

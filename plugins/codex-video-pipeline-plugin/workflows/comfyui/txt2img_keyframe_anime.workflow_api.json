@@ -1,0 +1,289 @@
+{
+  "1": {
+    "inputs": {
+      "unet_name": "Zimage\\z_image_turbo_bf16.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "Load Anime Zimage UNet"
+    }
+  },
+  "2": {
+    "inputs": {
+      "clip_name": "Zimage\\qwen_3_4b.safetensors",
+      "type": "lumina2",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "Load Anime Zimage CLIP"
+    }
+  },
+  "3": {
+    "inputs": {
+      "vae_name": "Zimage\\ae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "Load Anime Zimage VAE"
+    }
+  },
+  "10": {
+    "inputs": {
+      "text": "modern anime character key art",
+      "clip": [
+        "2",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "User Positive Prompt"
+    }
+  },
+  "11": {
+    "inputs": {
+      "text": "modern Japanese anime character portrait, polished key visual, exquisite face rendering, large glossy expressive eyes, refined delicate facial features, clean premium line art, smooth digital cel shading, luminous skin tones, elegant hair detailing, contemporary TV anime and game illustration finish, character-first composition, high-end promotional artwork, crisp modern color design, soft cinematic bloom, visually rich but not painterly",
+      "clip": [
+        "2",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "Anime Style Anchor"
+    }
+  },
+  "12": {
+    "inputs": {
+      "conditioning_1": [
+        "10",
+        0
+      ],
+      "conditioning_2": [
+        "11",
+        0
+      ]
+    },
+    "class_type": "ConditioningCombine",
+    "_meta": {
+      "title": "Combine Positive Conditioning"
+    }
+  },
+  "13": {
+    "inputs": {
+      "text": "low quality, blurry, deformed, duplicate subject, extra limbs, bad anatomy, text, watermark, logo",
+      "clip": [
+        "2",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "User Negative Prompt"
+    }
+  },
+  "14": {
+    "inputs": {
+      "text": "1980s anime cel look, retro TV anime palette, vintage cel shading, washed muted retro colors, ghibli-like whimsical watercolor, old manga screentone print, photorealistic DSLR portrait, double exposure, collage poster layout, giant face overlay, multiple composition planes, split-screen montage, muddy painterly smear, underexposed face, deep black shadows hiding facial features, malformed hands, noisy linework, over-rendered pores, 3D plastic skin, western comic halftone print, monochrome silhouette only",
+      "clip": [
+        "2",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "Anime Negative Anchor"
+    }
+  },
+  "15": {
+    "inputs": {
+      "conditioning_1": [
+        "13",
+        0
+      ],
+      "conditioning_2": [
+        "14",
+        0
+      ]
+    },
+    "class_type": "ConditioningCombine",
+    "_meta": {
+      "title": "Combine Negative Conditioning"
+    }
+  },
+  "20": {
+    "inputs": {
+      "width": 1024,
+      "height": 1024,
+      "batch_size": 1
+    },
+    "class_type": "EmptySD3LatentImage",
+    "_meta": {
+      "title": "Empty Latent Image"
+    }
+  },
+  "21": {
+    "inputs": {
+      "steps": 8,
+      "sigma_max": 0.99,
+      "sigma_min": 0.08,
+      "rho": 0.3
+    },
+    "class_type": "KarrasScheduler",
+    "_meta": {
+      "title": "Karras Scheduler"
+    }
+  },
+  "22": {
+    "inputs": {
+      "sigmas": [
+        "21",
+        0
+      ],
+      "step": 2
+    },
+    "class_type": "SplitSigmas",
+    "_meta": {
+      "title": "Split Sigmas"
+    }
+  },
+  "23": {
+    "inputs": {
+      "sigmas": [
+        "22",
+        1
+      ],
+      "sigma": 0.906
+    },
+    "class_type": "SetFirstSigma",
+    "_meta": {
+      "title": "Set First Sigma"
+    }
+  },
+  "24": {
+    "inputs": {
+      "sigmas": [
+        "23",
+        0
+      ],
+      "steps": 2,
+      "start_at_sigma": 1,
+      "end_at_sigma": 0.8,
+      "spacing": "linear"
+    },
+    "class_type": "ExtendIntermediateSigmas",
+    "_meta": {
+      "title": "Extend Intermediate Sigmas"
+    }
+  },
+  "25": {
+    "inputs": {
+      "sampler_name": "euler"
+    },
+    "class_type": "KSamplerSelect",
+    "_meta": {
+      "title": "Euler Sampler Select"
+    }
+  },
+  "30": {
+    "inputs": {
+      "add_noise": true,
+      "noise_seed": 147258369,
+      "cfg": 1,
+      "model": [
+        "1",
+        0
+      ],
+      "positive": [
+        "10",
+        0
+      ],
+      "negative": [
+        "13",
+        0
+      ],
+      "sampler": [
+        "25",
+        0
+      ],
+      "sigmas": [
+        "22",
+        0
+      ],
+      "latent_image": [
+        "20",
+        0
+      ]
+    },
+    "class_type": "SamplerCustom",
+    "_meta": {
+      "title": "Anime First Pass Sampler"
+    }
+  },
+  "35": {
+    "inputs": {
+      "add_noise": false,
+      "noise_seed": 147258369,
+      "cfg": 1,
+      "model": [
+        "1",
+        0
+      ],
+      "positive": [
+        "10",
+        0
+      ],
+      "negative": [
+        "13",
+        0
+      ],
+      "sampler": [
+        "25",
+        0
+      ],
+      "sigmas": [
+        "24",
+        0
+      ],
+      "latent_image": [
+        "30",
+        0
+      ]
+    },
+    "class_type": "SamplerCustom",
+    "_meta": {
+      "title": "Anime Second Pass Sampler"
+    }
+  },
+  "40": {
+    "inputs": {
+      "samples": [
+        "35",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "Decode Image"
+    }
+  },
+  "60": {
+    "inputs": {
+      "images": [
+        "40",
+        0
+      ],
+      "filename_prefix": "video/keyframes/zimage_keyframe_anime"
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  }
+}

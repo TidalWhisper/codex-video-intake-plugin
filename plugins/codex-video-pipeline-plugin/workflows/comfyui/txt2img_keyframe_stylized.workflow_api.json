@@ -1,0 +1,218 @@
+{
+  "1": {
+    "inputs": {
+      "unet_name": "Qwen\\qwen_image_2512_fp8_e4m3fn.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "Load Stylized UNet"
+    }
+  },
+  "2": {
+    "inputs": {
+      "clip_name": "Qwen2.5\\qwen_2.5_vl_7b_fp8_scaled.safetensors",
+      "type": "qwen_image",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "Load Stylized CLIP"
+    }
+  },
+  "3": {
+    "inputs": {
+      "vae_name": "Qwen\\qwen_image_vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "Load Stylized VAE"
+    }
+  },
+  "4": {
+    "inputs": {
+      "model": [
+        "1",
+        0
+      ],
+      "clip": [
+        "2",
+        0
+      ],
+      "lora_name": "qwen-image\\illustration-1.0-qwen-image.safetensors",
+      "strength_model": 0.85,
+      "strength_clip": 0.8
+    },
+    "class_type": "LoraLoader",
+    "_meta": {
+      "title": "Load Stylized Illustration LoRA"
+    }
+  },
+  "5": {
+    "inputs": {
+      "model": [
+        "4",
+        0
+      ],
+      "shift": 3.5
+    },
+    "class_type": "ModelSamplingAuraFlow",
+    "_meta": {
+      "title": "Model Sampling AuraFlow"
+    }
+  },
+  "10": {
+    "inputs": {
+      "text": "stylized cinematic keyframe",
+      "clip": [
+        "4",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "User Positive Prompt"
+    }
+  },
+  "11": {
+    "inputs": {
+      "text": "stylized concept art illustration, clear facial readability, deliberate silhouette design, painterly brushwork, editorial illustration energy, cinematic color scripting, visible atmosphere, strong shape language, art directed image not photography",
+      "clip": [
+        "4",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "Stylized Style Anchor"
+    }
+  },
+  "12": {
+    "inputs": {
+      "conditioning_1": [
+        "10",
+        0
+      ],
+      "conditioning_2": [
+        "11",
+        0
+      ]
+    },
+    "class_type": "ConditioningCombine",
+    "_meta": {
+      "title": "Combine Positive Conditioning"
+    }
+  },
+  "13": {
+    "inputs": {
+      "text": "low quality, blurry, deformed, duplicate subject, extra limbs, bad anatomy, text, watermark, logo",
+      "clip": [
+        "4",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "User Negative Prompt"
+    }
+  },
+  "14": {
+    "inputs": {
+      "text": "photorealistic documentary photo, muddy shadows, blacked out face, unreadable eyes, over-dark exposure, generic fashion portrait, anime cel shading, watercolor wash only, 3D CGI render, plastic skin, text banner, watermark",
+      "clip": [
+        "4",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "Stylized Negative Anchor"
+    }
+  },
+  "15": {
+    "inputs": {
+      "conditioning_1": [
+        "13",
+        0
+      ],
+      "conditioning_2": [
+        "14",
+        0
+      ]
+    },
+    "class_type": "ConditioningCombine",
+    "_meta": {
+      "title": "Combine Negative Conditioning"
+    }
+  },
+  "20": {
+    "inputs": {
+      "width": 1024,
+      "height": 1024,
+      "batch_size": 1
+    },
+    "class_type": "EmptySD3LatentImage",
+    "_meta": {
+      "title": "Empty Latent Image"
+    }
+  },
+  "30": {
+    "inputs": {
+      "model": [
+        "5",
+        0
+      ],
+      "seed": 147258369,
+      "steps": 20,
+      "cfg": 3.3,
+      "sampler_name": "res_multistep",
+      "scheduler": "sgm_uniform",
+      "positive": [
+        "12",
+        0
+      ],
+      "negative": [
+        "15",
+        0
+      ],
+      "latent_image": [
+        "20",
+        0
+      ],
+      "denoise": 1.0
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "Stylized Sampler"
+    }
+  },
+  "40": {
+    "inputs": {
+      "samples": [
+        "30",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "Decode Image"
+    }
+  },
+  "60": {
+    "inputs": {
+      "images": [
+        "40",
+        0
+      ],
+      "filename_prefix": "video/keyframes/qwen_keyframe_stylized"
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  }
+}

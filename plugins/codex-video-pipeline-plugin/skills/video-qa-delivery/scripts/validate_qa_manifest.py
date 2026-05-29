@@ -9,6 +9,18 @@ import json
 from pathlib import Path
 from typing import Any
 
+KNOWN_PLUGIN_ROOT_CHILDREN = {
+    "video_projects",
+    "templates",
+    "config",
+    "workflows",
+    "skills",
+    "scripts",
+    "tests",
+    "docs",
+    "prompts",
+}
+
 REQUIRED_TOP = [
     "schema_version", "stage", "status", "project_id", "source_brief", "source_assembly_manifest",
     "qa_root", "final_video_path", "qa_plan_path", "qa_checklist_path", "issue_report_path",
@@ -16,7 +28,8 @@ REQUIRED_TOP = [
     "qa_checks", "issue_summary", "delivery_package", "self_check", "allowed_next_stage"
 ]
 REQUIRED_CHECK_IDS = {
-    "final_video_evidence", "duration_consistency", "storyboard_coverage", "audio_presence", "subtitle_package", "delivery_package"
+    "final_video_evidence", "duration_consistency", "storyboard_coverage", "audio_presence", "subtitle_package", "delivery_package",
+    "intent_alignment", "visual_continuity_contract", "performance_direction_contract", "audio_direction_contract", "format_fit_contract",
 }
 VIDEO_EXTS = {".mp4", ".mov", ".mkv", ".webm"}
 
@@ -36,7 +49,34 @@ def resolve_path(base_json: Path, raw: Any) -> Path | None:
     if p.is_absolute():
         return p
     if p.exists():
-        return p
+        return p.resolve()
+    special_roots: list[Path] = []
+    plugin_root = next(
+        (anchor.resolve() for anchor in [base_json.parent, *base_json.parents] if anchor.name == "codex-video-pipeline-plugin"),
+        None,
+    )
+    repo_root = plugin_root.parent.parent.resolve() if plugin_root and plugin_root.parent.name == "plugins" else None
+    if p.parts:
+        first = p.parts[0].lower()
+        if first == "plugins" and repo_root is not None:
+            special_roots.append(repo_root)
+        elif first in KNOWN_PLUGIN_ROOT_CHILDREN and plugin_root is not None:
+            special_roots.append(plugin_root)
+    anchors: list[Path] = []
+    seen: set[str] = set()
+    for anchor in [*special_roots, Path.cwd(), base_json.parent, *base_json.parents]:
+        key = str(anchor.resolve()).lower()
+        if key not in seen:
+            anchors.append(anchor)
+            seen.add(key)
+    for anchor in anchors:
+        candidate = (anchor / p).resolve()
+        if candidate.exists():
+            return candidate
+    for anchor in anchors:
+        candidate = (anchor / p).resolve()
+        if candidate.parent.exists():
+            return candidate
     return (base_json.parent / p).resolve()
 
 
@@ -71,8 +111,12 @@ def validate(data: dict[str, Any], path: Path | None = None, mode: str = "final"
             seen_ids.add(cid)
         if check.get("status") not in {"pending", "pass", "fail", "waived", "manual_review"}:
             errors.append(f"qa_checks[{idx}].status must be pending, pass, fail, waived, or manual_review")
-        if mode == "final" and check.get("status") not in {"pass", "waived"}:
-            errors.append(f"qa_checks[{idx}] must be pass or waived in final mode: {cid}")
+        if mode == "final":
+            allowed_statuses = {"pass", "waived"}
+            if check.get("category") == "human_review" or check.get("review_mode") == "human_review":
+                allowed_statuses.add("manual_review")
+            if check.get("status") not in allowed_statuses:
+                errors.append(f"qa_checks[{idx}] must be one of {sorted(allowed_statuses)} in final mode: {cid}")
     if mode == "final" and not REQUIRED_CHECK_IDS.issubset(seen_ids):
         errors.append(f"qa_checks must include required check ids: {sorted(REQUIRED_CHECK_IDS - seen_ids)}")
 

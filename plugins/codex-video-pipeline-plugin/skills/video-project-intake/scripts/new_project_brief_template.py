@@ -12,12 +12,23 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
+def infer_project_context(output: Path) -> tuple[str, str]:
+    if output.parent.name in {"00_intake", "intake"}:
+        project_dir = output.parent.parent.resolve()
+    else:
+        project_dir = output.parent.resolve()
+    project_id = project_dir.name or "video_intake_draft"
+    return project_id, str(project_dir).replace("\\", "/")
+
+
 def main(argv: list[str]) -> int:
     output = Path(argv[1]) if len(argv) > 1 else Path(".video_project/intake/project_brief.draft.json")
     now = datetime.now(timezone.utc).isoformat()
+    project_id, project_dir = infer_project_context(output)
     data = {
-        "schema_version": "0.1.6",
-        "project_id": "video_intake_draft",
+        "schema_version": "0.3.0",
+        "project_id": project_id,
+        "project_dir": project_dir,
         "stage": "STAGE_00_INTAKE",
         "status": "draft",
         "confirmed_by_user": False,
@@ -31,9 +42,9 @@ def main(argv: list[str]) -> int:
             "characters",
             "voice",
             "music",
-            "final_output"
+            "final_output",
         ],
-        "source": "blank template created by video-project-intake skill",
+        "source": "Blank template created by video-project-intake skill.",
         "user_answers": {},
         "normalized": {
             "idea": "",
@@ -50,11 +61,12 @@ def main(argv: list[str]) -> int:
             "voice_mode": "",
             "voice_required": "",
             "music_mode": "",
+            "music_profile": "",
             "music_required": "",
-            "final_output": ""
+            "final_output": "",
         },
         "allowed_next_stage": None,
-        "created_at": now
+        "created_at": now,
     }
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")

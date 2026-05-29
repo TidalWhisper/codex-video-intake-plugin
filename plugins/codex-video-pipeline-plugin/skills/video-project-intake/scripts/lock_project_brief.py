@@ -14,12 +14,18 @@ from pathlib import Path
 # Import validator from same directory without third-party dependencies.
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
+PLUGIN_ROOT = next(anchor for anchor in [SCRIPT_DIR, *SCRIPT_DIR.parents] if anchor.name == "codex-video-pipeline-plugin")
+sys.path.insert(0, str(PLUGIN_ROOT / "scripts"))
 from validate_project_brief import validate  # noqa: E402
+from pipeline_core.pipeline_blueprints import routing_from_brief  # noqa: E402
+from pipeline_core.project_state import load_json_file, update_project_manifest_for_stage, utc_now  # noqa: E402
+from pipeline_core.quality_contracts import build_quality_contract  # noqa: E402
+from pipeline_core.requirement_compiler import compile_requirements  # noqa: E402
 
 
 def load_json(path: Path) -> dict:
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        return load_json_file(path)
     except FileNotFoundError:
         raise SystemExit(f"ERROR: file not found: {path}")
     except json.JSONDecodeError as exc:
@@ -57,7 +63,36 @@ def main(argv: list[str]) -> int:
     data["status"] = "locked"
     data["confirmed_by_user"] = True
     data["allowed_next_stage"] = "STAGE_01_SCRIPT_GENERATION"
-    data["locked_at"] = datetime.now(timezone.utc).isoformat()
+    data["locked_at"] = utc_now()
+    data["routing"] = routing_from_brief(data)
+    data["compiled_requirements"] = compile_requirements(data)
+    data["quality_contract"] = build_quality_contract(data, data["compiled_requirements"])
+
+    manifest_path = draft_path.parent.parent / "project_manifest.json"
+    if manifest_path.exists():
+        try:
+            manifest = load_json_file(manifest_path)
+        except json.JSONDecodeError as exc:
+            print(f"LOCKED BRIEF WARNING: project_manifest.json is invalid JSON: {exc}")
+        else:
+            manifest["current_stage"] = "STAGE_00_BRIEF_LOCKED"
+            manifest["requested_output_scope"] = data["routing"]["requested_output_scope"]
+            manifest["requested_output_label"] = data["routing"]["requested_output_label"]
+            manifest["requested_terminal_stage"] = data["routing"]["requested_terminal_stage"]
+            manifest["allowed_next_stage"] = "STAGE_01_SCRIPT_GENERATION"
+            manifest["brief_locked"] = True
+            manifest["compiled_requirements"] = data["compiled_requirements"]
+            manifest["quality_contract"] = data["quality_contract"]
+            manifest["updated_at"] = utc_now()
+            manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    else:
+        update_project_manifest_for_stage(
+            draft_path,
+            current_stage="STAGE_00_BRIEF_LOCKED",
+            allowed_next_stage="STAGE_01_SCRIPT_GENERATION",
+            flags={"brief_locked": True},
+            status="active",
+        )
 
     ok2, errors2, warnings2 = validate(data, locked_path)
     if not ok2:

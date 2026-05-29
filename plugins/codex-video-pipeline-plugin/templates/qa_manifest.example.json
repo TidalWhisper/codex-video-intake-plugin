@@ -57,6 +57,41 @@
       "description": "交付包完整性检查",
       "status": "pass",
       "severity": "blocker"
+    },
+    {
+      "check_id": "intent_alignment",
+      "category": "strategy",
+      "description": "需求意图与最终交付阶段一致",
+      "status": "pass",
+      "severity": "blocker"
+    },
+    {
+      "check_id": "visual_continuity_contract",
+      "category": "visual",
+      "description": "视觉连续性契约检查",
+      "status": "pass",
+      "severity": "major"
+    },
+    {
+      "check_id": "performance_direction_contract",
+      "category": "performance",
+      "description": "表演方向契约检查",
+      "status": "pass",
+      "severity": "major"
+    },
+    {
+      "check_id": "audio_direction_contract",
+      "category": "audio",
+      "description": "声音方向契约检查",
+      "status": "pass",
+      "severity": "major"
+    },
+    {
+      "check_id": "format_fit_contract",
+      "category": "delivery",
+      "description": "格式与策略匹配检查",
+      "status": "pass",
+      "severity": "major"
     }
   ],
   "issue_summary": {

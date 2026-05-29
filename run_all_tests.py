@@ -8,6 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 PLUGIN = ROOT / "plugins" / "codex-video-pipeline-plugin"
+PYTEST_BASETEMP = PLUGIN / ".pytest_tmp"
 
 REQUIRED_ROOT_FILES = [
     ROOT / "VERSION",
@@ -77,7 +78,7 @@ def main() -> None:
     run([sys.executable, "-m", "py_compile", *py_files], cwd=PLUGIN)
     print("python syntax: OK")
 
-    run([sys.executable, "-m", "pytest", "-q"], cwd=PLUGIN)
+    run([sys.executable, "-m", "pytest", "-q", f"--basetemp={PYTEST_BASETEMP}"], cwd=PLUGIN)
     print("pytest: OK")
 
     print("SELF TEST PASSED")

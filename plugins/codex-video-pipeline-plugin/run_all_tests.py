@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
+PYTEST_BASETEMP = ROOT / ".pytest_tmp"
 
 REQUIRED_FILES = [
     ROOT / "VERSION",
@@ -82,7 +83,7 @@ def main() -> None:
         fail("python syntax check failed")
     print("python syntax: OK")
 
-    result = subprocess.run([sys.executable, "-m", "pytest", "-q"], cwd=str(ROOT), text=True)
+    result = subprocess.run([sys.executable, "-m", "pytest", "-q", f"--basetemp={PYTEST_BASETEMP}"], cwd=str(ROOT), text=True)
     if result.returncode != 0:
         fail("pytest failed")
     print("pytest: OK")

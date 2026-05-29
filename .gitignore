@@ -1,0 +1,17 @@
+.agents/
+.codex/
+.pytest_cache/
+.pytest_tmp/
+.pytest_tmp*/
+__pycache__/
+
+example_video_clips/
+
+plugins/codex-video-pipeline-plugin/.pytest_cache/
+plugins/codex-video-pipeline-plugin/.pytest_tmp/
+plugins/codex-video-pipeline-plugin/.pytest_tmp*/
+plugins/codex-video-pipeline-plugin/.tmp/
+plugins/codex-video-pipeline-plugin/.tmp_user_flow/
+plugins/codex-video-pipeline-plugin/video_projects/
+plugins/codex-video-pipeline-plugin/config/providers.yaml
+plugins/codex-video-pipeline-plugin/config/workflow_node_mapping.yaml

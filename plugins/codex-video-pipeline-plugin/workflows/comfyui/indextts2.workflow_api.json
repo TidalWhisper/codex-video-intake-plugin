@@ -1,0 +1,53 @@
+{
+  "26": {
+    "inputs": {
+      "model": "IndexTTS-2",
+      "download_from": "modelscope"
+    },
+    "class_type": "easy downloadIndexTTSAndLoadModel",
+    "_meta": {
+      "title": "IndexTTS Model Loader"
+    }
+  },
+  "27": {
+    "inputs": {
+      "indextts_model": [
+        "26",
+        0
+      ],
+      "reference_audio": [
+        "29",
+        0
+      ],
+      "text": "你好，这是一个真实 provider smoke test 音频。",
+      "unload_model": false,
+      "seed": 4242950409
+    },
+    "class_type": "easy indexTTSGenerateSimple",
+    "_meta": {
+      "title": "IndexTTS Generate Simple"
+    }
+  },
+  "29": {
+    "inputs": {
+      "audio": "ref_audio_oo.mp3"
+    },
+    "class_type": "LoadAudio",
+    "_meta": {
+      "title": "Load Speaker Reference"
+    }
+  },
+  "39": {
+    "inputs": {
+      "audio": [
+        "27",
+        0
+      ],
+      "filename_prefix": "audio/indextts2"
+    },
+    "class_type": "SaveAudio",
+    "_meta": {
+      "title": "Save Audio"
+    }
+  }
+}

@@ -86,6 +86,11 @@ def main() -> int:
         "status": "created",
         "brief_locked": False,
         "script_confirmed": False,
+        "requested_output_scope": "",
+        "requested_output_label": "",
+        "requested_terminal_stage": "",
+        "compiled_requirements": {},
+        "quality_contract": {},
         "allowed_next_stage": None,
         "folders": {rel: str((project_dir / rel)).replace("\\", "/") for rel in REQUIRED_DIRS},
     }

@@ -27,15 +27,22 @@ $video-production-pipeline
 
 ## 当前状态
 
-已包含 Stage 00-09 流程框架、manifest、validator、placeholder 测试与后续 provider 接入计划。
+已包含：
 
-尚未真实接入：
+- Stage 00-09 流程框架
+- manifest / validator
+- provider 配置与健康检查
+- OpenAI GPT Image 2 图片生成 runner
+- ComfyUI txt2img / LTX I2V / IndexTTS2 / Music runners
+- Stage 05 → Stage 09 provider-backed 自动化测试
+
+当前仍有本机依赖，但已完成一次最小真实样本冒烟：
 
 ```text
-GPT Image 2 / OpenAI Images API
-ComfyUI txt2img
-ComfyUI LTX I2V
-IndexTTS2 / ComfyUI 音频工作流
+仓库内不内置可直接复用的真实 ComfyUI workflow_api.json
+config/providers.yaml 与 config/workflow_node_mapping.yaml 仍需本机配置
+2026-05-28 已在 video_projects/real_smoke_20260528_stage0509/ 跑通一条真实 Stage 05-09 样本链路
+Stage 07 默认 ComfyUI 音乐 workflow 已切到 AceStep，当前机器仍保留 local_music_library fallback
 ```
 
 后续开发请先读：

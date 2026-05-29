@@ -1,47 +1,51 @@
 # 当前 Provider 接入状态
 
-包内版本：1.1.2
+包内版本：1.1.3
 
 ## 结论
 
-当前插件已经包含 Stage 00-09 的流程框架、状态机、manifest、validator、placeholder 测试脚本和交付检查。
+当前插件已经具备从 Stage 05 到 Stage 09 的真实落盘、manifest 回写、自动化测试和最终交付能力。
 
-但当前包**还没有真正实现**以下真实后端调用：
+当前仓库对 Stage 07 音乐的口径已经收回到本地免费路线：
 
-- OpenAI GPT Image 2 图片生成
-- ComfyUI 文生图 / 图生图工作流调用
-- ComfyUI LTX / LTXVideo 图生视频工作流调用
-- ComfyUI IndexTTS2 工作流调用
-- ComfyUI 音乐生成工作流调用
+- 主线：`comfyui_music` + `AceStep_Music_Workflow.json`
+- 保留的本地 fallback：`local_music_library`
+- 兼容保留的本地 ComfyUI 音乐入口：`HeartMuLa_workflow_fixed_importable.json`
+- 已删除：所有收费背景音乐 workflow、映射、鉴权说明和相关测试
 
-## 当前 Stage 05 的真实状态
+## 已接入能力
 
-Stage 05 已经具备：
+- Stage 05
+  - OpenAI GPT Image 2
+  - ComfyUI txt2img fallback with 4 style-family routes:
+    - `txt2img_keyframe_realistic`
+    - `txt2img_keyframe_anime`
+    - `txt2img_keyframe_guofeng`
+    - `txt2img_keyframe_stylized`
+- Stage 06
+  - ComfyUI LTX I2V
+- Stage 07
+  - ComfyUI IndexTTS2
+  - ComfyUI Music runner
+  - AceStep prompt 构造与注入
+  - HeartMuLa prompt 构造与注入
+  - `local_music_library` fallback
+- Stage 08 / Stage 09
+  - FFmpeg 合成
+  - QA manifest
+  - final delivery 打包
 
-- `image_generation_jobs.json` 计划文件
-- `keyframe_image_manifest.json` 结果清单
-- `openai_image_requests.json` 请求清单结构
-- `comfyui_image_requests.json` 请求清单结构
-- placeholder 图片生成脚本
-- final validator：要求图片真实存在且文件大小大于 0
+## 当前限制
 
-但 Stage 05 目前**没有**：
+- 仓库仍然不内置你本机可直接运行的 ComfyUI API workflow，需要你本地导出后放进 `workflows/comfyui/`
+- `config/providers.yaml` 和 `config/workflow_node_mapping.yaml` 仍然需要本地填写
+- AceStep 现在是默认 ComfyUI 音乐入口，但仍依赖本机真实节点、模型和工作流
+- Stage 05 四路 workflow 目前是最小 starter 版本，仓库内置的是路由与文件位，不保证单一底模天然覆盖所有风格
+- `local_music_library` 仍可作为兜底路径
 
-- `openai_image_client.py`
-- `run_openai_gpt_image2.py`
-- `comfyui_client.py`
-- `run_comfyui_txt2img.py`
-- 可导入 ComfyUI 的真实 `workflow_api.json`
+## 当前建议
 
-因此当前包不能声称“已经可以调用 GPT Image 2 生成图”。
-
-## 后续目标
-
-下一轮由本地 Codex CLI 完成真实 provider 接入时，必须满足：
-
-1. 能检查 provider 配置。
-2. 能真正调用 OpenAI Images API 或 ComfyUI API。
-3. 能把真实输出文件写入项目目录。
-4. 能回写 manifest。
-5. final validator 能通过。
-6. 失败时写入错误证据，不能口头假装成功。
+1. Stage 07 默认音乐 workflow 走 AceStep，统一通过 `music_generation`
+2. 需要更高质量提示词时，先走 `$acestep-prompt-builder`
+3. `local_music_library` 和 `music_generation_heartmula` 保留为 fallback / 兼容路径
+4. Stage 05 本地 ComfyUI 建议按 `realistic / anime / guofeng / stylized` 分别维护独立 workflow，而不是要求单一 workflow 覆盖所有预设风格

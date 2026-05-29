@@ -14,6 +14,7 @@
     "music_required": true,
     "voice_mode": "只需要旁白",
     "music_mode": "需要",
+    "music_profile": "underscore",
     "include_voiceover": true,
     "include_dialogue": false,
     "target_duration_sec": 30
@@ -26,16 +27,18 @@
     "execution_mode": "provider_or_manual"
   },
   "music_provider_strategy": {
-    "primary": "local_music_library",
+    "primary": "comfyui_music",
     "fallback": [
-      "comfyui_music",
+      "local_music_library",
       "manual"
     ],
-    "execution_mode": "provider_or_manual"
+    "execution_mode": "provider_or_manual",
+    "default_profile": "underscore",
+    "prompt_builder": "acestep"
   },
-  "output_root": "templates/example_audio",
-  "voice_dir": "templates/example_audio/voice",
-  "music_dir": "templates/example_audio/music",
+  "output_root": "example_audio",
+  "voice_dir": "example_audio/voice",
+  "music_dir": "example_audio/music",
   "jobs": [
     {
       "audio_id": "AUD_VOICEOVER_S001",
@@ -59,9 +62,9 @@
       ],
       "provider": "placeholder_test_audio_generator",
       "status": "succeeded",
-      "output_path": "templates/example_audio/voice/S001_voiceover.wav",
+      "output_path": "example_audio/voice/S001_voiceover.wav",
       "evidence": {
-        "file_path": "templates/example_audio/voice/S001_voiceover.wav",
+        "file_path": "example_audio/voice/S001_voiceover.wav",
         "file_exists": true,
         "file_size_bytes": 3244,
         "created_at": "2026-05-28T10:31:00+08:00"
@@ -79,21 +82,22 @@
       "speaker_name": null,
       "text": "",
       "music_prompt": "轻柔钢琴与海浪环境声，温暖治愈，适合落日海滩短片",
+      "music_profile": "underscore",
       "emotion": "整体背景音乐",
       "voice_profile": {},
       "target_start": "00:00",
       "target_end": null,
       "duration_sec": 30,
       "provider_priority": [
-        "local_music_library",
         "comfyui_music",
+        "local_music_library",
         "manual"
       ],
       "provider": "placeholder_test_audio_generator",
       "status": "succeeded",
-      "output_path": "templates/example_audio/music/BGM_MAIN.wav",
+      "output_path": "example_audio/music/BGM_MAIN.wav",
       "evidence": {
-        "file_path": "templates/example_audio/music/BGM_MAIN.wav",
+        "file_path": "example_audio/music/BGM_MAIN.wav",
         "file_exists": true,
         "file_size_bytes": 3244,
         "created_at": "2026-05-28T10:31:00+08:00"
@@ -111,6 +115,12 @@
     "generated_audio_count": 2,
     "total_voice_duration_sec": 5,
     "target_total_duration_sec": 30
+  },
+  "quality_signals": {
+    "intent_route_matches_strategy": true,
+    "voice_direction_present": true,
+    "music_profile_matches_strategy": true,
+    "quality_targets_defined": true
   },
   "self_check": {
     "has_voice_tracks_for_required_lines": true,

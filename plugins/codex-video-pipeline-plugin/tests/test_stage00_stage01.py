@@ -32,6 +32,8 @@ def load_module(name: str, path: Path) -> ModuleType:
 
 
 create_project_folder = load_module("create_project_folder_for_test", INTAKE / "create_project_folder.py")
+new_project_brief_template = load_module("new_project_brief_template_for_test", INTAKE / "new_project_brief_template.py")
+lock_project_brief = load_module("lock_project_brief_for_test", INTAKE / "lock_project_brief.py")
 validate_project_brief = load_module("validate_project_brief", INTAKE / "validate_project_brief.py")
 validate_project_structure = load_module("validate_project_structure_for_test", INTAKE / "validate_project_structure.py")
 new_script_template = load_module("new_script_template_for_test", SCRIPT / "new_script_template.py")
@@ -67,6 +69,30 @@ def load_example_brief() -> dict:
 def test_validate_project_brief_example() -> None:
     data = load_example_brief()
     ok, errors, warnings = validate_project_brief.validate(data, TEMPLATES / "project_brief.draft.example.json")
+    assert ok, errors
+    assert data["normalized"]["music_profile"] == "underscore"
+
+
+def test_new_project_brief_template_generates_schema_compliant_draft(tmp_path: Path) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260529_190842_project"
+    intake_dir = project_dir / "00_intake"
+    intake_dir.mkdir(parents=True, exist_ok=True)
+    manifest_path = project_dir / "project_manifest.json"
+    manifest_path.write_text(json.dumps({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "current_stage": "STAGE_00_INTAKE",
+        "brief_locked": False,
+        "allowed_next_stage": None,
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    draft_path = intake_dir / "project_brief.draft.json"
+    assert new_project_brief_template.main(["new_project_brief_template.py", str(draft_path)]) == 0
+
+    data = json.loads(draft_path.read_text(encoding="utf-8"))
+    assert data["project_id"] == project_dir.name
+    assert data["project_dir"] == str(project_dir).replace("\\", "/")
+    ok, errors, warnings = validate_project_brief.validate(data, draft_path)
     assert ok, errors
 
 
@@ -114,13 +140,35 @@ def test_project_brief_must_match_containing_project_folder(tmp_path: Path, monk
     assert any("containing project folder" in e or "basename of project_dir" in e for e in errors)
 
 
+def test_validate_project_brief_accepts_utf8_bom(tmp_path: Path) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260529_190842_project"
+    intake_dir = project_dir / "00_intake"
+    intake_dir.mkdir(parents=True, exist_ok=True)
+    manifest_path = project_dir / "project_manifest.json"
+    manifest_path.write_text(json.dumps({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "current_stage": "STAGE_00_INTAKE",
+        "brief_locked": False,
+        "allowed_next_stage": None,
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    draft = load_example_brief()
+    draft["project_id"] = project_dir.name
+    draft["project_dir"] = str(project_dir).replace("\\", "/")
+    draft_path = intake_dir / "project_brief.draft.json"
+    draft_path.write_text("\ufeff" + json.dumps(draft, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    assert validate_project_brief.main(["validate_project_brief.py", str(draft_path)]) == 0
+
+
 def test_validate_script_example_final() -> None:
     data = json.loads((TEMPLATES / "script.example.json").read_text(encoding="utf-8"))
     ok, errors, warnings = validate_script.validate(data, mode="final")
     assert ok, errors
 
 
-def test_new_script_template_passes_draft_validation_but_not_final(tmp_path: Path) -> None:
+def test_new_script_template_generates_final_ready_draft(tmp_path: Path) -> None:
     project_dir = tmp_path / "video_projects" / "video_20260528_103000_sunset_beach_girl"
     intake_dir = project_dir / "00_intake"
     script_dir = project_dir / "01_script"
@@ -143,15 +191,20 @@ def test_new_script_template_passes_draft_validation_but_not_final(tmp_path: Pat
     assert new_script_template.main(["new_script_template.py", str(locked_brief), str(script_json)]) == 0
 
     script_data = json.loads(script_json.read_text(encoding="utf-8"))
+    assert script_data["script"]["music_profile"] == "underscore"
     ok, errors, warnings = validate_script.validate(script_data, mode="draft")
     assert ok, errors
-    assert warnings
-
     ok, errors, warnings = validate_script.validate(script_data, mode="final")
-    assert not ok
-    assert any("title must not be blank" in e for e in errors)
-
-
+    assert ok, errors
+    assert script_data["title"]
+    assert script_data["duration_plan"]["beats"]
+    assert script_data["script"]["sections"]
+    assert (script_dir / "story_direction.md").exists()
+    assert (script_dir / "story_direction.json").exists()
+    assert (script_dir / "plot_structure.md").exists()
+    assert (script_dir / "plot_structure.json").exists()
+    assert (script_dir / "script.md").exists()
+    assert (script_dir / "script_review.md").exists()
 
 def test_validate_storyboard_example_final() -> None:
     data = json.loads((TEMPLATES / "storyboard.example.json").read_text(encoding="utf-8"))
@@ -159,7 +212,7 @@ def test_validate_storyboard_example_final() -> None:
     assert ok, errors
 
 
-def test_new_storyboard_template_passes_draft_validation_but_not_final(tmp_path: Path) -> None:
+def test_new_storyboard_template_generates_final_ready_draft(tmp_path: Path) -> None:
     project_dir = tmp_path / "video_projects" / "video_20260528_103000_sunset_beach_girl"
     intake_dir = project_dir / "00_intake"
     script_dir = project_dir / "01_script"
@@ -193,11 +246,12 @@ def test_new_storyboard_template_passes_draft_validation_but_not_final(tmp_path:
     storyboard_data = json.loads(storyboard_json.read_text(encoding="utf-8"))
     ok, errors, warnings = validate_storyboard.validate(storyboard_data, mode="draft")
     assert ok, errors
-    assert warnings
-
     ok, errors, warnings = validate_storyboard.validate(storyboard_data, mode="final")
-    assert not ok
-    assert any("shots must not be empty" in e for e in errors)
+    assert ok, errors
+    assert storyboard_data["shots"]
+    assert storyboard_data["shot_count"] == len(storyboard_data["shots"])
+    assert (storyboard_dir / "storyboard.md").exists()
+    assert (storyboard_dir / "storyboard_review.md").exists()
 
 
 
@@ -207,7 +261,7 @@ def test_validate_character_bible_example_final() -> None:
     assert ok, errors
 
 
-def test_new_character_bible_template_passes_draft_validation_but_not_final(tmp_path: Path) -> None:
+def test_new_character_bible_template_generates_final_ready_draft(tmp_path: Path) -> None:
     project_dir = tmp_path / "video_projects" / "video_20260528_103000_sunset_beach_girl"
     intake_dir = project_dir / "00_intake"
     script_dir = project_dir / "01_script"
@@ -250,11 +304,13 @@ def test_new_character_bible_template_passes_draft_validation_but_not_final(tmp_
     character_data = json.loads(character_json.read_text(encoding="utf-8"))
     ok, errors, warnings = validate_character_bible.validate(character_data, mode="draft")
     assert ok, errors
-    assert warnings
-
     ok, errors, warnings = validate_character_bible.validate(character_data, mode="final")
-    assert not ok
-    assert any("characters must not be empty" in e for e in errors)
+    assert ok, errors
+    assert character_data["characters"]
+    assert "performance_profile" in character_data["characters"][0]
+    assert (character_dir / "character_bible.md").exists()
+    assert (character_dir / "character_review.md").exists()
+    assert (character_dir / "reference_image_plan.json").exists()
 
 def test_update_project_manifest_sets_pipeline_flags(tmp_path: Path, monkeypatch) -> None:
     project_dir = tmp_path / "video_projects" / "video_20260528_103000_sunset_beach_girl"
@@ -292,7 +348,7 @@ def test_validate_keyframe_prompts_example_final() -> None:
     assert ok, errors
 
 
-def test_new_keyframe_prompts_template_passes_draft_validation_but_not_final(tmp_path: Path) -> None:
+def test_new_keyframe_prompts_template_generates_final_ready_draft(tmp_path: Path) -> None:
     project_dir = tmp_path / "video_projects" / "video_20260528_103000_sunset_beach_girl"
     intake_dir = project_dir / "00_intake"
     script_dir = project_dir / "01_script"
@@ -347,12 +403,89 @@ def test_new_keyframe_prompts_template_passes_draft_validation_but_not_final(tmp
     keyframe_data = json.loads(keyframe_json.read_text(encoding="utf-8"))
     ok, errors, warnings = validate_keyframe_prompts.validate(keyframe_data, mode="draft")
     assert ok, errors
-    assert warnings
     assert len(keyframe_data["shot_prompts"]) == len(storyboard["shots"])
-
     ok, errors, warnings = validate_keyframe_prompts.validate(keyframe_data, mode="final")
-    assert not ok
-    assert any("start_keyframe_prompt must not be blank" in e for e in errors)
+    assert ok, errors
+    assert keyframe_data["transition_prompts"]
+    assert keyframe_data["shot_prompts"][0]["performance_prompt"]
+    assert (keyframe_dir / "keyframe_prompts.md").exists()
+    assert (keyframe_dir / "motion_prompts.json").exists()
+    assert (keyframe_dir / "prompt_review.md").exists()
+
+
+def test_lock_project_brief_derives_routing_and_updates_manifest(tmp_path: Path) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260528_103000_sunset_beach_girl"
+    intake_dir = project_dir / "00_intake"
+    intake_dir.mkdir(parents=True, exist_ok=True)
+    manifest_path = project_dir / "project_manifest.json"
+    manifest_path.write_text(json.dumps({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "current_stage": "STAGE_00_INTAKE",
+        "brief_locked": False,
+        "allowed_next_stage": None,
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    draft = load_example_brief()
+    draft["project_id"] = project_dir.name
+    draft["project_dir"] = str(project_dir).replace("\\", "/")
+    draft["status"] = "draft"
+    draft["confirmed_by_user"] = False
+    draft["normalized"]["final_output"] = "只要剧本"
+    draft_path = intake_dir / "project_brief.draft.json"
+    draft_path.write_text(json.dumps(draft, ensure_ascii=False, indent=2), encoding="utf-8")
+    locked_path = intake_dir / "project_brief.locked.json"
+
+    assert lock_project_brief.main(["lock_project_brief.py", str(draft_path), str(locked_path)]) == 0
+    locked = json.loads(locked_path.read_text(encoding="utf-8"))
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert locked["routing"]["requested_output_scope"] == "script_only"
+    assert locked["routing"]["requested_terminal_stage"] == "STAGE_01_SCRIPT_CONFIRMED"
+    assert locked["compiled_requirements"]["requested_output_scope"] == "script_only"
+    assert locked["quality_contract"]["project_shape"] == locked["compiled_requirements"]["project_shape"]
+    assert locked["quality_contract"]["axes"]
+    assert manifest["requested_terminal_stage"] == "STAGE_01_SCRIPT_CONFIRMED"
+    assert manifest["compiled_requirements"]["requested_output_scope"] == "script_only"
+    assert manifest["quality_contract"]["axes"]
+
+
+def test_stage05_compiler_prefers_comfy_route_for_anime_projects(tmp_path: Path) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260528_103000_anime_demo"
+    intake_dir = project_dir / "00_intake"
+    keyframe_dir = project_dir / "04_keyframes"
+    images_dir = project_dir / "05_images"
+    intake_dir.mkdir(parents=True, exist_ok=True)
+    keyframe_dir.mkdir(parents=True, exist_ok=True)
+    images_dir.mkdir(parents=True, exist_ok=True)
+
+    brief = load_example_brief()
+    brief.update({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "status": "locked",
+        "confirmed_by_user": True,
+        "allowed_next_stage": "STAGE_01_SCRIPT_GENERATION",
+        "locked_at": "2026-05-28T10:35:00+08:00",
+    })
+    brief["normalized"]["genre"] = "动漫短片"
+    brief["normalized"]["style"] = "日系动画风（日本动漫感）"
+    brief["normalized"]["final_output"] = "生成关键帧图片素材包"
+    locked_brief = intake_dir / "project_brief.locked.json"
+    locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    keyframe = json.loads((TEMPLATES / "keyframe_prompts.example.json").read_text(encoding="utf-8"))
+    keyframe["project_id"] = project_dir.name
+    keyframe["source_brief"] = str(locked_brief).replace("\\", "/")
+    keyframe["shot_prompts"][0]["style_prompt"] = "anime key visual, clean cel shading"
+    keyframe_json = keyframe_dir / "keyframe_prompts.json"
+    keyframe_json.write_text(json.dumps(keyframe, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    image_manifest_json = images_dir / "keyframe_image_manifest.json"
+    assert new_keyframe_image_jobs.main(["new_keyframe_image_jobs.py", str(locked_brief), str(keyframe_json), str(image_manifest_json)]) == 0
+    data = json.loads(image_manifest_json.read_text(encoding="utf-8"))
+    assert data["compiled_requirements"]["visual_family_hint"] == "anime"
+    assert data["image_provider_strategy"]["primary"] == "comfyui_txt2img"
+    assert data["jobs"][0]["provider_priority"][0] == "comfyui_txt2img"
 
 
 def test_validate_keyframe_image_manifest_example_final() -> None:
@@ -382,6 +515,7 @@ def test_new_keyframe_image_jobs_passes_draft_then_placeholder_passes_final(tmp_
         "allowed_next_stage": "STAGE_01_SCRIPT_GENERATION",
         "locked_at": "2026-05-28T10:35:00+08:00",
     })
+    brief["normalized"]["final_output"] = "生成关键帧图片素材包"
     locked_brief = intake_dir / "project_brief.locked.json"
     locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -398,6 +532,10 @@ def test_new_keyframe_image_jobs_passes_draft_then_placeholder_passes_final(tmp_
     assert ok, errors
     assert warnings
     assert len(data["jobs"]) == 2 * len(keyframe["shot_prompts"])
+    assert data["style_family"] == "realistic"
+    assert data["comfyui_workflow_router"]["realistic"] == "txt2img_keyframe_realistic"
+    assert all(job["style_family"] == "realistic" for job in data["jobs"])
+    assert all(job["comfyui_workflow_name"] == "txt2img_keyframe_realistic" for job in data["jobs"])
 
     ok, errors, warnings = validate_keyframe_image_manifest.validate(data, manifest_json, mode="final")
     assert not ok
@@ -448,6 +586,7 @@ def test_new_video_clip_jobs_passes_draft_then_placeholder_passes_final(tmp_path
         "allowed_next_stage": "STAGE_01_SCRIPT_GENERATION",
         "locked_at": "2026-05-28T10:35:00+08:00",
     })
+    brief["normalized"]["final_output"] = "生成视频片段素材包"
     locked_brief = intake_dir / "project_brief.locked.json"
     locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -499,6 +638,141 @@ def test_new_video_clip_jobs_passes_draft_then_placeholder_passes_final(tmp_path
     assert ok, errors
 
 
+def test_stage05_placeholder_generation_auto_advances_project_manifest_and_unblocks_stage06(tmp_path: Path) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260529_190842_project"
+    intake_dir = project_dir / "00_intake"
+    storyboard_dir = project_dir / "02_storyboard"
+    keyframe_dir = project_dir / "04_keyframes"
+    images_dir = project_dir / "05_images"
+    video_dir = project_dir / "06_video_clips"
+    for d in [intake_dir, storyboard_dir, keyframe_dir, images_dir, video_dir]:
+        d.mkdir(parents=True, exist_ok=True)
+
+    manifest_path = project_dir / "project_manifest.json"
+    manifest_path.write_text(json.dumps({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "current_stage": "STAGE_00_BRIEF_LOCKED",
+        "brief_locked": True,
+        "allowed_next_stage": "STAGE_01_SCRIPT_GENERATION",
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    brief = load_example_brief()
+    brief.update({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "status": "locked",
+        "confirmed_by_user": True,
+        "allowed_next_stage": "STAGE_01_SCRIPT_GENERATION",
+        "locked_at": "2026-05-29T19:08:42+08:00",
+    })
+    brief["normalized"]["final_output"] = "生成视频片段素材包"
+    locked_brief = intake_dir / "project_brief.locked.json"
+    locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    storyboard = json.loads((TEMPLATES / "storyboard.example.json").read_text(encoding="utf-8"))
+    storyboard["project_id"] = project_dir.name
+    storyboard_json = storyboard_dir / "storyboard.json"
+    storyboard_json.write_text(json.dumps(storyboard, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    keyframe = json.loads((TEMPLATES / "keyframe_prompts.example.json").read_text(encoding="utf-8"))
+    keyframe["project_id"] = project_dir.name
+    keyframe["source_brief"] = str(locked_brief).replace("\\", "/")
+    keyframe_json = keyframe_dir / "keyframe_prompts.json"
+    keyframe_json.write_text(json.dumps(keyframe, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    image_manifest_json = images_dir / "keyframe_image_manifest.json"
+    assert new_keyframe_image_jobs.main(["new_keyframe_image_jobs.py", str(locked_brief), str(keyframe_json), str(image_manifest_json)]) == 0
+
+    old_argv = sys.argv[:]
+    try:
+        sys.argv = ["generate_placeholder_keyframe_images.py", str(image_manifest_json), "--width", "64", "--height", "96"]
+        assert generate_placeholder_keyframe_images.main() == 0
+    finally:
+        sys.argv = old_argv
+
+    image_manifest = json.loads(image_manifest_json.read_text(encoding="utf-8"))
+    project_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert image_manifest["status"] == "generated"
+    assert image_manifest["allowed_next_stage"] == "STAGE_06_VIDEO_CLIPS"
+    assert project_manifest["current_stage"] == "STAGE_05_KEYFRAME_IMAGES_CONFIRMED"
+    assert project_manifest["keyframe_images_confirmed"] is True
+    assert project_manifest["allowed_next_stage"] == "STAGE_06_VIDEO_CLIPS"
+
+    clip_manifest_json = video_dir / "video_clip_manifest.json"
+    assert new_video_clip_jobs.main([
+        "new_video_clip_jobs.py",
+        str(locked_brief),
+        str(storyboard_json),
+        str(keyframe_json),
+        str(image_manifest_json),
+        str(clip_manifest_json),
+    ]) == 0
+
+
+def test_new_video_clip_jobs_blocks_when_requested_scope_stops_at_keyframe_prompts(tmp_path: Path) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260529_190842_project"
+    intake_dir = project_dir / "00_intake"
+    storyboard_dir = project_dir / "02_storyboard"
+    keyframe_dir = project_dir / "04_keyframes"
+    images_dir = project_dir / "05_images"
+    video_dir = project_dir / "06_video_clips"
+    for d in [intake_dir, storyboard_dir, keyframe_dir, images_dir, video_dir]:
+        d.mkdir(parents=True, exist_ok=True)
+
+    brief = load_example_brief()
+    brief.update({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "status": "locked",
+        "confirmed_by_user": True,
+        "allowed_next_stage": "STAGE_01_SCRIPT_GENERATION",
+        "locked_at": "2026-05-29T19:08:42+08:00",
+    })
+    brief["normalized"]["final_output"] = "剧本 + 分镜 + 关键帧提示词"
+    locked_brief = intake_dir / "project_brief.locked.json"
+    locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    storyboard = json.loads((TEMPLATES / "storyboard.example.json").read_text(encoding="utf-8"))
+    storyboard["project_id"] = project_dir.name
+    storyboard_json = storyboard_dir / "storyboard.json"
+    storyboard_json.write_text(json.dumps(storyboard, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    keyframe = json.loads((TEMPLATES / "keyframe_prompts.example.json").read_text(encoding="utf-8"))
+    keyframe["project_id"] = project_dir.name
+    keyframe["source_brief"] = str(locked_brief).replace("\\", "/")
+    keyframe_json = keyframe_dir / "keyframe_prompts.json"
+    keyframe_json.write_text(json.dumps(keyframe, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    image_manifest_json = images_dir / "keyframe_image_manifest.json"
+    assert new_keyframe_image_jobs.main(["new_keyframe_image_jobs.py", str(locked_brief), str(keyframe_json), str(image_manifest_json), "--allow-beyond-requested-scope"]) == 0
+    old_argv = sys.argv[:]
+    try:
+        sys.argv = ["generate_placeholder_keyframe_images.py", str(image_manifest_json), "--width", "64", "--height", "96"]
+        assert generate_placeholder_keyframe_images.main() == 0
+    finally:
+        sys.argv = old_argv
+
+    clip_manifest_json = video_dir / "video_clip_manifest.json"
+    assert new_video_clip_jobs.main([
+        "new_video_clip_jobs.py",
+        str(locked_brief),
+        str(storyboard_json),
+        str(keyframe_json),
+        str(image_manifest_json),
+        str(clip_manifest_json),
+    ]) == 1
+    assert new_video_clip_jobs.main([
+        "new_video_clip_jobs.py",
+        str(locked_brief),
+        str(storyboard_json),
+        str(keyframe_json),
+        str(image_manifest_json),
+        str(clip_manifest_json),
+        "--allow-beyond-requested-scope",
+    ]) == 0
+
+
 
 def test_validate_audio_manifest_example_final() -> None:
     data = json.loads((TEMPLATES / "audio_manifest.example.json").read_text(encoding="utf-8"))
@@ -529,6 +803,7 @@ def test_new_audio_jobs_passes_draft_then_placeholder_passes_final(tmp_path: Pat
         "allowed_next_stage": "STAGE_01_SCRIPT_GENERATION",
         "locked_at": "2026-05-28T10:35:00+08:00",
     })
+    brief["normalized"]["final_output"] = "合成粗剪成片"
     locked_brief = intake_dir / "project_brief.locked.json"
     locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -631,6 +906,7 @@ def test_new_assembly_manifest_passes_draft_then_placeholder_passes_final(tmp_pa
         "allowed_next_stage": "STAGE_01_SCRIPT_GENERATION",
         "locked_at": "2026-05-28T10:35:00+08:00",
     })
+    brief["normalized"]["final_output"] = "合成粗剪成片"
     locked_brief = intake_dir / "project_brief.locked.json"
     locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -742,8 +1018,17 @@ def test_new_qa_manifest_passes_draft_then_package_delivery_passes_final(tmp_pat
         "allowed_next_stage": "STAGE_01_SCRIPT_GENERATION",
         "locked_at": "2026-05-28T10:35:00+08:00",
     })
+    brief["normalized"]["final_output"] = "输出完整素材工程包，方便人工剪辑"
     locked_brief = intake_dir / "project_brief.locked.json"
     locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+    manifest_path = project_dir / "project_manifest.json"
+    manifest_path.write_text(json.dumps({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "current_stage": "STAGE_08_ASSEMBLY_CONFIRMED",
+        "assembly_confirmed": True,
+        "allowed_next_stage": "STAGE_09_QA",
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
 
     # Create a minimal Stage 08 assembly manifest with real rough_cut evidence.
     rough_cut = assembly_dir / "rough_cut" / "rough_cut.mp4"
@@ -783,6 +1068,8 @@ def test_new_qa_manifest_passes_draft_then_package_delivery_passes_final(tmp_pat
     qa_manifest_json = qa_dir / "qa_manifest.json"
     assert new_qa_manifest.main(["new_qa_manifest.py", str(locked_brief), str(assembly_manifest_json), str(qa_manifest_json)]) == 0
     data = json.loads(qa_manifest_json.read_text(encoding="utf-8"))
+    check_ids = {item["check_id"] for item in data["qa_checks"]}
+    assert {"intent_alignment", "visual_continuity_contract", "performance_direction_contract", "audio_direction_contract", "format_fit_contract"}.issubset(check_ids)
     ok, errors, warnings = validate_qa_manifest.validate(data, qa_manifest_json, mode="draft")
     assert ok, errors
     assert warnings
@@ -793,5 +1080,83 @@ def test_new_qa_manifest_passes_draft_then_package_delivery_passes_final(tmp_pat
 
     assert package_delivery.main(["package_delivery.py", str(qa_manifest_json)]) == 0
     data = json.loads(qa_manifest_json.read_text(encoding="utf-8"))
+    check_status = {item["check_id"]: item["status"] for item in data["qa_checks"]}
+    assert check_status["intent_alignment"] == "pass"
+    assert check_status["visual_continuity_contract"] in {"pass", "waived"}
     ok, errors, warnings = validate_qa_manifest.validate(data, qa_manifest_json, mode="final")
     assert ok, errors
+    project_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert project_manifest["current_stage"] == "STAGE_09_QA_CONFIRMED"
+    assert project_manifest["qa_confirmed"] is True
+    assert project_manifest["delivery_complete"] is True
+    assert project_manifest["allowed_next_stage"] == "PROJECT_DELIVERED"
+
+
+def test_package_delivery_blocks_when_requested_scope_stops_at_rough_cut(tmp_path: Path) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260528_103000_scope_blocked_qa"
+    intake_dir = project_dir / "00_intake"
+    assembly_dir = project_dir / "08_assembly"
+    qa_dir = project_dir / "09_qa"
+    intake_dir.mkdir(parents=True, exist_ok=True)
+    assembly_dir.mkdir(parents=True, exist_ok=True)
+    qa_dir.mkdir(parents=True, exist_ok=True)
+
+    brief = load_example_brief()
+    brief.update({
+        "schema_version": "1.0.0",
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "status": "locked",
+        "confirmed_by_user": True,
+        "allowed_next_stage": "STAGE_01_SCRIPT_GENERATION",
+        "locked_at": "2026-05-28T10:35:00+08:00",
+    })
+    brief["normalized"]["final_output"] = "合成粗剪成片"
+    locked_brief = intake_dir / "project_brief.locked.json"
+    locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    rough_cut = assembly_dir / "rough_cut" / "rough_cut.mp4"
+    rough_cut.parent.mkdir(parents=True, exist_ok=True)
+    rough_cut.write_bytes(b"PLACEHOLDER ROUGH CUT FOR QA TEST")
+    assembly_manifest = {
+        "schema_version": "0.9.0",
+        "stage": "STAGE_08_ASSEMBLY",
+        "status": "generated",
+        "project_id": project_dir.name,
+        "source_brief": str(locked_brief).replace("\\", "/"),
+        "source_storyboard": "",
+        "source_video_clip_manifest": "",
+        "source_audio_manifest": "",
+        "assembly_provider_strategy": {"primary": "placeholder"},
+        "output_root": str(assembly_dir).replace("\\", "/"),
+        "rough_cut_dir": str(rough_cut.parent).replace("\\", "/"),
+        "temp_dir": str((assembly_dir / "temp")).replace("\\", "/"),
+        "concat_list_path": str((assembly_dir / "ffmpeg_concat_list.txt")).replace("\\", "/"),
+        "edit_decision_list_path": str((assembly_dir / "edit_decision_list.json")).replace("\\", "/"),
+        "audio_mix_plan_path": str((assembly_dir / "audio_mix_plan.json")).replace("\\", "/"),
+        "subtitle_path": str((assembly_dir / "subtitles.srt")).replace("\\", "/"),
+        "final_output_path": str(rough_cut).replace("\\", "/"),
+        "timeline": [{"shot_id": "S001", "clip_path": str(rough_cut).replace("\\", "/"), "start_sec": 0, "duration_sec": 5, "source_clip_id": "CLIP_S001"}],
+        "audio_tracks": [],
+        "subtitle_tracks": [],
+        "ffmpeg_commands": [],
+        "evidence": {"file_path": str(rough_cut).replace("\\", "/"), "file_exists": True, "file_size_bytes": rough_cut.stat().st_size, "created_at": "2026-05-28T10:40:00+08:00"},
+        "summary": {"timeline_clip_count": 1, "audio_track_count": 0, "rough_cut_duration_sec": 5},
+        "self_check": {"has_timeline_from_confirmed_clips": True, "has_audio_mix_plan": True, "has_edit_decision_list": True, "has_final_output_file": True, "ready_for_qa_stage": True},
+        "allowed_next_stage": "STAGE_09_QA",
+        "errors": [],
+    }
+    assembly_manifest_json = assembly_dir / "assembly_manifest.json"
+    assembly_manifest_json.write_text(json.dumps(assembly_manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    qa_manifest_json = qa_dir / "qa_manifest.json"
+    assert new_qa_manifest.main([
+        "new_qa_manifest.py",
+        str(locked_brief),
+        str(assembly_manifest_json),
+        str(qa_manifest_json),
+        "--allow-beyond-requested-scope",
+    ]) == 0
+
+    assert package_delivery.main(["package_delivery.py", str(qa_manifest_json)]) == 1
+    assert package_delivery.main(["package_delivery.py", str(qa_manifest_json), "--allow-beyond-requested-scope"]) == 0

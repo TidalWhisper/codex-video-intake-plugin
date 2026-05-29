@@ -17,6 +17,14 @@ import sys
 from pathlib import Path
 from typing import Any
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+PLUGIN_ROOT = next(anchor for anchor in [SCRIPT_DIR, *SCRIPT_DIR.parents] if anchor.name == "codex-video-pipeline-plugin")
+sys.path.insert(0, str(PLUGIN_ROOT / "scripts"))
+from pipeline_core.pipeline_blueprints import OUTPUT_SCOPE_TO_LABEL, routing_from_brief  # noqa: E402
+from pipeline_core.project_state import load_json_file  # noqa: E402
+from pipeline_core.quality_contracts import build_quality_contract  # noqa: E402
+from pipeline_core.requirement_compiler import compile_requirements  # noqa: E402
+
 REQUIRED_TOP_LEVEL = [
     "schema_version",
     "project_id",
@@ -45,6 +53,7 @@ REQUIRED_NORMALIZED = [
     "voice_mode",
     "voice_required",
     "music_mode",
+    "music_profile",
     "music_required",
     "final_output",
 ]
@@ -69,7 +78,7 @@ def is_blank(value: Any) -> bool:
 
 def load_json(path: Path) -> dict[str, Any]:
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        return load_json_file(path)
     except FileNotFoundError:
         raise SystemExit(f"ERROR: file not found: {path}")
     except json.JSONDecodeError as exc:
@@ -102,7 +111,7 @@ def maybe_load_manifest(file_path: Path | None) -> dict[str, Any] | None:
     if not manifest_path.exists():
         return None
     try:
-        return json.loads(manifest_path.read_text(encoding="utf-8"))
+        return load_json_file(manifest_path)
     except json.JSONDecodeError:
         return {"__invalid_json__": str(manifest_path)}
 
@@ -198,6 +207,51 @@ def validate(data: dict[str, Any], file_path: Path | None = None) -> tuple[bool,
 
     if data.get("required_fields_complete") is False and not declared_missing:
         warnings.append("required_fields_complete is false but missing_required_fields is empty")
+
+    music_required = normalized.get("music_required")
+    music_profile = normalized.get("music_profile")
+    if music_required is True and music_profile not in {"song", "instrumental", "underscore"}:
+        errors.append("normalized.music_profile must be song, instrumental, or underscore when music_required=true")
+    if music_required is False and music_profile not in {"", None}:
+        errors.append("normalized.music_profile must be blank when music_required=false")
+
+    routing = data.get("routing")
+    if routing is not None and not isinstance(routing, dict):
+        errors.append("routing must be an object when present")
+    elif isinstance(routing, dict):
+        derived = routing_from_brief(data)
+        scope = routing.get("requested_output_scope")
+        terminal = routing.get("requested_terminal_stage")
+        label = routing.get("requested_output_label")
+        if scope != derived.get("requested_output_scope"):
+            errors.append("routing.requested_output_scope must match normalized.final_output")
+        if terminal != derived.get("requested_terminal_stage"):
+            errors.append("routing.requested_terminal_stage must match normalized.final_output")
+        if label != derived.get("requested_output_label"):
+            errors.append("routing.requested_output_label must match normalized.final_output")
+        if scope and scope not in OUTPUT_SCOPE_TO_LABEL:
+            errors.append("routing.requested_output_scope is not recognized")
+
+    compiled_requirements = data.get("compiled_requirements")
+    if compiled_requirements is not None and not isinstance(compiled_requirements, dict):
+        errors.append("compiled_requirements must be an object when present")
+    elif isinstance(compiled_requirements, dict):
+        derived_compiled = compile_requirements(data)
+        if compiled_requirements.get("requested_output_scope") != derived_compiled.get("requested_output_scope"):
+            errors.append("compiled_requirements.requested_output_scope must match normalized.final_output")
+        if compiled_requirements.get("project_shape") != derived_compiled.get("project_shape"):
+            errors.append("compiled_requirements.project_shape must match current brief")
+
+    quality_contract = data.get("quality_contract")
+    if quality_contract is not None and not isinstance(quality_contract, dict):
+        errors.append("quality_contract must be an object when present")
+    elif isinstance(quality_contract, dict):
+        compiled_for_contract = compiled_requirements if isinstance(compiled_requirements, dict) else compile_requirements(data)
+        derived_contract = build_quality_contract(data, compiled_for_contract)
+        if quality_contract.get("project_shape") != derived_contract.get("project_shape"):
+            errors.append("quality_contract.project_shape must match compiled requirements")
+        if not isinstance(quality_contract.get("axes"), list) or not quality_contract.get("axes"):
+            errors.append("quality_contract.axes must be a non-empty list")
 
     if data.get("status") == "locked":
         if data.get("confirmed_by_user") is not True:

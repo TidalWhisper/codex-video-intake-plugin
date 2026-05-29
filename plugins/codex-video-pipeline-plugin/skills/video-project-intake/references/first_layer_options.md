@@ -169,19 +169,26 @@ Mapping:
 | Choice | Canonical value |
 |---|---|
 | A | 不需要 |
-| B | 需要 |
+| B1 | 需要，歌曲（song） |
+| B2 | 需要，纯音乐（instrumental） |
+| B3 | 需要，背景配乐（underscore） |
 | C | 由模型根据题材自动建议 |
 
 Canonical keys:
 
 - `music_mode`
+- `music_profile`
 - `music_required`
 
 Mapping:
 
 - A => `music_required: false`
-- B => `music_required: true`
+- A => `music_profile: ""`
+- B1 => `music_required: true`, `music_profile: "song"`
+- B2 => `music_required: true`, `music_profile: "instrumental"`
+- B3 => `music_required: true`, `music_profile: "underscore"`
 - C => `music_required: "recommend"`
+- C => `music_profile: ""`
 
 ## 9. final_output
 
@@ -212,4 +219,5 @@ In this initial version:
   - `characters_required`: auto
   - `voice_required`: recommend
   - `music_required`: recommend
+  - `music_profile`: underscore when the user explicitly says “默认来一条背景音乐”
   - `final_output`: 剧本 + 分镜脚本

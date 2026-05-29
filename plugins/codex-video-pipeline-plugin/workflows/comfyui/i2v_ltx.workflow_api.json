@@ -1,0 +1,365 @@
+{
+  "1": {
+    "inputs": {
+      "ckpt_name": "LTX2.3\\ltx-2.3-22b-dev-fp8.safetensors"
+    },
+    "class_type": "CheckpointLoaderSimple",
+    "_meta": {
+      "title": "Load LTX Checkpoint"
+    }
+  },
+  "2": {
+    "inputs": {
+      "text_encoder": "Gemma3\\gemma_3_12B_it_fp8_e4m3fn.safetensors",
+      "ckpt_name": "LTX2.3\\ltx-2.3-22b-dev-fp8.safetensors",
+      "device": "default"
+    },
+    "class_type": "LTXAVTextEncoderLoader",
+    "_meta": {
+      "title": "Load LTX Text Encoder"
+    }
+  },
+  "3": {
+    "inputs": {
+      "text": "gentle cinematic motion",
+      "clip": [
+        "2",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "Positive Prompt"
+    }
+  },
+  "4": {
+    "inputs": {
+      "text": "low quality, blurry, deformed, duplicate subject, extra limbs, bad anatomy, watermark, logo, text",
+      "clip": [
+        "2",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "Negative Prompt"
+    }
+  },
+  "5": {
+    "inputs": {
+      "positive": [
+        "3",
+        0
+      ],
+      "negative": [
+        "4",
+        0
+      ],
+      "frame_rate": [
+        "24",
+        0
+      ]
+    },
+    "class_type": "LTXVConditioning",
+    "_meta": {
+      "title": "LTXV Conditioning"
+    }
+  },
+  "6": {
+    "inputs": {
+      "model": [
+        "1",
+        0
+      ],
+      "lora_name": "LTX2.3\\ltx-2.3-22b-distilled-lora-384-1.1.safetensors",
+      "strength_model": 0.5
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "Load Distilled LoRA"
+    }
+  },
+  "7": {
+    "inputs": {
+      "image": "example.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Start Image"
+    }
+  },
+  "8": {
+    "inputs": {
+      "width": 544,
+      "height": 960,
+      "length": [
+        "23",
+        0
+      ],
+      "batch_size": 1
+    },
+    "class_type": "EmptyLTXVLatentVideo",
+    "_meta": {
+      "title": "Empty Video Latent"
+    }
+  },
+  "9": {
+    "inputs": {
+      "vae": [
+        "1",
+        2
+      ],
+      "image": [
+        "7",
+        0
+      ],
+      "latent": [
+        "8",
+        0
+      ],
+      "strength": 0.7,
+      "bypass": false
+    },
+    "class_type": "LTXVImgToVideoConditionOnly",
+    "_meta": {
+      "title": "Image To Video Conditioning"
+    }
+  },
+  "10": {
+    "inputs": {
+      "ckpt_name": "LTX2.3\\ltx-2.3-22b-dev-fp8.safetensors"
+    },
+    "class_type": "LTXVAudioVAELoader",
+    "_meta": {
+      "title": "Load Audio VAE"
+    }
+  },
+  "11": {
+    "inputs": {
+      "frames_number": [
+        "23",
+        0
+      ],
+      "frame_rate": [
+        "25",
+        0
+      ],
+      "batch_size": 1,
+      "audio_vae": [
+        "10",
+        0
+      ]
+    },
+    "class_type": "LTXVEmptyLatentAudio",
+    "_meta": {
+      "title": "Empty Audio Latent"
+    }
+  },
+  "12": {
+    "inputs": {
+      "video_latent": [
+        "9",
+        0
+      ],
+      "audio_latent": [
+        "11",
+        0
+      ]
+    },
+    "class_type": "LTXVConcatAVLatent",
+    "_meta": {
+      "title": "Concat AV Latent"
+    }
+  },
+  "13": {
+    "inputs": {
+      "model": [
+        "6",
+        0
+      ],
+      "positive": [
+        "5",
+        0
+      ],
+      "negative": [
+        "5",
+        1
+      ],
+      "cfg": 1.0
+    },
+    "class_type": "CFGGuider",
+    "_meta": {
+      "title": "CFG Guider"
+    }
+  },
+  "14": {
+    "inputs": {
+      "sampler_name": "euler_ancestral_cfg_pp"
+    },
+    "class_type": "KSamplerSelect",
+    "_meta": {
+      "title": "Sampler Select"
+    }
+  },
+  "15": {
+    "inputs": {
+      "noise_seed": 43
+    },
+    "class_type": "RandomNoise",
+    "_meta": {
+      "title": "Random Noise"
+    }
+  },
+  "16": {
+    "inputs": {
+      "sigmas": "1.0, 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0"
+    },
+    "class_type": "ManualSigmas",
+    "_meta": {
+      "title": "Manual Sigmas"
+    }
+  },
+  "17": {
+    "inputs": {
+      "noise": [
+        "15",
+        0
+      ],
+      "guider": [
+        "13",
+        0
+      ],
+      "sampler": [
+        "14",
+        0
+      ],
+      "sigmas": [
+        "16",
+        0
+      ],
+      "latent_image": [
+        "12",
+        0
+      ]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {
+      "title": "Sampler Custom Advanced"
+    }
+  },
+  "18": {
+    "inputs": {
+      "av_latent": [
+        "17",
+        0
+      ]
+    },
+    "class_type": "LTXVSeparateAVLatent",
+    "_meta": {
+      "title": "Separate AV Latent"
+    }
+  },
+  "19": {
+    "inputs": {
+      "vae": [
+        "1",
+        2
+      ],
+      "latents": [
+        "18",
+        0
+      ],
+      "horizontal_tiles": 2,
+      "vertical_tiles": 2,
+      "overlap": 6,
+      "last_frame_fix": false,
+      "working_device": "auto",
+      "working_dtype": "auto"
+    },
+    "class_type": "LTXVTiledVAEDecode",
+    "_meta": {
+      "title": "Decode Video Frames"
+    }
+  },
+  "20": {
+    "inputs": {
+      "samples": [
+        "18",
+        1
+      ],
+      "audio_vae": [
+        "10",
+        0
+      ]
+    },
+    "class_type": "LTXVAudioVAEDecode",
+    "_meta": {
+      "title": "Decode Audio"
+    }
+  },
+  "21": {
+    "inputs": {
+      "images": [
+        "19",
+        0
+      ],
+      "audio": [
+        "20",
+        0
+      ],
+      "fps": [
+        "24",
+        0
+      ]
+    },
+    "class_type": "CreateVideo",
+    "_meta": {
+      "title": "Create Video"
+    }
+  },
+  "22": {
+    "inputs": {
+      "video": [
+        "21",
+        0
+      ],
+      "filename_prefix": "video/ltx_i2v",
+      "format": "mp4",
+      "codec": "h264"
+    },
+    "class_type": "SaveVideo",
+    "_meta": {
+      "title": "Save Video"
+    }
+  },
+  "23": {
+    "inputs": {
+      "value": 121
+    },
+    "class_type": "PrimitiveInt",
+    "_meta": {
+      "title": "Frame Count"
+    }
+  },
+  "24": {
+    "inputs": {
+      "value": 25.0
+    },
+    "class_type": "PrimitiveFloat",
+    "_meta": {
+      "title": "FPS"
+    }
+  },
+  "25": {
+    "inputs": {
+      "a": [
+        "24",
+        0
+      ]
+    },
+    "class_type": "LTXFloatToInt",
+    "_meta": {
+      "title": "FPS To Int"
+    }
+  }
+}

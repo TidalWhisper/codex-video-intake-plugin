@@ -29,19 +29,20 @@ Stage 00-09 SKILL.md
 Stage 00-09 manifest / schema / validator
 Stage 00-09 placeholder 生成脚本
 run_all_tests.cmd / run_all_tests.py
+provider 配置读取与健康检查
+OpenAI GPT Image 2 图片生成 runner
+ComfyUI core client 与 txt2img / LTX I2V / IndexTTS2 / Music runners
+Stage 05-09 provider-backed 自动化测试与交付打包链路
 后续 provider 接入文档和任务提示词
 ```
 
-未完成：
+仍未完全闭环：
 
 ```text
-真实 GPT Image 2 API 调用
-真实 ComfyUI API Client
-真实 ComfyUI txt2img 工作流接入
-真实 ComfyUI LTX I2V 工作流接入
-真实 IndexTTS2 / 音乐工作流接入
-真实 provider fallback
-真实失败重试策略
+本机真实 OpenAI / ComfyUI / FFmpeg 环境最终验收
+稳定的真实 workflow_api.json 导出与节点映射沉淀
+最小真实项目样例的仓库化基线
+更完整的 provider fallback / failure recovery / retry hardening
 ```
 
 ## C. 必读文件顺序
@@ -65,12 +66,15 @@ Codex 必须按顺序读取：
 
 ### D1. Provider 基础设施
 
-新增或完善：
+当前已具备：
 
 ```text
 config/providers.example.yaml
-scripts/provider_config.py
-scripts/check_provider_health.py
+scripts/providers/provider_config.py
+scripts/providers/check_provider_health.py
+scripts/providers/check_provider_config.py
+scripts/providers/check_openai_image_provider.py
+scripts/providers/check_comfyui_server.py
 ```
 
 验收：
@@ -84,11 +88,11 @@ run_all_tests.py 通过
 
 ### D2. GPT Image 2 / OpenAI Images Provider
 
-新增：
+当前已具备：
 
 ```text
-scripts/openai_image_client.py
-scripts/run_openai_image2_keyframes.py
+scripts/providers/openai_image_client.py
+scripts/providers/run_openai_gpt_image2.py
 ```
 
 接入 Stage 05：
@@ -110,12 +114,12 @@ manifest 写入 provider=openai_image2
 
 ### D3. ComfyUI Core Client
 
-新增：
+当前已具备：
 
 ```text
-scripts/comfyui_client.py
-scripts/check_comfyui_server.py
-scripts/run_comfyui_workflow.py
+scripts/providers/comfyui_client.py
+scripts/providers/check_comfyui_server.py
+scripts/providers/run_comfyui_workflow.py
 ```
 
 基础能力：
@@ -137,11 +141,11 @@ workflow 文件不存在时报明确错误
 
 ### D4. Stage 05 ComfyUI txt2img fallback
 
-新增：
+当前已具备：
 
 ```text
 workflows/comfyui/txt2img_keyframe.workflow_api.json
-scripts/run_comfyui_txt2img_keyframes.py
+scripts/providers/run_comfyui_txt2img.py
 ```
 
 验收：
@@ -154,11 +158,11 @@ final validator 通过
 
 ### D5. Stage 06 LTX I2V
 
-新增：
+当前已具备：
 
 ```text
-workflows/comfyui/i2v_ltx23.workflow_api.json
-scripts/run_comfyui_ltx_i2v.py
+workflows/comfyui/i2v_ltx.workflow_api.json
+scripts/providers/run_comfyui_ltx_i2v.py
 ```
 
 验收：
@@ -171,13 +175,14 @@ video_clip_manifest.json final 通过
 
 ### D6. Stage 07 IndexTTS2 / Music
 
-新增：
+当前已具备：
 
 ```text
 workflows/comfyui/indextts2.workflow_api.json
-workflows/comfyui/music_generation.workflow_api.json
-scripts/run_comfyui_indextts2.py
-scripts/run_comfyui_music.py
+workflows/comfyui/HeartMuLa_workflow_fixed_importable.json
+workflows/comfyui/AceStep_Music_Workflow.json
+scripts/providers/run_comfyui_indextts2.py
+scripts/providers/run_comfyui_music.py
 ```
 
 验收：
@@ -190,12 +195,12 @@ audio_manifest.json final 通过
 
 ### D7. Stage 08/09 真实合成与交付强化
 
-完善：
+当前已具备基础真实链路：
 
 ```text
-scripts/ffmpeg_assembler.py
-scripts/package_delivery.py
-scripts/validate_qa_manifest.py
+skills/video-assembly/scripts/assemble_with_ffmpeg.py
+skills/video-qa-delivery/scripts/package_delivery.py
+skills/video-qa-delivery/scripts/validate_qa_manifest.py
 ```
 
 验收：
@@ -221,7 +226,7 @@ QA 和 delivery manifest final 通过
 下一轮最合理的任务是：
 
 ```text
-实现 provider_config.py + check_provider_health.py + openai_image_client.py 的第一版，
-并把 Stage 05 的 keyframe image provider 从 placeholder 扩展为：
-openai_image2 → comfyui_txt2img → manual/placeholder fallback。
+先校正文档与代码状态不一致的问题，
+再执行本机真实环境前置检查与最小 Stage 05-09 冒烟验证，
+最后针对验证结果补强 fallback、重试、失败证据和交付稳定性。
 ```
