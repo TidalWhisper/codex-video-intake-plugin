@@ -36,8 +36,10 @@ def write_stage02_companions(out_path: Path, template: dict) -> None:
         storyboard_lines.extend([
             f"## {shot.get('shot_id')} {shot.get('start')} - {shot.get('end')}",
             f"- 场景：{shot.get('scene')}",
+            f"- 地点/天气：{shot.get('location') or shot.get('scene')} / {shot.get('weather') or '按故事气氛执行'}",
             f"- 镜头：{shot.get('camera')}",
             f"- 构图：{shot.get('composition')}",
+            f"- 关键道具：{shot.get('key_prop') or '无'}",
             f"- 动作：{shot.get('action')}",
             f"- 情绪：{shot.get('emotion')}",
             f"- 对白：{shot.get('dialogue') or '无'}",

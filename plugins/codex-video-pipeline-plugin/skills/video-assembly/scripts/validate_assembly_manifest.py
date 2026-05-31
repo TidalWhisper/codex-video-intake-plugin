@@ -6,6 +6,7 @@ Final mode requires the rough-cut output file to exist and have non-zero size, a
 from __future__ import annotations
 import argparse
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +30,10 @@ REQUIRED_TOP = [
     "subtitle_tracks", "ffmpeg_commands", "evidence", "summary", "self_check", "allowed_next_stage"
 ]
 VIDEO_EXTS = {".mp4", ".mov", ".webm", ".mkv"}
+ROOT = Path(__file__).resolve().parents[3]
+if str(ROOT / "scripts") not in sys.path:
+    sys.path.insert(0, str(ROOT / "scripts"))
+from pipeline_core.media_evidence import MIN_PRODUCTION_VIDEO_BYTES  # noqa: E402
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -44,6 +49,29 @@ def is_blank(v: Any) -> bool:
     return v is None or (isinstance(v, str) and not v.strip())
 
 
+def _plugin_root_candidates(base_json: Path) -> list[Path]:
+    candidates: list[Path] = []
+    seen: set[str] = set()
+
+    def add(path: Path) -> None:
+        resolved = path.resolve()
+        if resolved.name != "codex-video-pipeline-plugin":
+            return
+        key = str(resolved).lower()
+        if key not in seen:
+            candidates.append(resolved)
+            seen.add(key)
+
+    base_abs = base_json if base_json.is_absolute() else (Path.cwd() / base_json).resolve()
+    for anchor in [base_abs.parent, *base_abs.parents]:
+        add(anchor)
+    cwd = Path.cwd().resolve()
+    for anchor in [cwd, *cwd.parents]:
+        add(anchor)
+    add(ROOT)
+    return candidates
+
+
 def resolve_path(base_json: Path, raw: Any) -> Path | None:
     if not isinstance(raw, str) or not raw.strip():
         return None
@@ -52,21 +80,24 @@ def resolve_path(base_json: Path, raw: Any) -> Path | None:
         return p
     if p.exists():
         return p.resolve()
+    base_abs = base_json if base_json.is_absolute() else (Path.cwd() / base_json).resolve()
+    plugin_roots = _plugin_root_candidates(base_json)
     special_roots: list[Path] = []
-    plugin_root = next(
-        (anchor.resolve() for anchor in [base_json.parent, *base_json.parents] if anchor.name == "codex-video-pipeline-plugin"),
-        None,
-    )
-    repo_root = plugin_root.parent.parent.resolve() if plugin_root and plugin_root.parent.name == "plugins" else None
+    repo_roots: list[Path] = []
+    for plugin_root in plugin_roots:
+        if plugin_root.parent.name == "plugins":
+            repo_root = plugin_root.parent.parent.resolve()
+            if repo_root not in repo_roots:
+                repo_roots.append(repo_root)
     if p.parts:
         first = p.parts[0].lower()
-        if first == "plugins" and repo_root is not None:
-            special_roots.append(repo_root)
-        elif first in KNOWN_PLUGIN_ROOT_CHILDREN and plugin_root is not None:
-            special_roots.append(plugin_root)
+        if first == "plugins":
+            special_roots.extend(repo_roots)
+        elif first in KNOWN_PLUGIN_ROOT_CHILDREN:
+            special_roots.extend(plugin_roots)
     anchors: list[Path] = []
     seen: set[str] = set()
-    for anchor in [*special_roots, Path.cwd(), base_json.parent, *base_json.parents]:
+    for anchor in [*special_roots, *repo_roots, *plugin_roots, Path.cwd().resolve(), base_abs.parent, *base_abs.parents]:
         key = str(anchor.resolve()).lower()
         if key not in seen:
             anchors.append(anchor)
@@ -79,7 +110,7 @@ def resolve_path(base_json: Path, raw: Any) -> Path | None:
         candidate = (anchor / p).resolve()
         if candidate.parent.exists():
             return candidate
-    return (base_json.parent / p).resolve()
+    return (base_abs.parent / p).resolve()
 
 
 def validate(data: dict[str, Any], path: Path | None = None, mode: str = "final") -> tuple[bool, list[str], list[str]]:
@@ -180,16 +211,26 @@ def validate(data: dict[str, Any], path: Path | None = None, mode: str = "final"
                 errors.append(f"final output file does not exist: {final_path}")
             elif not final_path.is_file():
                 errors.append(f"final output path is not a file: {final_path}")
-            elif final_path.stat().st_size <= 0:
-                errors.append(f"final output file is empty: {final_path}")
+            elif final_path.stat().st_size < MIN_PRODUCTION_VIDEO_BYTES:
+                errors.append(f"final output file is too small to be trusted as rough cut evidence: {final_path}")
         evidence = data.get("evidence")
         if not isinstance(evidence, dict):
             errors.append("evidence must be an object")
         else:
             if evidence.get("file_exists") is not True:
                 errors.append("evidence.file_exists must be true in final mode")
-            if not isinstance(evidence.get("file_size_bytes"), int) or evidence.get("file_size_bytes") <= 0:
-                errors.append("evidence.file_size_bytes must be a positive integer in final mode")
+            if not isinstance(evidence.get("file_size_bytes"), int) or evidence.get("file_size_bytes") < MIN_PRODUCTION_VIDEO_BYTES:
+                errors.append("evidence.file_size_bytes must be a trusted rough-cut-sized positive integer in final mode")
+        if str(data.get("assembly_provider") or "").strip().lower().startswith("placeholder_test_"):
+            errors.append("assembly_provider must not be a placeholder test provider in final mode")
+        if any(
+            isinstance(item, dict) and (
+                str(item.get("strategy") or "").strip().lower() == "placeholder_test"
+                or str(item.get("provider") or "").strip().lower().startswith("placeholder_test_")
+            )
+            for item in (data.get("ffmpeg_commands") or [])
+        ):
+            errors.append("ffmpeg_commands must not rely on placeholder_test strategy in final mode")
         summary = data.get("summary")
         if isinstance(summary, dict):
             if summary.get("timeline_clip_count") != len(timeline):

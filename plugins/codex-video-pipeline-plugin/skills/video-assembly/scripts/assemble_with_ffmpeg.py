@@ -31,6 +31,7 @@ KNOWN_PLUGIN_ROOT_CHILDREN = {
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "scripts"))
 from pipeline_blueprints import next_stage_after  # noqa: E402
+from pipeline_core.media_evidence import MIN_PRODUCTION_VIDEO_BYTES, assembly_output_ready, clip_output_ready, provider_is_nonproduction  # noqa: E402
 from pipeline_core.requirement_compiler import compiled_requirements_from_context, requested_output_scope_guard_message  # noqa: E402
 from pipeline_core.project_state import update_project_manifest_for_stage  # noqa: E402
 
@@ -52,21 +53,46 @@ def resolve_path(base_json: Path, raw: str) -> Path:
         return p
     if p.exists():
         return p.resolve()
+    base_abs = base_json if base_json.is_absolute() else (Path.cwd() / base_json).resolve()
+
+    def plugin_root_candidates() -> list[Path]:
+        candidates: list[Path] = []
+        seen: set[str] = set()
+
+        def add(path: Path) -> None:
+            resolved = path.resolve()
+            if resolved.name != "codex-video-pipeline-plugin":
+                return
+            key = str(resolved).lower()
+            if key not in seen:
+                candidates.append(resolved)
+                seen.add(key)
+
+        for anchor in [base_abs.parent, *base_abs.parents]:
+            add(anchor)
+        cwd = Path.cwd().resolve()
+        for anchor in [cwd, *cwd.parents]:
+            add(anchor)
+        add(ROOT)
+        return candidates
+
+    plugin_roots = plugin_root_candidates()
     special_roots: list[Path] = []
-    plugin_root = next(
-        (anchor.resolve() for anchor in [base_json.parent, *base_json.parents] if anchor.name == "codex-video-pipeline-plugin"),
-        None,
-    )
-    repo_root = plugin_root.parent.parent.resolve() if plugin_root and plugin_root.parent.name == "plugins" else None
+    repo_roots: list[Path] = []
+    for plugin_root in plugin_roots:
+        if plugin_root.parent.name == "plugins":
+            repo_root = plugin_root.parent.parent.resolve()
+            if repo_root not in repo_roots:
+                repo_roots.append(repo_root)
     if p.parts:
         first = p.parts[0].lower()
-        if first == "plugins" and repo_root is not None:
-            special_roots.append(repo_root)
-        elif first in KNOWN_PLUGIN_ROOT_CHILDREN and plugin_root is not None:
-            special_roots.append(plugin_root)
+        if first == "plugins":
+            special_roots.extend(repo_roots)
+        elif first in KNOWN_PLUGIN_ROOT_CHILDREN:
+            special_roots.extend(plugin_roots)
     anchors: list[Path] = []
     seen: set[str] = set()
-    for anchor in [*special_roots, Path.cwd(), base_json.parent, *base_json.parents]:
+    for anchor in [*special_roots, *repo_roots, *plugin_roots, Path.cwd().resolve(), base_abs.parent, *base_abs.parents]:
         key = str(anchor.resolve()).lower()
         if key not in seen:
             anchors.append(anchor)
@@ -79,7 +105,54 @@ def resolve_path(base_json: Path, raw: str) -> Path:
         candidate = (anchor / p).resolve()
         if candidate.parent.exists():
             return candidate
-    return (base_json.parent / p).resolve()
+    return (base_abs.parent / p).resolve()
+
+
+def maybe_load_json(path: Path | None) -> dict[str, Any]:
+    if path is None or not path.exists() or not path.is_file():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def clip_manifest_ready(manifest_path: Path | None, clip_manifest: dict[str, Any]) -> bool:
+    if manifest_path is None or not clip_manifest:
+        return False
+    if not bool((clip_manifest.get("self_check") or {}).get("ready_for_audio_stage")):
+        return False
+    jobs = clip_manifest.get("jobs") if isinstance(clip_manifest.get("jobs"), list) else []
+    if not jobs:
+        return False
+    for job in jobs:
+        if not isinstance(job, dict):
+            return False
+        raw = job.get("output_path") or (job.get("evidence") or {}).get("file_path")
+        if not raw:
+            return False
+        clip_path = resolve_path(manifest_path, str(raw))
+        if not clip_output_ready(clip_path, job.get("provider")):
+            return False
+    return True
+
+
+def upstream_blocking_state(base_json: Path, data: dict[str, Any]) -> tuple[str, dict[str, bool], list[str]]:
+    clip_manifest_path = resolve_path(base_json, data.get("source_video_clip_manifest") or "")
+    audio_manifest_path = resolve_path(base_json, data.get("source_audio_manifest") or "")
+    clip_manifest = maybe_load_json(clip_manifest_path)
+    audio_manifest = maybe_load_json(audio_manifest_path)
+    blockers: list[str] = []
+    clip_ready = clip_manifest_ready(clip_manifest_path, clip_manifest) if clip_manifest else True
+    audio_ready = bool((audio_manifest.get("self_check") or {}).get("ready_for_assembly_stage")) if audio_manifest else True
+    if not clip_ready:
+        blockers.append("source_video_clip_manifest not ready_for_audio_stage or contains non-production clip evidence")
+        return "STAGE_06_VIDEO_CLIPS", {"video_clips_confirmed": False, "audio_confirmed": False, "assembly_confirmed": False}, blockers
+    if not audio_ready:
+        blockers.append("source_audio_manifest not ready_for_assembly_stage")
+        return "STAGE_07_AUDIO", {"audio_confirmed": False, "assembly_confirmed": False}, blockers
+    return "STAGE_08_ASSEMBLY", {"assembly_confirmed": False}, blockers
 
 
 def find_ffmpeg() -> str | None:
@@ -212,7 +285,10 @@ def build_filter_complex(
 
 
 def build_ffmpeg_attempts(data: dict[str, Any], manifest_path: Path, ffmpeg_path: str) -> list[dict[str, Any]]:
-    concat_list = resolve_path(manifest_path, data.get("concat_list_path") or "ffmpeg_concat_list.txt")
+    concat_list = resolve_path(
+        manifest_path,
+        data.get("runtime_concat_list_path") or data.get("concat_list_path") or "ffmpeg_concat_list.txt",
+    )
     final_output = resolve_path(manifest_path, data.get("final_output_path") or "rough_cut/rough_cut.mp4")
     spec = output_spec_for_manifest(data)
     burn_subtitles = subtitle_burn_in_requested(data)
@@ -325,6 +401,98 @@ def build_ffmpeg_attempts(data: dict[str, Any], manifest_path: Path, ffmpeg_path
     return attempts
 
 
+def build_fallback_visual_segment(
+    ffmpeg_path: str,
+    image_path: Path,
+    output_path: Path,
+    *,
+    duration_sec: float,
+    spec: dict[str, Any],
+) -> tuple[int, str]:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    width = safe_int(spec.get("width"), DEFAULT_OUTPUT_SPEC["width"])
+    height = safe_int(spec.get("height"), DEFAULT_OUTPUT_SPEC["height"])
+    fps = safe_int(spec.get("fps"), DEFAULT_OUTPUT_SPEC["fps"])
+    cmd = [
+        ffmpeg_path,
+        "-y",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-loop",
+        "1",
+        "-i",
+        str(image_path),
+        "-vf",
+        f"scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black,fps={fps},format=yuv420p,setsar=1",
+        "-t",
+        f"{max(0.5, duration_sec):.3f}",
+        "-r",
+        str(fps),
+        "-c:v",
+        str(spec.get("video_codec") or DEFAULT_OUTPUT_SPEC["video_codec"]),
+        "-preset",
+        "veryfast",
+        "-pix_fmt",
+        str(spec.get("pixel_format") or DEFAULT_OUTPUT_SPEC["pixel_format"]),
+        "-movflags",
+        "+faststart",
+        str(output_path),
+    ]
+    result = subprocess.run(cmd, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    return int(result.returncode), ((result.stderr or result.stdout or "").strip())
+
+
+def prepare_runtime_concat_inputs(data: dict[str, Any], manifest_path: Path, ffmpeg_path: str) -> tuple[Path | None, str | None]:
+    timeline = data.get("timeline") if isinstance(data.get("timeline"), list) else []
+    temp_dir = resolve_path(manifest_path, data.get("temp_dir") or "temp")
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    fallback_dir = temp_dir / "fallback_visual_clips"
+    fallback_dir.mkdir(parents=True, exist_ok=True)
+    concat_path = temp_dir / "ffmpeg_concat_runtime.txt"
+    spec = output_spec_for_manifest(data)
+    concat_lines: list[str] = []
+    fallback_segments: list[dict[str, Any]] = []
+    for item in timeline:
+        if not isinstance(item, dict):
+            continue
+        shot_id = str(item.get("shot_id") or "shot").strip() or "shot"
+        clip_path = resolve_path(manifest_path, item.get("clip_path") or "")
+        if clip_output_ready(clip_path):
+            concat_lines.append(f"file '{str(clip_path).replace(chr(92), '/')}'")
+            continue
+        fallback = item.get("fallback_visual") if isinstance(item.get("fallback_visual"), dict) else {}
+        preferred_image = str(fallback.get("preferred_image_path") or "").strip()
+        if not preferred_image:
+            return None, f"timeline clip file is non-production or too small and no fallback keyframe is available: {shot_id}"
+        image_path = resolve_path(manifest_path, preferred_image)
+        if not image_path.exists() or not image_path.is_file() or image_path.stat().st_size <= 0:
+            return None, f"fallback keyframe missing or empty for shot {shot_id}: {image_path}"
+        fallback_clip_path = fallback_dir / f"{shot_id}.mp4"
+        duration = safe_float(item.get("duration_sec"), 0.0)
+        return_code, error_text = build_fallback_visual_segment(
+            ffmpeg_path,
+            image_path,
+            fallback_clip_path,
+            duration_sec=duration,
+            spec=spec,
+        )
+        if return_code != 0 or not fallback_clip_path.exists() or fallback_clip_path.stat().st_size <= 0:
+            return None, error_text or f"failed to render fallback visual clip for {shot_id}"
+        concat_lines.append(f"file '{str(fallback_clip_path).replace(chr(92), '/')}'")
+        fallback_segments.append({
+            "shot_id": shot_id,
+            "source_image_path": str(image_path).replace("\\", "/"),
+            "rendered_clip_path": str(fallback_clip_path).replace("\\", "/"),
+            "duration_sec": round(duration, 3),
+            "strategy": str(fallback.get("fallback_strategy") or "stage05_keyframe_reel"),
+        })
+    concat_path.write_text("\n".join(concat_lines) + ("\n" if concat_lines else ""), encoding="utf-8")
+    data["runtime_concat_list_path"] = str(concat_path).replace("\\", "/")
+    data["fallback_visual_segments"] = fallback_segments
+    return concat_path, None
+
+
 def record_attempt(data: dict[str, Any], *, provider: str, strategy: str, command: list[str], return_code: int, stdout: str, stderr: str) -> None:
     data.setdefault("ffmpeg_commands", [])
     data["ffmpeg_commands"].append({
@@ -336,6 +504,58 @@ def record_attempt(data: dict[str, Any], *, provider: str, strategy: str, comman
         "stderr_excerpt": stderr.strip()[-2000:],
         "ran_at": utc_now(),
     })
+
+
+def write_review_markdown(data: dict[str, Any], manifest_path: Path, output_path: Path) -> None:
+    review_path = manifest_path.parent / "assembly_review.md"
+    evidence = data.get("evidence") if isinstance(data.get("evidence"), dict) else {}
+    size = int(evidence.get("file_size_bytes") or 0)
+    fallback_count = int((data.get("summary") or {}).get("fallback_visual_segment_count") or 0)
+    provider = str(data.get("assembly_provider") or "").strip() or "unknown"
+    notes = [str(item).strip() for item in (data.get("self_check", {}).get("notes") or []) if str(item).strip()]
+    errors = data.get("errors") if isinstance(data.get("errors"), list) else []
+    lines = [
+        "# Stage 08 粗剪合成 Review",
+        "",
+        f"- 状态：`{data.get('status')}`",
+        f"- 执行器：`{provider}`",
+        f"- 输出文件：`{str(output_path).replace(chr(92), '/')}`",
+        f"- 文件大小：`{size}` bytes",
+        f"- fallback 关键帧补段数：`{fallback_count}`",
+        "",
+    ]
+    if data.get("status") == "generated":
+        lines.append("已生成可播放 rough cut，可继续进入 QA 或人工审片。")
+        lines.append("")
+    if notes:
+        lines.append("## 状态备注")
+        lines.append("")
+        for note in notes:
+            lines.append(f"- {note}")
+        lines.append("")
+    if errors:
+        lines.append("## 最近错误")
+        lines.append("")
+        for item in errors[-3:]:
+            if not isinstance(item, dict):
+                continue
+            message = str(item.get("message") or "").strip()
+            if message:
+                lines.append(f"- {message}")
+        lines.append("")
+    review_path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+
+
+def dedupe_preserve_order(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for item in items:
+        normalized = str(item).strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        deduped.append(normalized)
+    return deduped
 
 
 def finalize_manifest(
@@ -365,15 +585,44 @@ def finalize_manifest(
     })
     data.setdefault("summary", {})
     data["summary"]["output_video_spec"] = spec
+    data["summary"]["fallback_visual_segment_count"] = len(data.get("fallback_visual_segments") or [])
+    if provider:
+        data["assembly_provider"] = provider
+    if provider and not provider_is_nonproduction(provider):
+        commands = data.get("ffmpeg_commands") if isinstance(data.get("ffmpeg_commands"), list) else []
+        data["ffmpeg_commands"] = [
+            item for item in commands
+            if not (
+                isinstance(item, dict)
+                and (
+                    provider_is_nonproduction(item.get("provider"))
+                    or str(item.get("strategy") or "").strip().lower() == "placeholder_test"
+                )
+            )
+        ]
+    production_ready = assembly_output_ready(data, out, min_bytes=MIN_PRODUCTION_VIDEO_BYTES)
+    fallback_stage, fallback_flags, blockers = upstream_blocking_state(path, data)
     data.setdefault("self_check", {})
     data["self_check"].update({
         "has_timeline_from_confirmed_clips": bool(data.get("timeline")),
         "has_audio_mix_plan": mix_plan.exists(),
         "has_edit_decision_list": edit_list.exists(),
-        "has_final_output_file": exists and size > 0,
-        "ready_for_qa_stage": exists and size > 0,
+        "has_final_output_file": production_ready,
+        "ready_for_qa_stage": production_ready,
+        "source_video_clips_ready": fallback_stage != "STAGE_06_VIDEO_CLIPS",
+        "source_audio_ready": fallback_stage not in {"STAGE_06_VIDEO_CLIPS", "STAGE_07_AUDIO"},
     })
-    if exists and size > 0:
+    data["self_check"]["notes"] = [
+        note for note in (data["self_check"].get("notes") or [])
+        if isinstance(note, str) and not note.startswith("upstream_blocker:")
+    ]
+    data["self_check"]["notes"].extend([f"upstream_blocker:{item}" for item in blockers])
+    if data["summary"].get("fallback_visual_segment_count"):
+        data["self_check"]["notes"].append(
+            f"fallback_visual_segments:{int(data['summary']['fallback_visual_segment_count'])}"
+        )
+    data["self_check"]["notes"] = dedupe_preserve_order(data["self_check"]["notes"])
+    if production_ready:
         data["status"] = "generated"
         data["allowed_next_stage"] = next_stage_after("STAGE_08_ASSEMBLY", routing, "STAGE_09_QA")
         data["assembly_provider"] = provider
@@ -387,12 +636,23 @@ def finalize_manifest(
     else:
         data["status"] = "in_progress"
         data["allowed_next_stage"] = None
+        update_project_manifest_for_stage(
+            path,
+            current_stage=fallback_stage,
+            allowed_next_stage=None,
+            flags=fallback_flags,
+            status="active",
+        )
     data["updated_at"] = utc_now()
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    write_review_markdown(data, path, out)
 
 
 def validate_source_inputs(data: dict[str, Any], manifest_path: Path) -> str | None:
-    concat_list = resolve_path(manifest_path, data.get("concat_list_path") or "ffmpeg_concat_list.txt")
+    concat_list = resolve_path(
+        manifest_path,
+        data.get("runtime_concat_list_path") or data.get("concat_list_path") or "ffmpeg_concat_list.txt",
+    )
     if not concat_list.exists():
         return f"concat list not found: {concat_list}"
     timeline = data.get("timeline") if isinstance(data.get("timeline"), list) else []
@@ -404,7 +664,15 @@ def validate_source_inputs(data: dict[str, Any], manifest_path: Path) -> str | N
             return f"timeline clip_path missing for shot: {item.get('shot_id')}"
         clip_path = resolve_path(manifest_path, raw)
         if not clip_path.exists() or not clip_path.is_file() or clip_path.stat().st_size <= 0:
+            fallback = item.get("fallback_visual") if isinstance(item.get("fallback_visual"), dict) else {}
+            if str(fallback.get("preferred_image_path") or "").strip():
+                continue
             return f"timeline clip file missing or empty: {clip_path}"
+        if not clip_output_ready(clip_path):
+            fallback = item.get("fallback_visual") if isinstance(item.get("fallback_visual"), dict) else {}
+            if str(fallback.get("preferred_image_path") or "").strip():
+                continue
+            return f"timeline clip file is non-production or too small: {clip_path} ({clip_path.stat().st_size} bytes)"
     audio_tracks = data.get("audio_tracks") if isinstance(data.get("audio_tracks"), list) else []
     for item in audio_tracks:
         if not isinstance(item, dict):
@@ -460,6 +728,15 @@ def main(argv: list[str] | None = None) -> int:
     if source_error:
         finalize_manifest(data, path, out, provider="ffmpeg", error=source_error)
         print(f"ERROR: {source_error}")
+        return 1
+    runtime_concat, runtime_error = prepare_runtime_concat_inputs(data, path, ffmpeg)
+    if runtime_error:
+        finalize_manifest(data, path, out, provider="ffmpeg", error=runtime_error)
+        print(f"ERROR: {runtime_error}")
+        return 1
+    if runtime_concat is None:
+        finalize_manifest(data, path, out, provider="ffmpeg", error="runtime concat list unavailable")
+        print("ERROR: runtime concat list unavailable")
         return 1
 
     attempts = build_ffmpeg_attempts(data, path, ffmpeg)

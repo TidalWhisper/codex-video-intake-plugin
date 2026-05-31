@@ -9,13 +9,17 @@ import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "scripts"))
 from pipeline_core.pipeline_blueprints import routing_from_brief  # noqa: E402
+from pipeline_core.media_evidence import clip_output_ready  # noqa: E402
 from pipeline_core.project_state import load_json_file  # noqa: E402
+from pipeline_core.project_state import update_project_manifest_for_stage  # noqa: E402
 from pipeline_core.quality_contracts import build_quality_contract, build_stage_quality_targets  # noqa: E402
 from pipeline_core.requirement_compiler import compile_requirements, requested_output_allows_stage, stage_meets_requested_output  # noqa: E402
+from pipeline_core.story_continuity import has_template_leak, pick_story_anchors, shot_anchor_bundle  # noqa: E402
 
 KNOWN_PLUGIN_ROOT_CHILDREN = {
     "video_projects",
@@ -48,6 +52,28 @@ def rel_or_abs(path: Path) -> str:
     return str(path).replace("\\", "/")
 
 
+def _plugin_root_candidates(base_json: Path) -> list[Path]:
+    candidates: list[Path] = []
+    seen: set[str] = set()
+
+    def add(path: Path) -> None:
+        resolved = path.resolve()
+        if resolved.name != "codex-video-pipeline-plugin":
+            return
+        key = str(resolved).lower()
+        if key not in seen:
+            candidates.append(resolved)
+            seen.add(key)
+
+    base_abs = base_json if base_json.is_absolute() else (Path.cwd() / base_json).resolve()
+    for anchor in [base_abs.parent, *base_abs.parents]:
+        add(anchor)
+    cwd = Path.cwd().resolve()
+    for anchor in [cwd, *cwd.parents]:
+        add(anchor)
+    return candidates
+
+
 def resolve_path(base_json: Path, raw: str | None) -> Path | None:
     if not raw:
         return None
@@ -56,21 +82,24 @@ def resolve_path(base_json: Path, raw: str | None) -> Path | None:
         return p
     if p.exists():
         return p.resolve()
+    base_abs = base_json if base_json.is_absolute() else (Path.cwd() / base_json).resolve()
+    plugin_roots = _plugin_root_candidates(base_json)
     special_roots: list[Path] = []
-    plugin_root = next(
-        (anchor.resolve() for anchor in [base_json.parent, *base_json.parents] if anchor.name == "codex-video-pipeline-plugin"),
-        None,
-    )
-    repo_root = plugin_root.parent.parent.resolve() if plugin_root and plugin_root.parent.name == "plugins" else None
+    repo_roots: list[Path] = []
+    for plugin_root in plugin_roots:
+        if plugin_root.parent.name == "plugins":
+            repo_root = plugin_root.parent.parent.resolve()
+            if repo_root not in repo_roots:
+                repo_roots.append(repo_root)
     if p.parts:
         first = p.parts[0].lower()
-        if first == "plugins" and repo_root is not None:
-            special_roots.append(repo_root)
-        elif first in KNOWN_PLUGIN_ROOT_CHILDREN and plugin_root is not None:
-            special_roots.append(plugin_root)
+        if first == "plugins":
+            special_roots.extend(repo_roots)
+        elif first in KNOWN_PLUGIN_ROOT_CHILDREN:
+            special_roots.extend(plugin_roots)
     anchors: list[Path] = []
     seen: set[str] = set()
-    for anchor in [*special_roots, Path.cwd(), base_json.parent, *base_json.parents]:
+    for anchor in [*special_roots, *repo_roots, *plugin_roots, Path.cwd().resolve(), base_abs.parent, *base_abs.parents]:
         key = str(anchor.resolve()).lower()
         if key not in seen:
             anchors.append(anchor)
@@ -83,7 +112,7 @@ def resolve_path(base_json: Path, raw: str | None) -> Path | None:
         candidate = (anchor / p).resolve()
         if candidate.parent.exists():
             return candidate
-    return (base_json.parent / p).resolve()
+    return (base_abs.parent / p).resolve()
 
 
 def sec_to_srt_time(sec: float) -> str:
@@ -105,6 +134,53 @@ def default_output_video_spec() -> dict:
         "audio_codec": "aac",
         "audio_sample_rate": 48000,
     }
+
+
+def timeline_note_for_shot(shot: dict, bundle: dict[str, str]) -> str:
+    composition = str(shot.get("composition") or "").strip()
+    action = bundle.get("action") or str(shot.get("action") or "").strip() or "推进故事"
+    emotion = bundle.get("emotion") or str(shot.get("emotion") or "").strip() or "当前情绪变化"
+    location = bundle.get("location") or str(shot.get("scene") or shot.get("location") or "").strip() or "当前场景"
+    weather = bundle.get("weather") or str(shot.get("weather") or "").strip()
+    scene_label = f"{weather}{location}".strip() or location
+    key_prop = bundle.get("key_prop") or str(shot.get("key_prop") or "").strip()
+    if composition and not has_template_leak(composition):
+        return composition
+    prop_clause = f"，保留{key_prop}线索" if key_prop else ""
+    return f"{scene_label}里，{action}，情绪落在{emotion}{prop_clause}。"
+
+
+def realized_media_path(base_json: Path, job: dict, key: str) -> str:
+    raw = job.get(key) or (job.get("evidence") or {}).get("file_path") or ""
+    resolved = resolve_path(base_json, raw)
+    if resolved is None:
+        return ""
+    return rel_or_abs(resolved)
+
+
+def fallback_visual_payload(base_json: Path, clip_job: dict) -> dict[str, Any]:
+    keyframes = clip_job.get("source_keyframes") if isinstance(clip_job.get("source_keyframes"), dict) else {}
+    payload: dict[str, Any] = {
+        "fallback_strategy": "stage05_keyframe_reel",
+        "source_clip_ready": False,
+        "start_image_path": "",
+        "mid_image_path": "",
+        "end_image_path": "",
+        "preferred_image_path": "",
+    }
+    for role in ["start", "mid", "end"]:
+        resolved = resolve_path(base_json, keyframes.get(role))
+        if resolved and resolved.exists() and resolved.is_file() and resolved.stat().st_size > 0:
+            payload[f"{role}_image_path"] = rel_or_abs(resolved)
+    for candidate_key in ["mid_image_path", "end_image_path", "start_image_path"]:
+        candidate = str(payload.get(candidate_key) or "").strip()
+        if candidate:
+            payload["preferred_image_path"] = candidate
+            break
+    clip_path = resolve_path(base_json, clip_job.get("output_path") or (clip_job.get("evidence") or {}).get("file_path"))
+    if clip_path and clip_output_ready(clip_path, clip_job.get("provider")):
+        payload["source_clip_ready"] = True
+    return payload
 
 
 def main(argv: list[str]) -> int:
@@ -142,6 +218,7 @@ def main(argv: list[str]) -> int:
     routing = routing_from_brief(brief)
     quality_contract = build_quality_contract(brief, compiled)
     quality_targets = build_stage_quality_targets("STAGE_08", quality_contract)
+    anchors = pick_story_anchors(brief, max(1, len(storyboard.get("shots") or [])), storyboard, clip_manifest)
     assembly_dir = out_path.parent
     rough_cut_dir = assembly_dir / "rough_cut"
     temp_dir = assembly_dir / "temp"
@@ -175,15 +252,18 @@ def main(argv: list[str]) -> int:
         )
         if clip_path is None:
             continue
+        bundle = shot_anchor_bundle(anchors, len(timeline), shot=shot)
+        fallback_visual = fallback_visual_payload(clip_manifest_path, clip)
         timeline.append({
             "shot_id": shot_id,
             "source_clip_id": clip.get("clip_id"),
             "clip_path": rel_or_abs(clip_path),
+            "fallback_visual": fallback_visual,
             "start_sec": round(current, 3),
             "duration_sec": duration,
             "transition_in": shot.get("transition_in") or "cut",
             "transition_out": shot.get("transition_to_next") or clip.get("transition_out_prompt") or "cut",
-            "notes": shot.get("composition") or shot.get("action") or ""
+            "notes": timeline_note_for_shot(shot, bundle)
         })
         concat_lines.append(f"file '{rel_or_abs(clip_path)}'")
         edl_events.append({
@@ -263,6 +343,7 @@ def main(argv: list[str]) -> int:
             "fallback": ["manual"],
             "execution_mode": "provider_or_manual"
         },
+        "story_anchors": anchors,
         "compiled_requirements": compiled,
         "quality_contract": quality_contract,
         "quality_targets": quality_targets,
@@ -304,6 +385,13 @@ def main(argv: list[str]) -> int:
         "allowed_next_stage": None
     }
     write_json(out_path, manifest)
+    update_project_manifest_for_stage(
+        out_path,
+        current_stage="STAGE_08_ASSEMBLY",
+        allowed_next_stage=None,
+        flags={"assembly_confirmed": False},
+        status="active",
+    )
     print(f"ASSEMBLY MANIFEST CREATED: {out_path}")
     print(f"ROUGH CUT TARGET: {final_out}")
     return 0

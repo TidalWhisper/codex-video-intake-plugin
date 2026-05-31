@@ -87,6 +87,26 @@ class _FakeOpenAIHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def do_GET(self) -> None:  # noqa: N802
+        if self.path in {"/v1/models/gpt-image-2", "/v1/models"}:
+            if type(self).mode == "invalid_key":
+                body = json.dumps({"error": {"message": "Incorrect API key provided"}}).encode("utf-8")
+                self.send_response(401)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+            body = json.dumps({"id": "gpt-image-2", "data": [{"id": "gpt-image-2"}]}).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        self.send_response(404)
+        self.end_headers()
+
     def log_message(self, format: str, *args: object) -> None:
         return
 
@@ -188,6 +208,27 @@ def _prepare_scope_blocked_manifest(tmp_path: Path) -> Path:
     return manifest_json
 
 
+def _mark_job_missing_character_reference(manifest_json: Path, image_id: str) -> None:
+    data = json.loads(manifest_json.read_text(encoding="utf-8"))
+    for job in data["jobs"]:
+        if job["image_id"] != image_id:
+            continue
+        job["reference_images"] = [
+            "plugins/codex-video-pipeline-plugin/video_projects/demo_project/03_characters/reference_images/CHAR_001_primary.png"
+        ]
+        job["missing_reference_images"] = list(job["reference_images"])
+        job["stage06_requires_mid_guide"] = True
+        job["quality_gate"] = {
+            "risk_tags": ["missing_character_reference"],
+            "control_mode": "prompt_only",
+            "requires_manual_review": True,
+            "manual_review_status": "pending",
+            "reason": "Character-locked continuity is required, but no Stage 03 reference image is available for this shot.",
+        }
+        break
+    manifest_json.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 def test_image_size_for_aspect_ratio_maps_common_shapes() -> None:
     assert openai_image_client.image_size_for_aspect_ratio("9:16") == "1024x1536"
     assert openai_image_client.image_size_for_aspect_ratio("16:9") == "1536x1024"
@@ -287,6 +328,117 @@ def test_run_openai_gpt_image2_batch_failure_records_errors_without_fake_success
         request_manifest = json.loads((manifest_json.parent / "openai_image_requests.json").read_text(encoding="utf-8"))
         assert all(item["status"] == "failed" for item in request_manifest["requests"])
         assert all(not Path(job["evidence"]["file_path"]).exists() for job in data["jobs"])
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
+
+
+def test_run_openai_gpt_image2_preflight_invalid_key_falls_back_to_comfyui(tmp_path: Path, monkeypatch) -> None:
+    manifest_json = _prepare_manifest(tmp_path)
+    server, thread = _start_openai_server("invalid_key")
+    try:
+        config_path = _write_config(tmp_path, base_url=f"http://127.0.0.1:{server.server_port}/v1")
+        monkeypatch.setenv("OPENAI_API_KEY", "bad-key")
+        monkeypatch.setattr(run_openai_gpt_image2, "check_comfyui_server", lambda config: {"provider": "comfyui", "status": "ready", "ready": True})
+
+        def fake_comfyui_fallback(manifest_path: Path, *, config_path: str | None, image_id: str | None, allow_beyond_requested_scope: bool, fail_fast: bool) -> int:
+            data = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
+            for job in data["jobs"]:
+                if image_id and job["image_id"] != image_id:
+                    continue
+                job["provider"] = "comfyui_txt2img"
+                job["status"] = "succeeded"
+                job.setdefault("fallback_history", []).append({
+                    "provider": "comfyui_txt2img",
+                    "outcome": "succeeded",
+                    "reason": "auto_fallback_selected",
+                })
+                output_path = Path(job["output_path"])
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                output_path.write_bytes(png_bytes())
+                job.setdefault("evidence", {})
+                job["evidence"]["file_path"] = str(output_path).replace("\\", "/")
+                job["evidence"]["file_exists"] = True
+                job["evidence"]["file_size_bytes"] = output_path.stat().st_size
+            data["summary"]["generated_image_count"] = len(data["jobs"])
+            data["summary"]["failed_image_count"] = 0
+            data["self_check"]["all_required_images_exist"] = True
+            data["self_check"]["ready_for_video_clip_generation"] = True
+            data["allowed_next_stage"] = "STAGE_06_VIDEO_CLIPS"
+            Path(manifest_path).write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+            return 0
+
+        monkeypatch.setattr(run_openai_gpt_image2, "_run_comfyui_fallback", fake_comfyui_fallback)
+
+        assert run_openai_gpt_image2.main([str(manifest_json), "--config", str(config_path)]) == 0
+        data = json.loads(manifest_json.read_text(encoding="utf-8"))
+        assert all(job["provider"] == "comfyui_txt2img" for job in data["jobs"])
+        assert any(item["decision"] == "failed_preflight" for item in data["provider_decisions"])
+        assert any(item["decision"] == "auto_fallback_selected" and item["provider"] == "comfyui_txt2img" for item in data["provider_decisions"])
+        assert all(job["fallback_history"][0]["provider"] == "openai_gpt_image2" for job in data["jobs"])
+        assert data.get("manual_recovery") is None
+        assert len(_FakeOpenAIHandler.requests) == 0
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
+
+
+def test_run_openai_gpt_image2_preflight_invalid_key_records_manual_recovery_when_comfyui_unavailable(tmp_path: Path, monkeypatch) -> None:
+    manifest_json = _prepare_manifest(tmp_path)
+    server, thread = _start_openai_server("invalid_key")
+    try:
+        config_path = _write_config(tmp_path, base_url=f"http://127.0.0.1:{server.server_port}/v1")
+        monkeypatch.setenv("OPENAI_API_KEY", "bad-key")
+        monkeypatch.setattr(
+            run_openai_gpt_image2,
+            "check_comfyui_server",
+            lambda config: {"provider": "comfyui", "status": "connection_error", "ready": False, "error": "ComfyUI offline"},
+        )
+        assert run_openai_gpt_image2.main([str(manifest_json), "--config", str(config_path)]) == 1
+        data = json.loads(manifest_json.read_text(encoding="utf-8"))
+        assert any(item["decision"] == "manual_recovery_required" for item in data["provider_decisions"])
+        assert data["manual_recovery"]["status"] == "required"
+        assert "ComfyUI offline" in " ".join(data["manual_recovery"]["steps"])
+        assert all(job["status"] == "failed" for job in data["jobs"])
+        assert len(_FakeOpenAIHandler.requests) == 0
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
+
+
+def test_run_openai_gpt_image2_blocks_missing_character_reference_before_generation(tmp_path: Path, monkeypatch) -> None:
+    manifest_json = _prepare_manifest(tmp_path)
+    _mark_job_missing_character_reference(manifest_json, "IMG_S001_START")
+    server, thread = _start_openai_server("success")
+    try:
+        config_path = _write_config(tmp_path, base_url=f"http://127.0.0.1:{server.server_port}/v1")
+        monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+        assert run_openai_gpt_image2.main([
+            str(manifest_json),
+            "--config", str(config_path),
+            "--image-id", "IMG_S001_START",
+        ]) == 1
+        data = json.loads(manifest_json.read_text(encoding="utf-8"))
+        blocked_job = next(job for job in data["jobs"] if job["image_id"] == "IMG_S001_START")
+        assert blocked_job["status"] == "blocked"
+        assert blocked_job["provider"] == "openai_gpt_image2"
+        assert blocked_job["errors"]
+        assert data["manual_recovery"]["status"] == "required"
+        assert data["creator_runtime_status"]["headline"] == "高风险关键帧已阻断，先补角色参考图。"
+        assert "CHAR_001_primary.png" in " ".join(data["manual_recovery"]["steps"])
+        assert any(
+            item["decision"] == "manual_recovery_required"
+            and item["reason"] == "missing_character_reference_before_generation"
+            for item in data["provider_decisions"]
+        )
+        request_manifest = json.loads((manifest_json.parent / "openai_image_requests.json").read_text(encoding="utf-8"))
+        blocked_request = next(item for item in request_manifest["requests"] if item["image_id"] == "IMG_S001_START")
+        assert blocked_request["status"] == "blocked"
+        assert "CHAR_001_primary.png" in " ".join(blocked_request["missing_reference_images"])
+        assert _FakeOpenAIHandler.requests == []
     finally:
         server.shutdown()
         thread.join(timeout=5)

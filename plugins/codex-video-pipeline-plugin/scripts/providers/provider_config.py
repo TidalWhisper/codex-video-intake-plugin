@@ -21,8 +21,67 @@ AUTH_FILE_CANDIDATES = [
     Path.home() / ".chatgpt-local" / "auth.json",
 ]
 
+KNOWN_PLUGIN_ROOT_CHILDREN = {
+    "video_projects",
+    "templates",
+    "config",
+    "workflows",
+    "skills",
+    "scripts",
+    "tests",
+    "docs",
+    "prompts",
+}
+
+
 def root_dir() -> Path:
     return Path(__file__).resolve().parents[2]
+
+
+def _plugin_root_candidates(root: str | Path | None = None) -> list[Path]:
+    candidates: list[Path] = []
+    seen: set[str] = set()
+    for base in [Path(root).resolve()] if root else []:
+        key = str(base).lower()
+        if key not in seen:
+            candidates.append(base)
+            seen.add(key)
+    cwd = Path.cwd().resolve()
+    for anchor in [cwd, *cwd.parents]:
+        if anchor.name != "codex-video-pipeline-plugin":
+            continue
+        key = str(anchor).lower()
+        if key not in seen:
+            candidates.append(anchor)
+            seen.add(key)
+    default_root = root_dir().resolve()
+    key = str(default_root).lower()
+    if key not in seen:
+        candidates.append(default_root)
+    return candidates
+
+
+def _resolve_relative_path(path: Path, *, root: str | Path | None = None) -> Path:
+    if path.exists():
+        return path.resolve()
+    cwd_candidate = (Path.cwd() / path).resolve()
+    if cwd_candidate.exists():
+        return cwd_candidate
+    plugin_roots = _plugin_root_candidates(root=root)
+    special_roots: list[Path] = []
+    if path.parts:
+        first = path.parts[0].lower()
+        for plugin_root in plugin_roots:
+            repo_root = plugin_root.parent.parent.resolve() if plugin_root.parent.name == "plugins" else None
+            if first == "plugins" and repo_root is not None:
+                special_roots.append(repo_root)
+            elif first in KNOWN_PLUGIN_ROOT_CHILDREN:
+                special_roots.append(plugin_root)
+    for anchor in [*special_roots, *plugin_roots]:
+        candidate = (anchor / path).resolve()
+        if candidate.exists():
+            return candidate
+    return (plugin_roots[0] / path).resolve()
 
 
 def resolve_config_path(config_path: str | Path | None = None, root: str | Path | None = None) -> Path:
@@ -30,12 +89,7 @@ def resolve_config_path(config_path: str | Path | None = None, root: str | Path 
         path = Path(config_path)
         if path.is_absolute():
             return path.resolve()
-        if path.exists():
-            return path.resolve()
-        cwd_candidate = (Path.cwd() / path).resolve()
-        if cwd_candidate.exists():
-            return cwd_candidate
-        return (Path(root) if root else root_dir()).joinpath(path).resolve()
+        return _resolve_relative_path(path, root=root)
     base = Path(root) if root else root_dir()
     return (base / "config" / "providers.yaml").resolve()
 
@@ -224,25 +278,89 @@ def validate_provider_config(data: dict[str, Any]) -> list[str]:
     return errors
 
 
-def check_openai_image_provider(data: dict[str, Any], env: dict[str, str] | None = None) -> dict[str, Any]:
+def check_openai_image_provider(
+    data: dict[str, Any],
+    env: dict[str, str] | None = None,
+    *,
+    probe: bool = False,
+    timeout_seconds: int | None = None,
+) -> dict[str, Any]:
     openai_cfg = data.get("openai_image") if isinstance(data.get("openai_image"), dict) else {}
     env_name = str(openai_cfg.get("api_key_env") or "OPENAI_API_KEY")
     enabled = bool(openai_cfg.get("enabled"))
+    model = str(openai_cfg.get("model") or "gpt-image-2")
+    base_url = str(openai_cfg.get("base_url") or "https://api.openai.com/v1").rstrip("/")
     api_key_info = discover_openai_api_key(env_name=env_name, env=env)
     api_key_present = bool(api_key_info["value"])
-    ready = enabled and api_key_present
-    status = "ready" if ready else ("disabled" if not enabled else "missing_api_key")
-    return {
+    result = {
         "provider": str(openai_cfg.get("provider_name") or "openai_gpt_image2"),
         "enabled": enabled,
-        "model": str(openai_cfg.get("model") or "gpt-image-2"),
-        "base_url": str(openai_cfg.get("base_url") or "https://api.openai.com/v1").rstrip("/"),
+        "model": model,
+        "base_url": base_url,
         "api_key_env": env_name,
         "api_key_present": api_key_present,
         "api_key_source": api_key_info["source"],
-        "ready": ready,
-        "status": status,
     }
+    if not enabled:
+        result.update({
+            "ready": False,
+            "status": "disabled",
+            "auth_checked": False,
+        })
+        return result
+    if not api_key_present:
+        result.update({
+            "ready": False,
+            "status": "missing_api_key",
+            "auth_checked": False,
+        })
+        return result
+    if not probe:
+        result.update({
+            "ready": True,
+            "status": "ready",
+            "auth_checked": False,
+        })
+        return result
+
+    try:
+        from openai_image_client import OpenAIImageError, probe_image_provider_auth
+
+        probe_result = probe_image_provider_auth(
+            base_url=base_url,
+            api_key=api_key_info["value"],
+            model=model,
+            timeout_seconds=int(timeout_seconds or openai_cfg.get("timeout_seconds") or 15),
+        )
+    except Exception as exc:  # noqa: BLE001 - keep import surface light
+        if exc.__class__.__name__ == "OpenAIImageError":
+            status_code = getattr(exc, "status_code", None)
+            status = "invalid_api_key" if status_code in {401, 403} else ("model_probe_failed" if status_code else "connection_error")
+            result.update({
+                "ready": False,
+                "status": status,
+                "auth_checked": True,
+                "error": str(exc),
+                "http_status": status_code,
+            })
+            return result
+        result.update({
+            "ready": False,
+            "status": "client_error",
+            "auth_checked": True,
+            "error": str(exc),
+        })
+        return result
+
+    result.update({
+        "ready": True,
+        "status": "ready",
+        "auth_checked": True,
+        "http_status": probe_result.get("status_code"),
+        "probe_kind": probe_result.get("probe_kind"),
+        "probe_url": probe_result.get("probe_url"),
+    })
+    return result
 
 
 def get_openai_image_settings(data: dict[str, Any], env: dict[str, str] | None = None) -> dict[str, Any]:

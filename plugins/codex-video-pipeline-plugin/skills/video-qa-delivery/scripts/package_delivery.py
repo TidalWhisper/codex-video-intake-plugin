@@ -5,6 +5,7 @@ Usage:
   python package_delivery.py <qa_manifest.json>
 """
 from __future__ import annotations
+import argparse
 import json
 import shutil
 import sys
@@ -16,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT / "scripts") not in sys.path:
     sys.path.insert(0, str(ROOT / "scripts"))
 from pipeline_core.requirement_compiler import compiled_requirements_from_context, requested_output_scope_guard_message  # noqa: E402
+from pipeline_core.media_evidence import MIN_PRODUCTION_VIDEO_BYTES, assembly_output_ready  # noqa: E402
 from pipeline_core.project_state import update_project_manifest_for_stage  # noqa: E402
 
 KNOWN_PLUGIN_ROOT_CHILDREN = {
@@ -104,6 +106,9 @@ def evaluate_qa_checks(
     data: dict[str, Any],
     manifest_path: Path,
     all_files: list[dict[str, Any]],
+    *,
+    content_alignment_confirmed: bool,
+    content_alignment_note: str,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     checks = [dict(item) for item in (data.get("qa_checks") or []) if isinstance(item, dict)]
     assembly_manifest = maybe_load_json(resolve_path(manifest_path, data.get("source_assembly_manifest")))
@@ -160,6 +165,11 @@ def evaluate_qa_checks(
     requested_scope = str(compiled.get("requested_output_scope") or "")
     intent_ok = requested_scope in scope_order and scope_order["full_project"] >= scope_order.get(requested_scope, 99) and bool(routing)
     set_check("intent_alignment", "pass" if intent_ok else "fail", "current delivery stage meets or exceeds the requested output scope" if intent_ok else "requested output scope is missing or incompatible with delivery stage")
+    set_check(
+        "content_text_alignment",
+        "pass" if content_alignment_confirmed and content_alignment_note else "fail",
+        content_alignment_note if content_alignment_confirmed and content_alignment_note else "missing explicit content-text alignment sign-off",
+    )
 
     if not clip_manifest or not image_manifest:
         set_check("visual_continuity_contract", "waived", "legacy or partial project: upstream image/clip manifests are unavailable for continuity audit")
@@ -187,6 +197,8 @@ def evaluate_qa_checks(
         set_check("format_fit_contract", "pass" if format_fit_ok else "waived", "assembly manifest keeps compiled format or output spec metadata" if format_fit_ok else "legacy assembly manifest without explicit format-fit metadata")
 
     for check in checks:
+        if check.get("check_id") == "content_text_alignment":
+            continue
         if check.get("category") == "human_review" or check.get("review_mode") == "human_review":
             check["status"] = "manual_review"
             check["checked_at"] = datetime.now(timezone.utc).isoformat()
@@ -214,26 +226,40 @@ def evaluate_qa_checks(
     }
 
 
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("qa_manifest_json")
+    parser.add_argument("--allow-beyond-requested-scope", action="store_true")
+    parser.add_argument("--content-aligned", action="store_true", help="Confirm that the delivered video content matches the script/storyboard text description.")
+    parser.add_argument("--content-alignment-note", default=None, help="Required when using --content-aligned. Record why the video matches the text description.")
+    return parser.parse_args(argv)
+
+
 def main(argv: list[str] | None = None) -> int:
-    argv = argv or sys.argv
-    allow_beyond_requested_scope = "--allow-beyond-requested-scope" in argv
-    argv = [arg for arg in argv if arg != "--allow-beyond-requested-scope"]
-    if len(argv) != 2:
-        print("Usage: python package_delivery.py <qa_manifest.json>", file=sys.stderr)
-        return 2
-    manifest_path = Path(argv[1])
+    argv = list(argv or sys.argv[1:])
+    if argv and str(argv[0]).endswith(".py"):
+        argv = argv[1:]
+    args = parse_args(argv)
+    manifest_path = Path(args.qa_manifest_json)
     data = load_json(manifest_path)
     if data.get("stage") != "STAGE_09_QA":
         print("ERROR: qa_manifest.stage must be STAGE_09_QA", file=sys.stderr)
         return 1
-    if not allow_beyond_requested_scope:
+    if not args.allow_beyond_requested_scope:
         scope_error = requested_output_scope_guard_message("STAGE_09", compiled_requirements_from_context(data))
         if scope_error:
             print(f"ERROR: {scope_error}", file=sys.stderr)
             return 1
+    if not args.content_aligned:
+        print("ERROR: final QA acceptance requires --content-aligned", file=sys.stderr)
+        return 1
+    if not str(args.content_alignment_note or "").strip():
+        print("ERROR: final QA acceptance requires --content-alignment-note", file=sys.stderr)
+        return 1
 
+    assembly_manifest = maybe_load_json(resolve_path(manifest_path, data.get("source_assembly_manifest")))
     source_video = resolve_path(manifest_path, data.get("final_video_path"))
-    if source_video is None or not source_video.exists() or source_video.stat().st_size <= 0:
+    if source_video is None or not assembly_output_ready(assembly_manifest, source_video, min_bytes=MIN_PRODUCTION_VIDEO_BYTES):
         print(f"ERROR: final video source missing or empty: {source_video}", file=sys.stderr)
         return 1
 
@@ -261,8 +287,9 @@ def main(argv: list[str] | None = None) -> int:
     qa_checklist = resolve_path(manifest_path, data.get("qa_checklist_path")) or (manifest_path.parent / "qa_checklist.json")
 
     issue_report.write_text("# Stage 09 问题清单\n\n未发现阻塞问题。若需要人工精剪，可从 final_delivery/rough_cut.mp4 继续接管。\n", encoding="utf-8")
-    delivery_report.write_text(f"# Stage 09 交付报告\n\n项目：{data.get('project_id')}\n\n## 交付物\n\n- final_delivery/rough_cut.mp4\n- final_delivery/README_DELIVERY.md\n- final_delivery/delivery_report.md\n- final_delivery/asset_index.json\n\n## QA 结论\n\n通过自动证据校验。主观创意质量仍建议人工最终审片。\n", encoding="utf-8")
-    qa_review.write_text("# Stage 09 QA Review\n\n自动证据检查通过，交付包已归档。建议人工做最后一轮主观审片。\n", encoding="utf-8")
+    alignment_note = str(args.content_alignment_note or "").strip()
+    delivery_report.write_text(f"# Stage 09 交付报告\n\n项目：{data.get('project_id')}\n\n## 交付物\n\n- final_delivery/rough_cut.mp4\n- final_delivery/README_DELIVERY.md\n- final_delivery/delivery_report.md\n- final_delivery/asset_index.json\n\n## QA 结论\n\n自动证据校验通过，且已人工确认视频内容与文字描述一致。\n\n## 内容一致性确认\n\n- 结论：通过\n- 备注：{alignment_note}\n", encoding="utf-8")
+    qa_review.write_text(f"# Stage 09 QA Review\n\n自动证据检查通过，交付包已归档。\n\n## 内容与文字一致性确认\n\n- 结论：通过\n- 备注：{alignment_note}\n", encoding="utf-8")
     assets = [file_record(out_video, "final_video"), file_record(readme, "delivery_readme")]
     write_json(asset_index, {"project_id": data.get("project_id"), "assets": assets, "generated_at": datetime.now(timezone.utc).isoformat()})
     shutil.copyfile(delivery_report, delivery_report_copy)
@@ -272,13 +299,25 @@ def main(argv: list[str] | None = None) -> int:
     all_files = [file_record(p, role) for role, p in source_files]
     write_json(delivery_manifest, {"project_id": data.get("project_id"), "status": "generated", "files": all_files, "generated_at": datetime.now(timezone.utc).isoformat()})
 
-    checks, issue_summary = evaluate_qa_checks(data, manifest_path, all_files)
+    checks, issue_summary = evaluate_qa_checks(
+        data,
+        manifest_path,
+        all_files,
+        content_alignment_confirmed=True,
+        content_alignment_note=alignment_note,
+    )
     write_json(qa_checklist, {"project_id": data.get("project_id"), "checks": checks})
 
     data["status"] = "generated"
     data["updated_at"] = datetime.now(timezone.utc).isoformat()
     data["final_video_path"] = rel(out_video)
     data["qa_checks"] = checks
+    data["content_alignment_review"] = {
+        "confirmed": True,
+        "status": "pass",
+        "note": alignment_note,
+        "reviewed_at": datetime.now(timezone.utc).isoformat(),
+    }
     data["issue_summary"] = issue_summary
     data["delivery_package"] = {"root": rel(delivery_root), "files": all_files, "ready": True}
     data["self_check"] = {

@@ -239,6 +239,37 @@
     }
   ],
   "global_negative_prompt": "low resolution, watermark, logo, subtitles, text artifacts, duplicate person, extra limbs, deformed hands, distorted face, inconsistent clothing, changed hairstyle, unrealistic skin, flicker, warped background",
+  "reference_image_status": {
+    "required": true,
+    "target_paths": [
+      "03_characters/reference_images/CHAR_001_primary.png"
+    ],
+    "existing_paths": [],
+    "missing_paths": [
+      "03_characters/reference_images/CHAR_001_primary.png"
+    ],
+    "all_present": false,
+    "item_count": 1,
+    "missing_count": 1,
+    "items": [
+      {
+        "character_id": "CHAR_001",
+        "target_path": "03_characters/reference_images/CHAR_001_primary.png",
+        "file_exists": false
+      }
+    ]
+  },
+  "stage05_execution_readiness": {
+    "continuity_mode": "character_locked",
+    "reference_image_required": true,
+    "safe_to_auto_generate": false,
+    "blocker_reasons": [
+      "missing_character_reference_images"
+    ],
+    "missing_reference_images": [
+      "03_characters/reference_images/CHAR_001_primary.png"
+    ]
+  },
   "self_check": {
     "matches_locked_brief": true,
     "matches_script": true,
@@ -246,7 +277,11 @@
     "uses_character_consistency": true,
     "covers_all_storyboard_shots": true,
     "ready_for_image_generation": true,
-    "notes": []
+    "character_reference_images_ready": false,
+    "safe_for_auto_image_generation": false,
+    "notes": [
+      "Stage 05 automatic generation is not safe yet because character reference images are still missing: 03_characters/reference_images/CHAR_001_primary.png"
+    ]
   },
   "allowed_next_stage": null
 }

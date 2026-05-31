@@ -1,7 +1,7 @@
 {
   "schema_version": "0.6.0",
   "stage": "STAGE_05_KEYFRAME_IMAGES",
-  "status": "draft|confirmed",
+  "status": "draft|in_progress|generated|confirmed",
   "project_id": "string",
   "source_brief": "path",
   "source_keyframe_prompts": "path",
@@ -12,16 +12,120 @@
       "manual"
     ]
   },
+  "stage05_route_key": "string (optional, preferred route key for Stage 05 local image generation)",
+  "comfyui_workflow_mapping_key": "string (optional, preferred workflow_node_mapping key selected for this Stage 05 route)",
+  "comfyui_workflow_name": "string (optional, current underlying workflow target name used by the selected mapping key)",
+  "comfyui_model_id": "string (optional, current model candidate id selected for this Stage 05 route)",
+  "preferred_comfyui_workflow_candidate": "string (optional, preferred community or official workflow candidate recorded by the route registry)",
+  "preferred_comfyui_model_candidate": "string (optional, preferred model candidate recorded by the route registry)",
+  "route_migration_state": "string (optional, indicates whether the current route is transitional, ready_to_import, or still a research gap)",
+  "preferred_comfyui_workflow_source_ref": "string (optional, source URL or path for the preferred workflow candidate)",
+  "preferred_comfyui_workflow_format": "string (optional, for example api_workflow or ui_graph)",
+  "comfyui_style_preset_key": "string (optional, route-internal style preset key selected from the Stage 05 route registry)",
+  "comfyui_style_preset_label": "string (optional, human-readable label for the selected route-internal style preset)",
+  "comfyui_style_positive_anchor": "string (optional, positive style anchor text patched into workflow nodes when supported)",
+  "comfyui_style_negative_anchor": "string (optional, negative style anchor text patched into workflow nodes when supported)",
+  "comfyui_control_mode": "string (optional, current local control strategy such as prompt_only or pose_guided)",
+  "comfyui_optimization_profile": "string (optional, selected local speed-quality optimization profile such as preview, balanced, or quality)",
+  "comfyui_optimization_profile_label": "string (optional, human-readable label for the selected local optimization profile)",
+  "comfyui_optimization": {
+    "workflow_mapping_key": "string",
+    "profile_key": "string",
+    "profile_label": "string",
+    "dimension_scale": "number",
+    "round_to_multiple": "integer",
+    "max_width": "integer|null",
+    "max_height": "integer|null",
+    "workflow_replacements": {
+      "steps": "number|string|boolean",
+      "cfg": "number|string|boolean"
+    },
+    "notes": [
+      "string"
+    ]
+  },
+  "preferred_comfyui_workflow_custom_node_dependencies": [
+    "string (optional custom node dependency names)"
+  ],
+  "preferred_comfyui_workflow_import_blockers": [
+    "string (optional reasons the preferred workflow is not yet directly executable)"
+  ],
+  "route_resolution": {
+    "route_key": "string",
+    "style_family": "realistic|anime|guofeng|stylized",
+    "comfyui_workflow_mapping_key": "string",
+    "comfyui_workflow_name": "txt2img_keyframe_*",
+    "comfyui_model_id": "string|null",
+    "preferred_comfyui_workflow_candidate": "string|null",
+    "preferred_comfyui_model_candidate": "string|null",
+    "route_migration_state": "string|null",
+    "preferred_comfyui_workflow_source_ref": "string|null",
+    "preferred_comfyui_workflow_format": "string|null",
+    "comfyui_style_preset_key": "string|null",
+    "comfyui_style_preset_label": "string|null",
+    "comfyui_style_positive_anchor": "string|null",
+    "comfyui_style_negative_anchor": "string|null",
+    "comfyui_control_mode": "string|null",
+    "preferred_comfyui_workflow_custom_node_dependencies": [
+      "string"
+    ],
+    "preferred_comfyui_workflow_import_blockers": [
+      "string"
+    ],
+    "stage00_style": "string",
+    "registry_path": "path|null",
+    "used_registry": true,
+    "resolution_mode": "stage00_style_registry|legacy_style_family_fallback",
+    "workflow_mapping_resolution": "route_registry_current_mapping|legacy_style_family_fallback"
+  },
+  "shot_frame_requirements": {
+    "S001": [
+      "start",
+      "mid",
+      "end"
+    ]
+  },
   "jobs": [
     {
       "image_id": "IMG_S001_START",
       "shot_id": "S001",
-      "frame_role": "start|end",
+      "frame_role": "start|mid|end",
       "prompt": "string",
       "negative_prompt": "string",
+      "stage05_route_key": "string (optional, should match top-level route key when present)",
+      "comfyui_workflow_mapping_key": "string (optional, should match top-level mapping key when present)",
+      "comfyui_workflow_name": "string (optional, current underlying workflow target name for this job)",
+      "comfyui_model_id": "string (optional, should match top-level model id when present)",
+      "preferred_comfyui_workflow_candidate": "string (optional, should match top-level preferred workflow candidate when present)",
+      "preferred_comfyui_model_candidate": "string (optional, should match top-level preferred model candidate when present)",
+      "route_migration_state": "string (optional, should match top-level route migration state when present)",
+      "preferred_comfyui_workflow_source_ref": "string (optional, should match top-level preferred workflow source ref when present)",
+      "preferred_comfyui_workflow_format": "string (optional, should match top-level preferred workflow format when present)",
+      "comfyui_style_preset_key": "string (optional, should match top-level style preset key when present)",
+      "comfyui_style_preset_label": "string (optional, should match top-level style preset label when present)",
+      "comfyui_style_positive_anchor": "string (optional, should match top-level positive style anchor when present)",
+      "comfyui_style_negative_anchor": "string (optional, should match top-level negative style anchor when present)",
+      "comfyui_control_mode": "string (optional, should match top-level control mode when present)",
+      "comfyui_optimization_profile": "string (optional, should match top-level optimization profile when present)",
+      "comfyui_optimization_profile_label": "string (optional, should match top-level optimization profile label when present)",
+      "preferred_comfyui_workflow_custom_node_dependencies": [
+        "string (optional, should match top-level dependency list when present)"
+      ],
+      "preferred_comfyui_workflow_import_blockers": [
+        "string (optional, should match top-level import blocker list when present)"
+      ],
       "output_path": "path",
-      "status": "pending|succeeded|failed|skipped",
+      "status": "pending|succeeded|failed|blocked|skipped",
       "provider": "string",
+      "quality_gate": {
+        "risk_tags": [
+          "string"
+        ],
+        "control_mode": "prompt_only|pose_guided|reference_guided|controlnet_guided",
+        "requires_manual_review": false,
+        "manual_review_status": "not_required|pending|approved|waived",
+        "reason": "string|null"
+      },
       "evidence": {
         "file_path": "path",
         "file_exists": false,
@@ -34,10 +138,19 @@
     "expected_image_count": 0,
     "generated_image_count": 0
   },
+  "quality_review": {
+    "risky_image_count": 0,
+    "required_count": 0,
+    "pending_count": 0,
+    "approved_count": 0,
+    "waived_count": 0,
+    "manual_review_cleared": false
+  },
   "self_check": {
     "covers_all_keyframe_prompts": false,
     "has_start_and_end_for_each_shot": false,
     "all_required_images_exist": false,
+    "manual_review_cleared": false,
     "ready_for_video_clip_generation": false
   },
   "allowed_next_stage": "STAGE_06_VIDEO_CLIPS|null"

@@ -212,6 +212,40 @@ def test_comfyui_client_raises_on_node_errors(tmp_path: Path) -> None:
         server.server_close()
 
 
+def test_comfyui_client_summarizes_http_node_validation_errors() -> None:
+    summary = comfyui_client.ComfyUIClient._summarize_error_details({
+        "error": {
+            "type": "prompt_outputs_failed_validation",
+            "message": "Prompt outputs failed validation",
+        },
+        "node_errors": {
+            "8": {
+                "class_type": "CLIPLoader",
+                "errors": [
+                    {
+                        "message": "Value not in list",
+                        "details": "clip_name: 'gemma_2_2b_fp16.safetensors' not in available models",
+                    }
+                ],
+            },
+            "1": {
+                "class_type": "UNETLoader",
+                "errors": [
+                    {
+                        "message": "Value not in list",
+                        "details": "unet_name: 'neta-lumina-v1.0.safetensors' not in available models",
+                    }
+                ],
+            },
+        },
+    })
+    assert "prompt_outputs_failed_validation" in summary
+    assert "node 8 (CLIPLoader)" in summary
+    assert "gemma_2_2b_fp16.safetensors" in summary
+    assert "node 1 (UNETLoader)" in summary
+    assert "neta-lumina-v1.0.safetensors" in summary
+
+
 def test_comfyui_client_raises_on_execution_error(tmp_path: Path) -> None:
     output_root = tmp_path / "comfy_output"
     server, thread = _start_server("history_error", output_root=output_root)

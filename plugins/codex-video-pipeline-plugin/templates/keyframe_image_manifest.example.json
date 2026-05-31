@@ -15,6 +15,73 @@
   },
   "output_root": "example_keyframe_images",
   "keyframes_dir": "example_keyframe_images",
+  "stage05_route_key": "realistic_cinematic",
+  "comfyui_workflow_mapping_key": "stage05_realistic_cinematic",
+  "comfyui_workflow_name": "txt2img_keyframe_realistic_zimage_photo_bridge",
+  "comfyui_model_id": "Tongyi-MAI/Z-Image",
+  "comfyui_style_preset_key": null,
+  "comfyui_style_preset_label": null,
+  "comfyui_style_positive_anchor": null,
+  "comfyui_style_negative_anchor": null,
+  "comfyui_control_mode": "prompt_only",
+  "comfyui_optimization_profile": "balanced",
+  "comfyui_optimization_profile_label": "Balanced",
+  "comfyui_optimization": {
+    "workflow_mapping_key": "stage05_realistic_cinematic",
+    "profile_key": "balanced",
+    "profile_label": "Balanced",
+    "profile_description": "Default local generation profile tuned for a better speed-quality tradeoff.",
+    "dimension_scale": 0.875,
+    "round_to_multiple": 64,
+    "max_width": null,
+    "max_height": null,
+    "workflow_replacements": {
+      "steps": 8,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1
+    },
+    "notes": [],
+    "config_path": "config/stage05_optimization_profiles.example.yaml"
+  },
+  "preferred_comfyui_workflow_candidate": "txt2img_keyframe_realistic_zimage_photo_bridge",
+  "preferred_comfyui_model_candidate": "Tongyi-MAI/Z-Image",
+  "route_migration_state": "repo_transitional",
+  "preferred_comfyui_workflow_source_ref": "workflows/comfyui/txt2img_keyframe_realistic_zimage_photo_bridge.workflow_api.json",
+  "preferred_comfyui_workflow_format": "api_workflow",
+  "preferred_comfyui_workflow_custom_node_dependencies": [],
+  "preferred_comfyui_workflow_import_blockers": [],
+  "route_resolution": {
+    "route_key": "realistic_cinematic",
+    "style_family": "realistic",
+    "comfyui_workflow_mapping_key": "stage05_realistic_cinematic",
+    "comfyui_workflow_name": "txt2img_keyframe_realistic_zimage_photo_bridge",
+    "comfyui_model_id": "Tongyi-MAI/Z-Image",
+    "comfyui_style_preset_key": null,
+    "comfyui_style_preset_label": null,
+    "comfyui_style_positive_anchor": null,
+    "comfyui_style_negative_anchor": null,
+    "comfyui_control_mode": "prompt_only",
+    "preferred_comfyui_workflow_candidate": "txt2img_keyframe_realistic_zimage_photo_bridge",
+    "preferred_comfyui_model_candidate": "Tongyi-MAI/Z-Image",
+    "route_migration_state": "repo_transitional",
+    "preferred_comfyui_workflow_source_ref": "workflows/comfyui/txt2img_keyframe_realistic_zimage_photo_bridge.workflow_api.json",
+    "preferred_comfyui_workflow_format": "api_workflow",
+    "preferred_comfyui_workflow_custom_node_dependencies": [],
+    "preferred_comfyui_workflow_import_blockers": [],
+    "stage00_style": "电影级写实",
+    "registry_path": "config/stage05_route_registry.example.yaml",
+    "used_registry": true,
+    "resolution_mode": "stage00_style_registry",
+    "workflow_mapping_resolution": "route_registry_current_mapping"
+  },
+  "shot_frame_requirements": {
+    "S001": [
+      "start",
+      "end"
+    ]
+  },
   "jobs": [
     {
       "image_id": "IMG_S001_START",
@@ -26,6 +93,24 @@
       "consistency_prompt": "same young woman, long black hair, light summer dress",
       "style_prompt": "warm healing cinematic realism",
       "camera_prompt": "wide shot",
+      "stage05_route_key": "realistic_cinematic",
+      "comfyui_workflow_mapping_key": "stage05_realistic_cinematic",
+      "comfyui_workflow_name": "txt2img_keyframe_realistic_zimage_photo_bridge",
+      "comfyui_model_id": "Tongyi-MAI/Z-Image",
+      "comfyui_style_preset_key": null,
+      "comfyui_style_preset_label": null,
+      "comfyui_style_positive_anchor": null,
+      "comfyui_style_negative_anchor": null,
+      "comfyui_control_mode": "prompt_only",
+      "comfyui_optimization_profile": "balanced",
+      "comfyui_optimization_profile_label": "Balanced",
+      "preferred_comfyui_workflow_candidate": "txt2img_keyframe_realistic_zimage_photo_bridge",
+      "preferred_comfyui_model_candidate": "Tongyi-MAI/Z-Image",
+      "route_migration_state": "repo_transitional",
+      "preferred_comfyui_workflow_source_ref": "workflows/comfyui/txt2img_keyframe_realistic_zimage_photo_bridge.workflow_api.json",
+      "preferred_comfyui_workflow_format": "api_workflow",
+      "preferred_comfyui_workflow_custom_node_dependencies": [],
+      "preferred_comfyui_workflow_import_blockers": [],
       "aspect_ratio": "9:16",
       "resolution": "1080P",
       "provider_priority": [
@@ -35,6 +120,13 @@
       "status": "succeeded",
       "seed": 1,
       "output_path": "example_keyframe_images/S001_start.png",
+      "quality_gate": {
+        "risk_tags": [],
+        "control_mode": "prompt_only",
+        "requires_manual_review": false,
+        "manual_review_status": "not_required",
+        "reason": null
+      },
       "evidence": {
         "file_path": "example_keyframe_images/S001_start.png",
         "file_exists": true,
@@ -42,7 +134,7 @@
         "created_at": "2026-05-28T10:50:00+08:00"
       },
       "errors": [],
-      "notes": "example image"
+      "notes": "route=realistic_cinematic; route_state=repo_transitional; preferred_workflow=txt2img_keyframe_realistic_zimage_photo_bridge; profile=balanced; size=896x1344; mapping=stage05_realistic_cinematic; workflow=txt2img_keyframe_realistic_zimage_photo_bridge; example image"
     },
     {
       "image_id": "IMG_S001_END",
@@ -54,6 +146,24 @@
       "consistency_prompt": "same young woman, long black hair, light summer dress",
       "style_prompt": "warm healing cinematic realism",
       "camera_prompt": "wide shot",
+      "stage05_route_key": "realistic_cinematic",
+      "comfyui_workflow_mapping_key": "stage05_realistic_cinematic",
+      "comfyui_workflow_name": "txt2img_keyframe_realistic_zimage_photo_bridge",
+      "comfyui_model_id": "Tongyi-MAI/Z-Image",
+      "comfyui_style_preset_key": null,
+      "comfyui_style_preset_label": null,
+      "comfyui_style_positive_anchor": null,
+      "comfyui_style_negative_anchor": null,
+      "comfyui_control_mode": "prompt_only",
+      "comfyui_optimization_profile": "balanced",
+      "comfyui_optimization_profile_label": "Balanced",
+      "preferred_comfyui_workflow_candidate": "txt2img_keyframe_realistic_zimage_photo_bridge",
+      "preferred_comfyui_model_candidate": "Tongyi-MAI/Z-Image",
+      "route_migration_state": "repo_transitional",
+      "preferred_comfyui_workflow_source_ref": "workflows/comfyui/txt2img_keyframe_realistic_zimage_photo_bridge.workflow_api.json",
+      "preferred_comfyui_workflow_format": "api_workflow",
+      "preferred_comfyui_workflow_custom_node_dependencies": [],
+      "preferred_comfyui_workflow_import_blockers": [],
       "aspect_ratio": "9:16",
       "resolution": "1080P",
       "provider_priority": [
@@ -63,6 +173,13 @@
       "status": "succeeded",
       "seed": 2,
       "output_path": "example_keyframe_images/S001_end.png",
+      "quality_gate": {
+        "risk_tags": [],
+        "control_mode": "prompt_only",
+        "requires_manual_review": false,
+        "manual_review_status": "not_required",
+        "reason": null
+      },
       "evidence": {
         "file_path": "example_keyframe_images/S001_end.png",
         "file_exists": true,
@@ -70,7 +187,7 @@
         "created_at": "2026-05-28T10:50:00+08:00"
       },
       "errors": [],
-      "notes": "example image"
+      "notes": "route=realistic_cinematic; route_state=repo_transitional; preferred_workflow=txt2img_keyframe_realistic_zimage_photo_bridge; profile=balanced; size=896x1344; mapping=stage05_realistic_cinematic; workflow=txt2img_keyframe_realistic_zimage_photo_bridge; example image"
     }
   ],
   "summary": {
@@ -85,10 +202,21 @@
     "consistency_prompts_present": true,
     "quality_targets_defined": true
   },
+  "quality_review": {
+    "risky_image_count": 0,
+    "risky_image_ids": [],
+    "required_count": 0,
+    "approved_count": 0,
+    "pending_count": 0,
+    "waived_count": 0,
+    "blocking_image_ids": [],
+    "manual_review_cleared": true
+  },
   "self_check": {
     "covers_all_keyframe_prompts": true,
     "has_start_and_end_for_each_shot": true,
     "all_required_images_exist": true,
+    "manual_review_cleared": true,
     "ready_for_video_clip_generation": true,
     "notes": []
   },

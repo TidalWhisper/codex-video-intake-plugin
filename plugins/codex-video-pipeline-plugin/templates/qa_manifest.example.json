@@ -66,6 +66,14 @@
       "severity": "blocker"
     },
     {
+      "check_id": "content_text_alignment",
+      "category": "human_review",
+      "description": "人工确认图像/视频内容与脚本、分镜和文字描述一致",
+      "status": "pass",
+      "severity": "blocker",
+      "review_mode": "human_review"
+    },
+    {
       "check_id": "visual_continuity_contract",
       "category": "visual",
       "description": "视觉连续性契约检查",
@@ -94,6 +102,12 @@
       "severity": "major"
     }
   ],
+  "content_alignment_review": {
+    "confirmed": true,
+    "status": "pass",
+    "note": "示例项目已人工确认画面内容与脚本/分镜文字描述一致。",
+    "reviewed_at": "2026-05-28T10:50:00+08:00"
+  },
   "issue_summary": {
     "blocker_count": 0,
     "major_count": 0,

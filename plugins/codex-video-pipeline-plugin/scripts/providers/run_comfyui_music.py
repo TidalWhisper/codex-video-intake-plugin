@@ -17,8 +17,8 @@ from comfyui_client import ComfyUIClient, ComfyUIError
 from comfyui_music_sync_utils import finalize_music_success, mark_job_failed, sync_request_and_job
 from heartmula_prompt_builder import build_heartmula_prompt
 from pipeline_core.requirement_compiler import compiled_requirements_from_context, requested_output_scope_guard_message
-from provider_config import ConfigError, get_comfyui_settings, load_provider_config, validate_provider_config
-from stage07_audio_utils import load_json, update_manifest_state, utc_now, write_json
+from provider_config import ConfigError, check_comfyui_server, get_comfyui_settings, load_provider_config, validate_provider_config
+from stage07_audio_utils import load_json, update_manifest_state, utc_now, write_audio_recovery_artifacts, write_json
 from workflow_mapping import apply_node_inputs, load_mapped_workflow, load_workflow_mapping
 
 
@@ -79,6 +79,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--fail-fast", action="store_true", help="Stop on the first provider error")
     parser.add_argument("--poll-interval", type=float, default=1.0, help="Polling interval in seconds")
     parser.add_argument("--max-wait-seconds", type=float, default=None, help="Maximum time to wait for each prompt")
+    parser.add_argument("--preflight-timeout", type=int, default=8, help="Short connectivity probe timeout before prompt submission")
     parser.add_argument("--allow-beyond-requested-scope", action="store_true", help="Allow this executor to run even when the project brief requested an earlier terminal output")
     args = parser.parse_args(argv)
 
@@ -144,6 +145,36 @@ def main(argv: list[str] | None = None) -> int:
         print(f"MUSIC REQUEST MANIFEST UPDATED: {requests_path}")
         return 0
 
+    comfyui_result = check_comfyui_server(config, timeout=args.preflight_timeout)
+    if not comfyui_result.get("ready"):
+        message = f"ComfyUI preflight failed before Stage 07 music submission: {comfyui_result.get('status')}"
+        if comfyui_result.get("error"):
+            message = f"{message} ({comfyui_result.get('error')})"
+        for job in selected_jobs:
+            mark_job_failed(job, args.workflow_name, "", message)
+        for request_item in request_manifest["requests"]:
+            request_item.update({
+                "status": "failed",
+                "requested_at": utc_now(),
+                "completed_at": utc_now(),
+                "error_message": message,
+            })
+        update_manifest_state(data, manifest_path)
+        write_json(manifest_path, data)
+        request_manifest["generated_at"] = utc_now()
+        write_json(requests_path, request_manifest)
+        write_audio_recovery_artifacts(
+            manifest_path,
+            data,
+            reason=message,
+            provider_health={
+                "comfyui_status": str(comfyui_result.get("status") or "unknown"),
+                "comfyui_error": str(comfyui_result.get("error") or ""),
+            },
+        )
+        print(f"ERROR: {message}", file=sys.stderr)
+        return 1
+
     client = ComfyUIClient(
         base_url=settings["base_url"],
         timeout_seconds=settings["timeout_seconds"],
@@ -155,6 +186,9 @@ def main(argv: list[str] | None = None) -> int:
     for job in selected_jobs:
         request_item = requests_by_id[job["audio_id"]]
         request_item["requested_at"] = utc_now()
+        request_item["status"] = "submitting"
+        request_manifest["generated_at"] = utc_now()
+        write_json(requests_path, request_manifest)
         try:
             nodes = mapping_entry["nodes"]
             duration_seconds = music_duration_seconds(job)

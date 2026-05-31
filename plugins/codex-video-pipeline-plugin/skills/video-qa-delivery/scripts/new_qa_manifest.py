@@ -166,6 +166,12 @@ def main(argv: list[str] | None = None) -> int:
         "asset_index_path": rel(asset_index),
         "qa_review_path": rel(qa_review),
         "qa_checks": checks,
+        "content_alignment_review": {
+            "confirmed": False,
+            "status": "pending",
+            "note": "",
+            "reviewed_at": None,
+        },
         "issue_summary": {"blocker_count": 0, "major_count": 0, "minor_count": 0, "notes": ["draft QA manifest; run package_delivery.py before final validation"]},
         "delivery_package": {"root": rel(delivery_dir), "files": [], "ready": False},
         "self_check": {

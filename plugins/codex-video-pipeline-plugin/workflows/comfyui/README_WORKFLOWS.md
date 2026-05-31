@@ -7,9 +7,14 @@
 ```text
 txt2img_keyframe.workflow_api.json
 txt2img_keyframe_realistic.workflow_api.json
+txt2img_keyframe_realistic_zimage_photo_bridge.workflow_api.json
 txt2img_keyframe_anime.workflow_api.json
+txt2img_keyframe_anime_cn_newguofeng.workflow_api.json
 txt2img_keyframe_guofeng.workflow_api.json
+txt2img_keyframe_guofeng_ink.workflow_api.json
 txt2img_keyframe_stylized.workflow_api.json
+txt2img_keyframe_stylized_concept.workflow_api.json
+txt2img_keyframe_stylized_zimage_image_b_bridge.workflow_api.json
 i2v_ltx.workflow_api.json
 indextts2.workflow_api.json
 HeartMuLa_workflow_fixed_importable.json
@@ -19,14 +24,53 @@ AceStep_Music_Workflow.json
 注意：
 
 - 必须是 ComfyUI 导出的 API 格式 workflow，不是普通 UI workflow
-- Stage 05 txt2img 现在推荐使用四路最小架构：`realistic / anime / guofeng / stylized`
-- `txt2img_keyframe.workflow_api.json` 仍保留为兼容入口；默认 runner 会根据 Stage 05 manifest 自动路由到四个 style-family workflow
-- 维护 Stage 05 风格路由时，先看 `config/stage05_style_profiles.example.yaml`，不要把同一个通用底模仅靠 prompt 改名后当成多个成熟风格路线
+- Stage 05 txt2img 的 provider 顺序固定为：`OpenAI GPT Image 2 -> ComfyUI -> manual`
+- Stage 05 的真正路由入口已经切到 `config/stage05_route_registry.example.yaml`
+- `txt2img_keyframe.workflow_api.json` 仍保留为兼容入口；默认 runner 会根据 Stage 05 manifest 先解析 `route_key`，再路由到对应 workflow
+- 第一批 route-specific workflow 已拆出独立文件：
+  - `anime_cn_newguofeng`
+  - `guofeng_ink`
+  - `stylized_concept`
+- 这三条现在也补了可直接指定的 mapping key：
+  - `txt2img_keyframe_anime_cn_newguofeng`
+  - `txt2img_keyframe_guofeng_ink`
+  - `txt2img_keyframe_stylized_concept`
+- 维护 Stage 05 风格路由时，先看 `config/stage05_route_registry.example.yaml`，不要把同一个通用底模仅靠 prompt 改名后当成多个成熟风格路线
+- route registry 里的 `adoption_strategy` / `evidence_refs` 用来记录每条路线当前桥接实现、社区优先候选、以及外部证据来源
 - 当前本机已验证的 Stage 05 模型栈：
   - `realistic` → `Qwen 2512` 基础栈
   - `anime` → `Zimage` 基础栈
   - `guofeng` → `Qwen 2512 + qwen_image_gufeng LoRA`
   - `stylized` → `Qwen 2512 + illustration-1.0-qwen-image LoRA`
+- 当前第一批 route-specific workflow 试点：
+  - `realistic_zimage_photo_bridge` → `Z-Image photo` 社区 UI graph 的最小 API bridge，使用 `z_image_turbo_bf16.safetensors + qwen_3_4b.safetensors + ae.safetensors`
+  - `anime_cn_newguofeng` → `Neta-Lumina` 风格 API 结构，使用 `neta-lumina-v1.0.safetensors + gemma_2_2b_fp16 + ae.safetensors`
+  - `guofeng_ink` → `Qwen 2512 + qwen_image_gufeng LoRA` 独立工作流文件，并额外暴露 `style_anchor / negative_style_anchor` 节点给 Stage 05 route/preset 层
+  - `stylized_concept` → `Z-Image image-b` 社区 UI graph 的最小 API bridge，使用 `z_image_turbo_bf16.safetensors + qwen_3_4b.safetensors + ae.safetensors`
+- `scripts/providers/build_stage05_zimage_photo_bridge.py` 用来把 `AmazingZImageWorkflow/amazing-z-photo_SAFETENSORS.json` 裁成 Stage 05 可 patch 的 API bridge
+- `scripts/providers/build_stage05_zimage_image_b_bridge.py` 用来把 `AmazingZImageWorkflow/amazing-z-image-b_SAFETENSORS.json` 裁成 Stage 05 可 patch 的 API bridge
+- 这些 repo 内 route-specific workflow 仍然只是过渡桥接，并不自动等于“社区最佳版”
+- `realistic_cinematic` 当前已经切到仓库内 bridge：`txt2img_keyframe_realistic_zimage_photo_bridge.workflow_api.json`
+- `stylized_concept` 当前已经切到仓库内 bridge：`txt2img_keyframe_stylized_zimage_image_b_bridge.workflow_api.json`
+- `stylized_concept` 已有本地 smoke evidence：`video_projects/real_smoke_20260530_stage05_stylized_bridge/05_images/keyframe_image_manifest.json`
+- `stylized_concept` 现在还支持 route-internal preset anchor：
+  - `cyberpunk_neon`
+  - `dark_fantasy_noir`
+  - `chromatic_editorial`
+- `game_cg` 现在使用独立的 clean-plate bridge：`txt2img_keyframe_game_cg_clean_plate.workflow_api.json`
+- `game_cg` 仍复用同一套 `Z-Image image-b` 模型底座，但 prompt anchor 与默认保存前缀已经和 `stylized_concept` 分开，优先压低标题字 / logo / poster layout 倾向
+- `game_cg` 已有本地 smoke evidence：`video_projects/real_smoke_20260530_stage05_gamecg_bridge/05_images/keyframe_image_manifest.json`
+- `guofeng_ink` 已有本地 smoke evidence：`video_projects/real_smoke_20260530_stage05_guofeng_ink/05_images/keyframe_image_manifest.json`
+- `anime_cn_newguofeng` 在本机当前仍未通过 smoke：
+  - 失败原因不是 prompt，而是本机缺少这条 Lumina 栈所需的 `neta-lumina-v1.0.safetensors`、`gemma_2_2b_fp16.safetensors` 和匹配的 VAE 路径
+  - 失败证据：`video_projects/real_smoke_20260530_stage05_anime_cn_newguofeng/05_images/comfyui_image_requests.json`
+- `guofeng_ink` 当前有一个额外例外：外部 `Workflow-Qwen-Image-LORA.json` 源在 2026-05-30 核验时出现了与 `liuyifei` LoRA 混线的问题，所以 repo 内独立文件暂时仍是更可信的执行版本
+- 后续优先迁移顺序：
+  - `realistic_cinematic` 已通过 repo bridge 吸收 `AmazingZImageWorkflow/amazing-z-photo_SAFETENSORS.json` 的核心模型栈；后续重点转为做更多视觉对照而不是回退默认路由
+  - `stylized_concept` 已通过 repo bridge 吸收 `AmazingZImageWorkflow/amazing-z-image-b_SAFETENSORS.json` 的核心模型栈；后续重点是补 smoke evidence 与细分 preset
+  - `anime_jp` → `Anima` / `Z-Anime` 原生 workflow
+  - `guofeng_ink` → `Qwen-Image-Gufeng-LoRA` 专用 workflow
+  - `anime_cn_newguofeng` → 继续以 `Neta-Lumina` 为主线补 community source
 - Stage 07 默认 ComfyUI 音乐 workflow 入口已切到 `AceStep_Music_Workflow.json`
 - `run_comfyui_music.py` 的默认 `music_generation` 映射现在指向 AceStep
 - `music_generation_heartmula` 仍保留给 HeartMuLa 兼容路径

@@ -49,8 +49,12 @@ class ComfyUIClient:
                 details = json.loads(raw)
             except json.JSONDecodeError:
                 details = {"raw": raw}
+            detail_message = self._summarize_error_details(details)
+            message = f"ComfyUI request failed with HTTP {exc.code}"
+            if detail_message:
+                message = f"{message}: {detail_message}"
             raise ComfyUIError(
-                f"ComfyUI request failed with HTTP {exc.code}",
+                message,
                 kind="http_error",
                 status_code=exc.code,
                 details=details,
@@ -79,6 +83,73 @@ class ComfyUIClient:
             )
         return data
 
+    @staticmethod
+    def _summarize_node_errors(node_errors: Any, *, limit: int = 3) -> str:
+        if not isinstance(node_errors, dict):
+            return ""
+        parts: list[str] = []
+        for node_id, payload in node_errors.items():
+            if not isinstance(payload, dict):
+                continue
+            class_type = str(payload.get("class_type") or "").strip()
+            errors = payload.get("errors")
+            if not isinstance(errors, list):
+                continue
+            for item in errors:
+                if not isinstance(item, dict):
+                    continue
+                message = str(item.get("message") or "").strip()
+                details = str(item.get("details") or "").strip()
+                if message and details:
+                    summary = f"node {node_id}"
+                    if class_type:
+                        summary = f"{summary} ({class_type})"
+                    summary = f"{summary}: {message} - {details}"
+                elif details or message:
+                    summary = f"node {node_id}"
+                    if class_type:
+                        summary = f"{summary} ({class_type})"
+                    summary = f"{summary}: {details or message}"
+                else:
+                    continue
+                parts.append(summary)
+                if len(parts) >= limit:
+                    return "; ".join(parts)
+        return "; ".join(parts)
+
+    @staticmethod
+    def _summarize_error_details(details: Any) -> str:
+        if isinstance(details, dict):
+            error = details.get("error")
+            node_error_summary = ComfyUIClient._summarize_node_errors(details.get("node_errors"))
+            if isinstance(error, dict):
+                error_type = str(error.get("type") or "").strip()
+                message = str(error.get("message") or "").strip()
+                if error_type and message:
+                    summary = f"{error_type}: {message}"
+                    if node_error_summary:
+                        return f"{summary}; {node_error_summary}"
+                    return summary
+                if message:
+                    if node_error_summary:
+                        return f"{message}; {node_error_summary}"
+                    return message
+                if error_type:
+                    if node_error_summary:
+                        return f"{error_type}; {node_error_summary}"
+                    return error_type
+            if node_error_summary:
+                return node_error_summary
+            message = str(details.get("message") or "").strip()
+            if message:
+                return message
+            raw = str(details.get("raw") or "").strip()
+            if raw:
+                return raw
+        elif details:
+            return str(details).strip()
+        return ""
+
     def get_system_stats(self) -> dict[str, Any]:
         return self._request_json("GET", "/system_stats")
 
@@ -90,10 +161,13 @@ class ComfyUIClient:
         workflow: dict[str, Any],
         *,
         client_id: str | None = None,
+        extra_data: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         payload: dict[str, Any] = {"prompt": workflow}
         if client_id:
             payload["client_id"] = client_id
+        if isinstance(extra_data, dict) and extra_data:
+            payload["extra_data"] = extra_data
         data = self._request_json("POST", "/prompt", payload=payload)
         prompt_id = data.get("prompt_id")
         if not isinstance(prompt_id, str) or not prompt_id.strip():

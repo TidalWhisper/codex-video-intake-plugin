@@ -117,6 +117,7 @@ def build_qa_checks(brief: dict[str, Any], compiled: dict[str, Any], contract: d
     ]
     dynamic_checks = [
         {"check_id": "intent_alignment", "category": "strategy", "description": "Stage 路由、最终交付形式与锁定需求一致", "status": "pending", "severity": "blocker"},
+        {"check_id": "content_text_alignment", "category": "human_review", "description": "人工确认图像/视频内容与脚本、分镜和文字描述一致", "status": "pending", "severity": "blocker", "review_mode": "human_review"},
         {"check_id": "visual_continuity_contract", "category": "visual", "description": "视觉连续性约束已贯穿关键帧与视频片段", "status": "pending", "severity": "major"},
         {"check_id": "performance_direction_contract", "category": "performance", "description": "动作/情绪/对白方向在提示词、片段和音频阶段保持一致", "status": "pending", "severity": "major"},
         {"check_id": "audio_direction_contract", "category": "audio", "description": "配音与音乐模式匹配 brief 的声音策略", "status": "pending", "severity": "major"},

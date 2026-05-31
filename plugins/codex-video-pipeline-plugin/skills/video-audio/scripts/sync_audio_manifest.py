@@ -21,8 +21,11 @@ KNOWN_PLUGIN_ROOT_CHILDREN = {
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "scripts"))
+sys.path.insert(0, str(ROOT / "scripts" / "providers"))
 from pipeline_blueprints import next_stage_after  # noqa: E402
 from pipeline_core.project_state import update_project_manifest_for_stage  # noqa: E402
+from providers.provider_config import ConfigError, check_comfyui_server, load_provider_config  # noqa: E402
+from providers.stage07_audio_utils import write_audio_recovery_artifacts  # noqa: E402
 
 
 def resolve(base: Path, raw: str) -> Path:
@@ -69,6 +72,7 @@ def main() -> int:
     path = Path(args.manifest_json)
     data = json.loads(path.read_text(encoding="utf-8"))
     routing = data.get("routing") if isinstance(data.get("routing"), dict) else {"legacy_mode": True}
+    provider_health: dict[str, str] = {}
     generated_voice = generated_music = generated_total = failed = 0
     voice_jobs = music_jobs = 0
     for job in data.get("jobs") or []:
@@ -123,6 +127,16 @@ def main() -> int:
     data["updated_at"] = datetime.now(timezone.utc).isoformat()
     if all_audio:
         data["allowed_next_stage"] = next_stage_after("STAGE_07_AUDIO", routing, "STAGE_08_ASSEMBLY")
+        self_check.setdefault("notes", [])
+        self_check["notes"] = [
+            note for note in self_check["notes"]
+            if not (isinstance(note, str) and note.startswith(("recovery:", "runtime_status:")))
+        ]
+        write_audio_recovery_artifacts(
+            path,
+            data,
+            reason="Stage 07 audio files are present and ready for Stage 08 assembly.",
+        )
         update_project_manifest_for_stage(
             path,
             current_stage="STAGE_07_AUDIO_CONFIRMED",
@@ -132,6 +146,42 @@ def main() -> int:
         )
     else:
         data["allowed_next_stage"] = None
+        try:
+            provider_config, _ = load_provider_config(root=ROOT)
+            comfyui_result = check_comfyui_server(provider_config, timeout=8)
+            provider_health = {
+                "comfyui_status": str(comfyui_result.get("status") or "unknown"),
+                "comfyui_error": str(comfyui_result.get("error") or ""),
+            }
+        except ConfigError as exc:
+            provider_health = {
+                "comfyui_status": "config_error",
+                "comfyui_error": str(exc),
+            }
+        recovery_path, runtime_status_path = write_audio_recovery_artifacts(
+            path,
+            data,
+            reason="Stage 07 audio files are still missing, so assembly cannot continue yet.",
+            provider_health=provider_health,
+        )
+        recovery_note = str(recovery_path).replace("\\", "/")
+        runtime_status_note = str(runtime_status_path).replace("\\", "/")
+        self_check.setdefault("notes", [])
+        self_check["notes"] = [
+            note for note in self_check["notes"]
+            if isinstance(note, str) and not note.startswith(("recovery:", "runtime_status:"))
+        ]
+        self_check["notes"].extend([
+            f"recovery:{recovery_note}",
+            f"runtime_status:{runtime_status_note}",
+        ])
+        update_project_manifest_for_stage(
+            path,
+            current_stage="STAGE_07_AUDIO",
+            allowed_next_stage=None,
+            flags={"audio_confirmed": False},
+            status="active",
+        )
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"AUDIO MANIFEST SYNCED: {path}")
     print(f"GENERATED_AUDIO: {generated_total}")

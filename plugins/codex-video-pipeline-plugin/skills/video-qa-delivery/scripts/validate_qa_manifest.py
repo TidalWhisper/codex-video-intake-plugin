@@ -25,11 +25,11 @@ REQUIRED_TOP = [
     "schema_version", "stage", "status", "project_id", "source_brief", "source_assembly_manifest",
     "qa_root", "final_video_path", "qa_plan_path", "qa_checklist_path", "issue_report_path",
     "delivery_report_path", "delivery_manifest_path", "asset_index_path", "qa_review_path",
-    "qa_checks", "issue_summary", "delivery_package", "self_check", "allowed_next_stage"
+    "qa_checks", "content_alignment_review", "issue_summary", "delivery_package", "self_check", "allowed_next_stage"
 ]
 REQUIRED_CHECK_IDS = {
     "final_video_evidence", "duration_consistency", "storyboard_coverage", "audio_presence", "subtitle_package", "delivery_package",
-    "intent_alignment", "visual_continuity_contract", "performance_direction_contract", "audio_direction_contract", "format_fit_contract",
+    "intent_alignment", "content_text_alignment", "visual_continuity_contract", "performance_direction_contract", "audio_direction_contract", "format_fit_contract",
 }
 VIDEO_EXTS = {".mp4", ".mov", ".mkv", ".webm"}
 
@@ -113,7 +113,9 @@ def validate(data: dict[str, Any], path: Path | None = None, mode: str = "final"
             errors.append(f"qa_checks[{idx}].status must be pending, pass, fail, waived, or manual_review")
         if mode == "final":
             allowed_statuses = {"pass", "waived"}
-            if check.get("category") == "human_review" or check.get("review_mode") == "human_review":
+            if cid == "content_text_alignment":
+                allowed_statuses = {"pass"}
+            elif check.get("category") == "human_review" or check.get("review_mode") == "human_review":
                 allowed_statuses.add("manual_review")
             if check.get("status") not in allowed_statuses:
                 errors.append(f"qa_checks[{idx}] must be one of {sorted(allowed_statuses)} in final mode: {cid}")
@@ -143,6 +145,19 @@ def validate(data: dict[str, Any], path: Path | None = None, mode: str = "final"
         else:
             if int(issue_summary.get("blocker_count") or 0) > 0:
                 errors.append("issue_summary.blocker_count must be 0 in final mode")
+
+        content_alignment_review = data.get("content_alignment_review")
+        if not isinstance(content_alignment_review, dict):
+            errors.append("content_alignment_review must be an object")
+        else:
+            if content_alignment_review.get("confirmed") is not True:
+                errors.append("content_alignment_review.confirmed must be true in final mode")
+            if content_alignment_review.get("status") != "pass":
+                errors.append("content_alignment_review.status must be pass in final mode")
+            if is_blank(content_alignment_review.get("note")):
+                errors.append("content_alignment_review.note must not be blank in final mode")
+            if is_blank(content_alignment_review.get("reviewed_at")):
+                errors.append("content_alignment_review.reviewed_at must not be blank in final mode")
 
         package = data.get("delivery_package")
         if not isinstance(package, dict):

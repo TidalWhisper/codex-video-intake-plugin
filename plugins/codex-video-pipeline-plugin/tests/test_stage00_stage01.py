@@ -4,8 +4,11 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
+import threading
 from pathlib import Path
 from types import ModuleType
+from urllib.parse import quote
+from urllib import request
 
 ROOT = Path(__file__).resolve().parents[1]
 INTAKE = ROOT / "skills" / "video-project-intake" / "scripts"
@@ -47,15 +50,22 @@ validate_keyframe_prompts = load_module("validate_keyframe_prompts_for_test", KE
 new_keyframe_image_jobs = load_module("new_keyframe_image_jobs_for_test", IMAGES / "new_keyframe_image_jobs.py")
 validate_keyframe_image_manifest = load_module("validate_keyframe_image_manifest_for_test", IMAGES / "validate_keyframe_image_manifest.py")
 generate_placeholder_keyframe_images = load_module("generate_placeholder_keyframe_images_for_test", IMAGES / "generate_placeholder_keyframe_images.py")
+sync_keyframe_image_manifest = load_module("sync_keyframe_image_manifest_for_test", IMAGES / "sync_keyframe_image_manifest.py")
+rerun_top_prompt_patches = load_module("rerun_top_prompt_patches_for_test", IMAGES / "rerun_top_prompt_patches.py")
+approve_stage05_review_queue = load_module("approve_stage05_review_queue_for_test", IMAGES / "approve_stage05_review_queue.py")
+serve_stage05_review_workbench = load_module("serve_stage05_review_workbench_for_test", IMAGES / "serve_stage05_review_workbench.py")
 new_video_clip_jobs = load_module("new_video_clip_jobs_for_test", VIDEOCLIPS / "new_video_clip_jobs.py")
 validate_video_clip_manifest = load_module("validate_video_clip_manifest_for_test", VIDEOCLIPS / "validate_video_clip_manifest.py")
 generate_placeholder_video_clips = load_module("generate_placeholder_video_clips_for_test", VIDEOCLIPS / "generate_placeholder_video_clips.py")
+sync_video_clip_manifest = load_module("sync_video_clip_manifest_for_test", VIDEOCLIPS / "sync_video_clip_manifest.py")
 new_audio_jobs = load_module("new_audio_jobs_for_test", AUDIO / "new_audio_jobs.py")
 validate_audio_manifest = load_module("validate_audio_manifest_for_test", AUDIO / "validate_audio_manifest.py")
 generate_placeholder_audio = load_module("generate_placeholder_audio_for_test", AUDIO / "generate_placeholder_audio.py")
+sync_audio_manifest = load_module("sync_audio_manifest_for_test", AUDIO / "sync_audio_manifest.py")
 new_assembly_manifest = load_module("new_assembly_manifest_for_test", ASSEMBLY / "new_assembly_manifest.py")
 validate_assembly_manifest = load_module("validate_assembly_manifest_for_test", ASSEMBLY / "validate_assembly_manifest.py")
 assemble_with_ffmpeg = load_module("assemble_with_ffmpeg_for_test", ASSEMBLY / "assemble_with_ffmpeg.py")
+sync_assembly_manifest = load_module("sync_assembly_manifest_for_test", ASSEMBLY / "sync_assembly_manifest.py")
 new_qa_manifest = load_module("new_qa_manifest_for_test", QA / "new_qa_manifest.py")
 validate_qa_manifest = load_module("validate_qa_manifest_for_test", QA / "validate_qa_manifest.py")
 package_delivery = load_module("package_delivery_for_test", QA / "package_delivery.py")
@@ -64,6 +74,50 @@ update_project_manifest = load_module("update_project_manifest_for_test", PIPELI
 
 def load_example_brief() -> dict:
     return json.loads((TEMPLATES / "project_brief.draft.example.json").read_text(encoding="utf-8"))
+
+
+def load_rainy_store_brief(project_dir: Path) -> dict:
+    brief = load_example_brief()
+    brief.update({
+        "schema_version": "0.5.0",
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "status": "locked",
+        "confirmed_by_user": True,
+        "allowed_next_stage": "STAGE_01_SCRIPT_GENERATION",
+        "locked_at": "2026-05-30T14:20:12+08:00",
+    })
+    brief["user_answers"] = {
+        "idea": "一位20岁出头的女孩在雨夜便利店门口把最后一把伞留给陌生人，自己淋着雨走远，回头发现门口多了一杯热可可",
+        "target_duration": "12秒",
+        "genre": "治愈",
+        "style": "写实电影感",
+        "visual_spec": "9:16 竖屏 1080P",
+        "characters": "有固定主角/人物",
+        "voice": "只需要旁白",
+        "music": "需要 underscore",
+        "final_output": "合成粗剪成片",
+    }
+    brief["normalized"].update({
+        "idea": "一位20岁出头的女孩在雨夜便利店门口把最后一把伞留给陌生人，自己淋着雨走远，回头发现门口多了一杯热可可",
+        "target_duration_sec": 12,
+        "target_duration_label": "12秒",
+        "genre": "治愈",
+        "style": "写实电影感",
+        "aspect_ratio": "9:16",
+        "aspect_ratio_label": "9:16 竖屏",
+        "resolution": "1080P",
+        "resolution_label": "1080P",
+        "characters_mode": "有固定主角/人物",
+        "characters_required": True,
+        "voice_mode": "只需要旁白",
+        "voice_required": True,
+        "music_mode": "需要",
+        "music_profile": "underscore",
+        "music_required": True,
+        "final_output": "合成粗剪成片",
+    })
+    return brief
 
 
 def test_validate_project_brief_example() -> None:
@@ -308,9 +362,15 @@ def test_new_character_bible_template_generates_final_ready_draft(tmp_path: Path
     assert ok, errors
     assert character_data["characters"]
     assert "performance_profile" in character_data["characters"][0]
+    assert character_data["reference_image_status"]["all_present"] is False
+    assert character_data["stage05_execution_readiness"]["safe_to_auto_generate"] is False
+    assert character_data["self_check"]["reference_images_ready"] is False
     assert (character_dir / "character_bible.md").exists()
     assert (character_dir / "character_review.md").exists()
     assert (character_dir / "reference_image_plan.json").exists()
+    review_text = (character_dir / "character_review.md").read_text(encoding="utf-8")
+    assert "角色参考图就绪：否" in review_text
+    assert "CHAR_001_primary.png" in review_text
 
 def test_update_project_manifest_sets_pipeline_flags(tmp_path: Path, monkeypatch) -> None:
     project_dir = tmp_path / "video_projects" / "video_20260528_103000_sunset_beach_girl"
@@ -408,9 +468,267 @@ def test_new_keyframe_prompts_template_generates_final_ready_draft(tmp_path: Pat
     assert ok, errors
     assert keyframe_data["transition_prompts"]
     assert keyframe_data["shot_prompts"][0]["performance_prompt"]
+    assert keyframe_data["reference_image_status"]["all_present"] is False
+    assert keyframe_data["stage05_execution_readiness"]["safe_to_auto_generate"] is False
+    assert keyframe_data["self_check"]["character_reference_images_ready"] is False
     assert (keyframe_dir / "keyframe_prompts.md").exists()
     assert (keyframe_dir / "motion_prompts.json").exists()
     assert (keyframe_dir / "prompt_review.md").exists()
+    prompt_review_text = (keyframe_dir / "prompt_review.md").read_text(encoding="utf-8")
+    assert "角色参考图就绪：否" in prompt_review_text
+    assert "CHAR_001_primary.png" in prompt_review_text
+
+
+def test_rainy_store_story_anchors_survive_stage01_to_stage04(tmp_path: Path) -> None:
+    project_dir = tmp_path / "video_projects" / "creator_trial_20260530_rainy_store"
+    intake_dir = project_dir / "00_intake"
+    script_dir = project_dir / "01_script"
+    storyboard_dir = project_dir / "02_storyboard"
+    character_dir = project_dir / "03_characters"
+    keyframe_dir = project_dir / "04_keyframes"
+    for path in [intake_dir, script_dir, storyboard_dir, character_dir, keyframe_dir]:
+        path.mkdir(parents=True, exist_ok=True)
+
+    brief = load_rainy_store_brief(project_dir)
+    locked_brief = intake_dir / "project_brief.locked.json"
+    locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    script_json = script_dir / "script.json"
+    assert new_script_template.main(["new_script_template.py", str(locked_brief), str(script_json)]) == 0
+    storyboard_json = storyboard_dir / "storyboard.json"
+    assert new_storyboard_template.main(["new_storyboard_template.py", str(locked_brief), str(script_json), str(storyboard_json)]) == 0
+    character_json = character_dir / "character_bible.json"
+    assert new_character_bible_template.main([
+        "new_character_bible_template.py",
+        str(locked_brief),
+        str(script_json),
+        str(storyboard_json),
+        str(character_json),
+    ]) == 0
+    keyframe_json = keyframe_dir / "keyframe_prompts.json"
+    assert new_keyframe_prompts_template.main([
+        "new_keyframe_prompts_template.py",
+        str(locked_brief),
+        str(script_json),
+        str(storyboard_json),
+        str(character_json),
+        str(keyframe_json),
+    ]) == 0
+
+    script_data = json.loads(script_json.read_text(encoding="utf-8"))
+    storyboard_data = json.loads(storyboard_json.read_text(encoding="utf-8"))
+    character_data = json.loads(character_json.read_text(encoding="utf-8"))
+    keyframe_data = json.loads(keyframe_json.read_text(encoding="utf-8"))
+
+    assert script_data["story_anchors"]["scene_label"] == "雨夜便利店门口"
+    assert script_data["story_anchors"]["key_props"][:2] == ["最后一把伞", "热可可"]
+    script_text = (script_dir / "script.md").read_text(encoding="utf-8")
+    assert "雨夜便利店门口" in script_text
+    assert "最后一把伞" in script_text
+    assert "热可可" in script_text
+    assert "核心场景" not in script_text
+    assert "海边女孩" not in script_text
+
+    joined_storyboard = "\n".join(
+        f"{shot.get('scene')} {shot.get('composition')} {shot.get('action')} {shot.get('key_prop')}"
+        for shot in storyboard_data["shots"]
+    )
+    assert "雨夜便利店门口" in joined_storyboard
+    assert "最后一把伞" in joined_storyboard
+    assert "热可可" in joined_storyboard
+    assert storyboard_data["shots"][0]["location"] == "便利店门口"
+    assert storyboard_data["shots"][0]["weather"] == "雨夜"
+
+    assert character_data["characters"][0]["name"] == "20岁出头的女孩"
+    assert "最后一把伞" in character_data["characters"][0]["appearance"]["accessories"]
+
+    prompt_text = (keyframe_dir / "keyframe_prompts.md").read_text(encoding="utf-8")
+    assert "地点：便利店门口" in prompt_text
+    assert "天气：雨夜" in prompt_text
+    assert "关键道具：最后一把伞" in prompt_text
+    assert "关键道具：热可可" in prompt_text
+    assert "构图重点：" in prompt_text
+    assert "镜头意图：" in prompt_text
+    assert all(shot.get("intent_summary") for shot in keyframe_data["shot_prompts"])
+    assert all("地点：" in shot["scene_summary"] for shot in keyframe_data["shot_prompts"])
+    assert all("天气：" in shot["scene_summary"] for shot in keyframe_data["shot_prompts"])
+    assert "Character identity anchor:" in keyframe_data["shot_prompts"][0]["consistency_prompt"]
+    assert "Primary protagonist must remain 20岁出头的女孩" in keyframe_data["shot_prompts"][0]["start_keyframe_prompt"]
+    assert "do not swap protagonist identity" in keyframe_data["shot_prompts"][0]["end_keyframe_prompt"]
+
+
+def test_rainy_store_story_anchors_survive_stage06_to_stage08_and_tiny_rough_cut_cannot_pass(tmp_path: Path) -> None:
+    project_dir = tmp_path / "video_projects" / "creator_trial_20260530_rainy_store"
+    intake_dir = project_dir / "00_intake"
+    script_dir = project_dir / "01_script"
+    storyboard_dir = project_dir / "02_storyboard"
+    character_dir = project_dir / "03_characters"
+    keyframe_dir = project_dir / "04_keyframes"
+    images_dir = project_dir / "05_images"
+    video_dir = project_dir / "06_video_clips"
+    audio_dir = project_dir / "07_audio"
+    assembly_dir = project_dir / "08_assembly"
+    for path in [intake_dir, script_dir, storyboard_dir, character_dir, keyframe_dir, images_dir, video_dir, audio_dir, assembly_dir]:
+        path.mkdir(parents=True, exist_ok=True)
+
+    manifest_path = project_dir / "project_manifest.json"
+    manifest_path.write_text(json.dumps({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "current_stage": "STAGE_04_KEYFRAME_PROMPTS_GENERATION",
+        "status": "active",
+        "brief_locked": True,
+        "keyframe_images_confirmed": True,
+        "video_clips_confirmed": True,
+        "audio_confirmed": True,
+        "assembly_confirmed": True,
+        "allowed_next_stage": "STAGE_09_QA",
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    brief = load_rainy_store_brief(project_dir)
+    locked_brief = intake_dir / "project_brief.locked.json"
+    locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    script_json = script_dir / "script.json"
+    assert new_script_template.main(["new_script_template.py", str(locked_brief), str(script_json)]) == 0
+    storyboard_json = storyboard_dir / "storyboard.json"
+    assert new_storyboard_template.main(["new_storyboard_template.py", str(locked_brief), str(script_json), str(storyboard_json)]) == 0
+    character_json = character_dir / "character_bible.json"
+    assert new_character_bible_template.main([
+        "new_character_bible_template.py",
+        str(locked_brief),
+        str(script_json),
+        str(storyboard_json),
+        str(character_json),
+    ]) == 0
+    keyframe_json = keyframe_dir / "keyframe_prompts.json"
+    assert new_keyframe_prompts_template.main([
+        "new_keyframe_prompts_template.py",
+        str(locked_brief),
+        str(script_json),
+        str(storyboard_json),
+        str(character_json),
+        str(keyframe_json),
+    ]) == 0
+
+    image_manifest_json = images_dir / "keyframe_image_manifest.json"
+    assert new_keyframe_image_jobs.main(["new_keyframe_image_jobs.py", str(locked_brief), str(keyframe_json), str(image_manifest_json)]) == 0
+    image_manifest = json.loads(image_manifest_json.read_text(encoding="utf-8"))
+    first_shot_jobs = [job for job in image_manifest["jobs"] if job["shot_id"] == "S001"]
+    assert any("missing_character_reference" in (job.get("quality_gate") or {}).get("risk_tags", []) for job in first_shot_jobs)
+    assert any("Character identity anchor:" in job.get("consistency_prompt", "") for job in first_shot_jobs)
+    for job in image_manifest["jobs"]:
+        output_path = Path(job["output_path"])
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"png")
+        job["status"] = "succeeded"
+    image_manifest["status"] = "confirmed"
+    image_manifest_json.write_text(json.dumps(image_manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    clip_manifest_json = video_dir / "video_clip_manifest.json"
+    assert new_video_clip_jobs.main([
+        "new_video_clip_jobs.py",
+        str(locked_brief),
+        str(storyboard_json),
+        str(keyframe_json),
+        str(image_manifest_json),
+        str(clip_manifest_json),
+    ]) == 0
+    clip_manifest = json.loads(clip_manifest_json.read_text(encoding="utf-8"))
+    clip_text = json.dumps(clip_manifest, ensure_ascii=False)
+    assert "雨夜便利店门口" in clip_text
+    assert "最后一把伞" in clip_text
+    assert "热可可" in clip_text
+    assert "海边女孩" not in clip_text
+    assert "核心场景" not in clip_text
+    for job in clip_manifest["jobs"]:
+        output_path = Path(job["output_path"])
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"\x00\x00\x00\x18ftypmp42REALCLIP" + (b"0" * 512))
+        job["status"] = "succeeded"
+        job["provider"] = "comfyui_ltx_i2v"
+    clip_manifest_json.write_text(json.dumps(clip_manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    old_argv = sys.argv[:]
+    try:
+        sys.argv = ["sync_video_clip_manifest.py", str(clip_manifest_json)]
+        assert sync_video_clip_manifest.main() == 0
+    finally:
+        sys.argv = old_argv
+
+    audio_manifest_json = audio_dir / "audio_manifest.json"
+    assert new_audio_jobs.main([
+        "new_audio_jobs.py",
+        str(locked_brief),
+        str(script_json),
+        str(storyboard_json),
+        str(character_json),
+        str(clip_manifest_json),
+        str(audio_manifest_json),
+    ]) == 0
+    audio_manifest = json.loads(audio_manifest_json.read_text(encoding="utf-8"))
+    audio_text = json.dumps(audio_manifest, ensure_ascii=False)
+    assert "雨夜便利店门口" in audio_text
+    assert "热可可" in audio_text
+    assert "海边女孩" not in audio_text
+    assert "核心场景" not in audio_text
+    voiceovers = [job for job in audio_manifest["jobs"] if job["audio_type"] == "voiceover"]
+    assert voiceovers
+    assert all(job["speaker_name"] == "旁白" for job in voiceovers)
+    for job in audio_manifest["jobs"]:
+        output_path = Path(job["output_path"])
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"audio-output")
+        job["status"] = "succeeded"
+        job["provider"] = "manual"
+    audio_manifest_json.write_text(json.dumps(audio_manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    try:
+        sys.argv = ["sync_audio_manifest.py", str(audio_manifest_json)]
+        assert sync_audio_manifest.main() == 0
+    finally:
+        sys.argv = old_argv
+
+    assembly_manifest_json = assembly_dir / "assembly_manifest.json"
+    assert new_assembly_manifest.main([
+        "new_assembly_manifest.py",
+        str(locked_brief),
+        str(storyboard_json),
+        str(clip_manifest_json),
+        str(audio_manifest_json),
+        str(assembly_manifest_json),
+    ]) == 0
+    assembly_manifest = json.loads(assembly_manifest_json.read_text(encoding="utf-8"))
+    assembly_text = json.dumps(assembly_manifest, ensure_ascii=False)
+    assert "雨夜便利店门口" in assembly_text
+    assert "热可可" in assembly_text
+    assert "海边女孩" not in assembly_text
+    assert "核心场景" not in assembly_text
+
+    rough_cut_path = project_dir / "08_assembly" / "rough_cut" / "rough_cut.mp4"
+    rough_cut_path.parent.mkdir(parents=True, exist_ok=True)
+    rough_cut_path.write_bytes(b"\x00\x00\x00\x18ftypmp42tiny")
+    assembly_manifest["assembly_provider"] = "ffmpeg"
+    assembly_manifest["ffmpeg_commands"] = [{
+        "command": ["ffmpeg"],
+        "provider": "ffmpeg",
+        "strategy": "reencode_mix",
+        "return_code": 0,
+        "stdout_excerpt": "",
+        "stderr_excerpt": "",
+        "ran_at": "2026-05-30T00:00:00+00:00",
+    }]
+    assembly_manifest_json.write_text(json.dumps(assembly_manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    try:
+        sys.argv = ["sync_assembly_manifest.py", str(assembly_manifest_json)]
+        assert sync_assembly_manifest.main() == 0
+    finally:
+        sys.argv = old_argv
+
+    synced_assembly = json.loads(assembly_manifest_json.read_text(encoding="utf-8"))
+    assert synced_assembly["self_check"]["ready_for_qa_stage"] is False
+    assert synced_assembly["allowed_next_stage"] is None
+    project_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert project_manifest["current_stage"] == "STAGE_08_ASSEMBLY"
+    assert project_manifest["assembly_confirmed"] is False
 
 
 def test_lock_project_brief_derives_routing_and_updates_manifest(tmp_path: Path) -> None:
@@ -449,7 +767,7 @@ def test_lock_project_brief_derives_routing_and_updates_manifest(tmp_path: Path)
     assert manifest["quality_contract"]["axes"]
 
 
-def test_stage05_compiler_prefers_comfy_route_for_anime_projects(tmp_path: Path) -> None:
+def test_stage05_compiler_keeps_openai_first_for_anime_projects(tmp_path: Path) -> None:
     project_dir = tmp_path / "video_projects" / "video_20260528_103000_anime_demo"
     intake_dir = project_dir / "00_intake"
     keyframe_dir = project_dir / "04_keyframes"
@@ -484,12 +802,95 @@ def test_stage05_compiler_prefers_comfy_route_for_anime_projects(tmp_path: Path)
     assert new_keyframe_image_jobs.main(["new_keyframe_image_jobs.py", str(locked_brief), str(keyframe_json), str(image_manifest_json)]) == 0
     data = json.loads(image_manifest_json.read_text(encoding="utf-8"))
     assert data["compiled_requirements"]["visual_family_hint"] == "anime"
-    assert data["image_provider_strategy"]["primary"] == "comfyui_txt2img"
-    assert data["jobs"][0]["provider_priority"][0] == "comfyui_txt2img"
+    assert data["image_provider_strategy"]["primary"] == "openai_gpt_image2"
+    assert data["jobs"][0]["provider_priority"][0] == "openai_gpt_image2"
+    assert data["stage05_route_key"] == "anime_jp"
+    assert data["comfyui_workflow_mapping_key"] == "stage05_anime_jp"
+    assert data["comfyui_model_id"] == "circlestone-labs/Anima"
+    assert data["preferred_comfyui_workflow_candidate"] == "anima_comparison_workflow"
+    assert data["preferred_comfyui_model_candidate"] == "circlestone-labs/Anima"
+    assert data["route_migration_state"] == "needs_api_conversion"
+    assert data["jobs"][0]["comfyui_workflow_name"] == "txt2img_keyframe_anime"
+    assert data["jobs"][0]["comfyui_workflow_mapping_key"] == "stage05_anime_jp"
+    assert data["jobs"][0]["comfyui_model_id"] == "circlestone-labs/Anima"
+    assert data["jobs"][0]["preferred_comfyui_workflow_candidate"] == "anima_comparison_workflow"
+    assert data["jobs"][0]["preferred_comfyui_model_candidate"] == "circlestone-labs/Anima"
+    assert data["jobs"][0]["route_migration_state"] == "needs_api_conversion"
+    assert data["jobs"][0]["stage05_route_key"] == "anime_jp"
+    assert data["route_resolution"]["used_registry"] is True
+    assert data["route_resolution"]["resolution_mode"] == "stage00_style_registry"
+    assert data["route_resolution"]["workflow_mapping_resolution"] == "route_registry_current_mapping"
+    assert data["route_resolution"]["preferred_comfyui_workflow_candidate"] == "anima_comparison_workflow"
+    assert data["route_resolution"]["preferred_comfyui_model_candidate"] == "circlestone-labs/Anima"
+    assert data["route_resolution"]["route_migration_state"] == "needs_api_conversion"
+
+
+def test_stage05_route_registry_maps_cn_animation_style_to_new_route_key(tmp_path: Path) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260528_103000_cn_anime_demo"
+    intake_dir = project_dir / "00_intake"
+    keyframe_dir = project_dir / "04_keyframes"
+    images_dir = project_dir / "05_images"
+    intake_dir.mkdir(parents=True, exist_ok=True)
+    keyframe_dir.mkdir(parents=True, exist_ok=True)
+    images_dir.mkdir(parents=True, exist_ok=True)
+
+    brief = load_example_brief()
+    brief.update({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "status": "locked",
+        "confirmed_by_user": True,
+        "allowed_next_stage": "STAGE_01_SCRIPT_GENERATION",
+        "locked_at": "2026-05-28T10:35:00+08:00",
+    })
+    brief["normalized"]["genre"] = "动画短片"
+    brief["normalized"]["style"] = "国漫动画风（中国动画/新国风）"
+    brief["normalized"]["final_output"] = "生成关键帧图片素材包"
+    locked_brief = intake_dir / "project_brief.locked.json"
+    locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    keyframe = json.loads((TEMPLATES / "keyframe_prompts.example.json").read_text(encoding="utf-8"))
+    keyframe["project_id"] = project_dir.name
+    keyframe["source_brief"] = str(locked_brief).replace("\\", "/")
+    keyframe["shot_prompts"][0]["style_prompt"] = "anime key visual, eastern architecture, refined line art"
+    keyframe_json = keyframe_dir / "keyframe_prompts.json"
+    keyframe_json.write_text(json.dumps(keyframe, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    image_manifest_json = images_dir / "keyframe_image_manifest.json"
+    assert new_keyframe_image_jobs.main(["new_keyframe_image_jobs.py", str(locked_brief), str(keyframe_json), str(image_manifest_json)]) == 0
+    data = json.loads(image_manifest_json.read_text(encoding="utf-8"))
+    assert data["stage05_route_key"] == "anime_cn_newguofeng"
+    assert data["style_family"] == "anime"
+    assert data["comfyui_workflow_mapping_key"] == "stage05_anime_cn_newguofeng"
+    assert data["comfyui_model_id"] == "neta-art/Neta-Lumina"
+    assert data["preferred_comfyui_workflow_candidate"] == "neta_lumina_official"
+    assert data["preferred_comfyui_model_candidate"] == "neta-art/Neta-Lumina"
+    assert data["route_migration_state"] == "needs_api_conversion"
+    assert data["jobs"][0]["comfyui_workflow_name"] == "txt2img_keyframe_anime_cn_newguofeng"
+    assert data["jobs"][0]["comfyui_workflow_mapping_key"] == "stage05_anime_cn_newguofeng"
+    assert data["route_resolution"]["used_registry"] is True
 
 
 def test_validate_keyframe_image_manifest_example_final() -> None:
     data = json.loads((TEMPLATES / "keyframe_image_manifest.example.json").read_text(encoding="utf-8"))
+    assert data["stage05_route_key"] == "realistic_cinematic"
+    assert data["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic"
+    assert data["comfyui_model_id"] == "Tongyi-MAI/Z-Image"
+    assert data["preferred_comfyui_workflow_candidate"] == "txt2img_keyframe_realistic_zimage_photo_bridge"
+    assert data["preferred_comfyui_model_candidate"] == "Tongyi-MAI/Z-Image"
+    assert data["route_migration_state"] == "repo_transitional"
+    assert data["preferred_comfyui_workflow_source_ref"] == "workflows/comfyui/txt2img_keyframe_realistic_zimage_photo_bridge.workflow_api.json"
+    assert data["preferred_comfyui_workflow_format"] == "api_workflow"
+    assert data["preferred_comfyui_workflow_custom_node_dependencies"] == []
+    assert data["preferred_comfyui_workflow_import_blockers"] == []
+    assert data["route_resolution"]["resolution_mode"] == "stage00_style_registry"
+    assert all(job["stage05_route_key"] == "realistic_cinematic" for job in data["jobs"])
+    assert all(job["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic" for job in data["jobs"])
+    assert all(job["comfyui_workflow_name"] == "txt2img_keyframe_realistic_zimage_photo_bridge" for job in data["jobs"])
+    assert all(job["preferred_comfyui_workflow_candidate"] == "txt2img_keyframe_realistic_zimage_photo_bridge" for job in data["jobs"])
+    assert all(job["preferred_comfyui_model_candidate"] == "Tongyi-MAI/Z-Image" for job in data["jobs"])
+    assert all(job["route_migration_state"] == "repo_transitional" for job in data["jobs"])
+    assert all(job["preferred_comfyui_workflow_format"] == "api_workflow" for job in data["jobs"])
     ok, errors, warnings = validate_keyframe_image_manifest.validate(data, TEMPLATES / "keyframe_image_manifest.example.json", mode="final")
     assert ok, errors
 
@@ -526,16 +927,43 @@ def test_new_keyframe_image_jobs_passes_draft_then_placeholder_passes_final(tmp_
     keyframe_json.write_text(json.dumps(keyframe, ensure_ascii=False, indent=2), encoding="utf-8")
 
     manifest_json = images_dir / "keyframe_image_manifest.json"
-    assert new_keyframe_image_jobs.main(["new_keyframe_image_jobs.py", str(locked_brief), str(keyframe_json), str(manifest_json)]) == 0
+    assert new_keyframe_image_jobs.main([
+        "new_keyframe_image_jobs.py",
+        str(locked_brief),
+        str(keyframe_json),
+        str(manifest_json),
+        "--allow-beyond-requested-scope",
+    ]) == 0
     data = json.loads(manifest_json.read_text(encoding="utf-8"))
     ok, errors, warnings = validate_keyframe_image_manifest.validate(data, manifest_json, mode="draft")
     assert ok, errors
     assert warnings
+    assert data["reference_image_status"]["all_present"] is False
+    assert data["stage05_execution_readiness"]["safe_to_auto_generate"] is False
+    assert data["reference_guidance_requested"] is True
+    assert data["reference_guidance_ready"] is False
+    assert data["reference_guidance_active"] is False
+    assert "selected_workflow_does_not_accept_reference_images" in data["workflow_capability_gaps"]
+    assert data["comfyui_workflow_capabilities"]["supports_reference_images"] is False
     assert len(data["jobs"]) == 2 * len(keyframe["shot_prompts"])
     assert data["style_family"] == "realistic"
+    assert data["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic"
+    assert data["comfyui_model_id"] == "Tongyi-MAI/Z-Image"
+    assert data["preferred_comfyui_workflow_candidate"] == "txt2img_keyframe_realistic_zimage_photo_bridge"
+    assert data["preferred_comfyui_model_candidate"] == "Tongyi-MAI/Z-Image"
+    assert data["route_migration_state"] == "repo_transitional"
+    assert data["preferred_comfyui_workflow_source_ref"] == "workflows/comfyui/txt2img_keyframe_realistic_zimage_photo_bridge.workflow_api.json"
+    assert data["preferred_comfyui_workflow_format"] == "api_workflow"
     assert data["comfyui_workflow_router"]["realistic"] == "txt2img_keyframe_realistic"
     assert all(job["style_family"] == "realistic" for job in data["jobs"])
-    assert all(job["comfyui_workflow_name"] == "txt2img_keyframe_realistic" for job in data["jobs"])
+    assert all(job["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic" for job in data["jobs"])
+    assert all(job["comfyui_workflow_name"] == "txt2img_keyframe_realistic_zimage_photo_bridge" for job in data["jobs"])
+    assert all(job["preferred_comfyui_workflow_candidate"] == "txt2img_keyframe_realistic_zimage_photo_bridge" for job in data["jobs"])
+    assert all(job["preferred_comfyui_model_candidate"] == "Tongyi-MAI/Z-Image" for job in data["jobs"])
+    assert all(job["route_migration_state"] == "repo_transitional" for job in data["jobs"])
+    assert all(job["preferred_comfyui_workflow_format"] == "api_workflow" for job in data["jobs"])
+    assert all(job["reference_guidance_requested"] is True for job in data["jobs"])
+    assert all(job["reference_guidance_active"] is False for job in data["jobs"])
 
     ok, errors, warnings = validate_keyframe_image_manifest.validate(data, manifest_json, mode="final")
     assert not ok
@@ -553,6 +981,744 @@ def test_new_keyframe_image_jobs_passes_draft_then_placeholder_passes_final(tmp_
     ok, errors, warnings = validate_keyframe_image_manifest.validate(data, manifest_json, mode="final")
     assert ok, errors
 
+
+def test_sync_keyframe_image_manifest_backfills_route_key_from_top_level(tmp_path: Path) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260529_210000_route_sync_demo"
+    intake_dir = project_dir / "00_intake"
+    keyframe_dir = project_dir / "04_keyframes"
+    images_dir = project_dir / "05_images"
+    intake_dir.mkdir(parents=True, exist_ok=True)
+    keyframe_dir.mkdir(parents=True, exist_ok=True)
+    images_dir.mkdir(parents=True, exist_ok=True)
+
+    brief = load_example_brief()
+    brief.update({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "status": "locked",
+        "confirmed_by_user": True,
+        "allowed_next_stage": "STAGE_01_SCRIPT_GENERATION",
+        "locked_at": "2026-05-29T21:00:00+08:00",
+    })
+    brief["normalized"]["style"] = "日系动画风（日本动漫感）"
+    brief["normalized"]["final_output"] = "生成关键帧图片素材包"
+    locked_brief = intake_dir / "project_brief.locked.json"
+    locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    keyframe = json.loads((TEMPLATES / "keyframe_prompts.example.json").read_text(encoding="utf-8"))
+    keyframe["project_id"] = project_dir.name
+    keyframe["source_brief"] = str(locked_brief).replace("\\", "/")
+    keyframe_json = keyframe_dir / "keyframe_prompts.json"
+    keyframe_json.write_text(json.dumps(keyframe, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    manifest_json = images_dir / "keyframe_image_manifest.json"
+    assert new_keyframe_image_jobs.main([
+        "new_keyframe_image_jobs.py",
+        str(locked_brief),
+        str(keyframe_json),
+        str(manifest_json),
+        "--allow-beyond-requested-scope",
+    ]) == 0
+
+    data = json.loads(manifest_json.read_text(encoding="utf-8"))
+    assert data["stage05_route_key"] == "anime_jp"
+    data.pop("stage05_route_key", None)
+    data.pop("comfyui_workflow_mapping_key", None)
+    data.pop("comfyui_model_id", None)
+    data.pop("preferred_comfyui_workflow_candidate", None)
+    data.pop("preferred_comfyui_model_candidate", None)
+    data.pop("route_migration_state", None)
+    for job in data["jobs"]:
+        job.pop("stage05_route_key", None)
+        job.pop("comfyui_workflow_mapping_key", None)
+        job.pop("comfyui_model_id", None)
+        job.pop("preferred_comfyui_workflow_candidate", None)
+        job.pop("preferred_comfyui_model_candidate", None)
+        job.pop("route_migration_state", None)
+    manifest_json.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    old_argv = sys.argv[:]
+    try:
+        sys.argv = ["sync_keyframe_image_manifest.py", str(manifest_json)]
+        assert sync_keyframe_image_manifest.main() == 0
+    finally:
+        sys.argv = old_argv
+
+    synced = json.loads(manifest_json.read_text(encoding="utf-8"))
+    assert synced["stage05_route_key"] == "anime_jp"
+    assert synced["comfyui_workflow_mapping_key"] == "stage05_anime_jp"
+    assert synced["comfyui_model_id"] == "circlestone-labs/Anima"
+    assert synced["preferred_comfyui_workflow_candidate"] == "anima_comparison_workflow"
+    assert synced["preferred_comfyui_model_candidate"] == "circlestone-labs/Anima"
+    assert synced["route_migration_state"] == "needs_api_conversion"
+    assert synced["preferred_comfyui_workflow_source_ref"] == "https://huggingface.co/circlestone-labs/Anima/blob/main/anima_comparison.json"
+    assert all(job["stage05_route_key"] == "anime_jp" for job in synced["jobs"])
+    assert all(job["comfyui_workflow_mapping_key"] == "stage05_anime_jp" for job in synced["jobs"])
+    assert all(job["comfyui_model_id"] == "circlestone-labs/Anima" for job in synced["jobs"])
+    assert all(job["preferred_comfyui_workflow_candidate"] == "anima_comparison_workflow" for job in synced["jobs"])
+    assert all(job["preferred_comfyui_model_candidate"] == "circlestone-labs/Anima" for job in synced["jobs"])
+    assert all(job["route_migration_state"] == "needs_api_conversion" for job in synced["jobs"])
+    assert synced["status"] == "draft"
+    assert synced["summary"]["generated_image_count"] == 0
+
+
+def test_new_keyframe_image_jobs_activates_reference_guided_mode_when_mapping_supports_it(tmp_path: Path, monkeypatch) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260528_103000_reference_ready"
+    intake_dir = project_dir / "00_intake"
+    keyframe_dir = project_dir / "04_keyframes"
+    images_dir = project_dir / "05_images"
+    reference_dir = project_dir / "03_characters" / "reference_images"
+    intake_dir.mkdir(parents=True, exist_ok=True)
+    keyframe_dir.mkdir(parents=True, exist_ok=True)
+    images_dir.mkdir(parents=True, exist_ok=True)
+    reference_dir.mkdir(parents=True, exist_ok=True)
+
+    brief = load_example_brief()
+    brief.update({
+        "schema_version": "0.5.0",
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "status": "locked",
+        "confirmed_by_user": True,
+        "allowed_next_stage": "STAGE_01_SCRIPT_GENERATION",
+        "locked_at": "2026-05-28T10:35:00+08:00",
+    })
+    locked_brief = intake_dir / "project_brief.locked.json"
+    locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    keyframe = json.loads((TEMPLATES / "keyframe_prompts.example.json").read_text(encoding="utf-8"))
+    keyframe["project_id"] = project_dir.name
+    keyframe["source_brief"] = str(locked_brief).replace("\\", "/")
+    keyframe["reference_image_status"] = {
+        "required": True,
+        "target_paths": ["03_characters/reference_images/CHAR_001_primary.png"],
+        "existing_paths": ["03_characters/reference_images/CHAR_001_primary.png"],
+        "missing_paths": [],
+        "all_present": True,
+        "item_count": 1,
+        "missing_count": 0,
+        "items": [{"character_id": "CHAR_001", "target_path": "03_characters/reference_images/CHAR_001_primary.png", "file_exists": True}],
+    }
+    keyframe["stage05_execution_readiness"] = {
+        "continuity_mode": "character_locked",
+        "reference_image_required": True,
+        "safe_to_auto_generate": True,
+        "blocker_reasons": [],
+        "missing_reference_images": [],
+    }
+    keyframe["self_check"]["character_reference_images_ready"] = True
+    keyframe["self_check"]["safe_for_auto_image_generation"] = True
+    keyframe_json = keyframe_dir / "keyframe_prompts.json"
+    keyframe_json.write_text(json.dumps(keyframe, ensure_ascii=False, indent=2), encoding="utf-8")
+    (reference_dir / "CHAR_001_primary.png").write_bytes(b"PNGDATA")
+
+    fake_mapping_path = tmp_path / "workflow_node_mapping.yaml"
+    fake_mapping = {
+        "workflows": {
+            "stage05_realistic_cinematic_qwen_edit_reference": {
+                "file": "workflows/comfyui/fake_reference.workflow_api.json",
+                "nodes": {
+                    "positive_prompt": {"node_id": "1", "input_name": "text"},
+                    "reference_image_path": {"node_id": "2", "input_name": "image"},
+                },
+                "capabilities": {
+                    "supports_reference_images": True,
+                    "supported_control_modes": ["prompt_only", "reference_guided"],
+                },
+            }
+        }
+    }
+    monkeypatch.setattr(new_keyframe_image_jobs, "load_workflow_mapping", lambda root=None: (fake_mapping, fake_mapping_path))
+    monkeypatch.setattr(new_keyframe_image_jobs, "get_workflow_mapping", lambda data, workflow_name: data["workflows"][workflow_name])
+
+    manifest_json = images_dir / "keyframe_image_manifest.json"
+    assert new_keyframe_image_jobs.main([
+        "new_keyframe_image_jobs.py",
+        str(locked_brief),
+        str(keyframe_json),
+        str(manifest_json),
+        "--allow-beyond-requested-scope",
+    ]) == 0
+    data = json.loads(manifest_json.read_text(encoding="utf-8"))
+    assert data["comfyui_control_mode"] == "reference_guided"
+    assert data["reference_guidance_requested"] is True
+    assert data["reference_guidance_ready"] is True
+    assert data["reference_guidance_active"] is True
+    assert data["workflow_capability_gaps"] == []
+    assert data["comfyui_workflow_capabilities"]["supports_reference_images"] is True
+    assert all(job["comfyui_control_mode"] == "reference_guided" for job in data["jobs"])
+    assert all(job["reference_guidance_active"] is True for job in data["jobs"])
+
+
+def test_new_keyframe_image_jobs_promotes_interaction_handoff_to_dual_reference_when_context_frame_exists(tmp_path: Path, monkeypatch) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260531_120000_handoff_dual_ref"
+    intake_dir = project_dir / "00_intake"
+    keyframe_dir = project_dir / "04_keyframes"
+    images_dir = project_dir / "05_images"
+    keyframes_output_dir = images_dir / "keyframes"
+    reference_dir = project_dir / "03_characters" / "reference_images"
+    intake_dir.mkdir(parents=True, exist_ok=True)
+    keyframe_dir.mkdir(parents=True, exist_ok=True)
+    keyframes_output_dir.mkdir(parents=True, exist_ok=True)
+    reference_dir.mkdir(parents=True, exist_ok=True)
+
+    brief = load_example_brief()
+    brief.update({
+        "schema_version": "0.5.0",
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "status": "locked",
+        "confirmed_by_user": True,
+        "allowed_next_stage": "STAGE_01_SCRIPT_GENERATION",
+        "locked_at": "2026-05-31T12:00:00+08:00",
+    })
+    locked_brief = intake_dir / "project_brief.locked.json"
+    locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    keyframe = json.loads((TEMPLATES / "keyframe_prompts.example.json").read_text(encoding="utf-8"))
+    keyframe["project_id"] = project_dir.name
+    keyframe["source_brief"] = str(locked_brief).replace("\\", "/")
+    keyframe["shot_prompts"] = keyframe["shot_prompts"][:1]
+    keyframe_json = keyframe_dir / "keyframe_prompts.json"
+    keyframe_json.write_text(json.dumps(keyframe, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    (reference_dir / "CHAR_001_primary.png").write_bytes(b"PNGDATA")
+    (keyframes_output_dir / "S001_end.png").write_bytes(b"PNGDATA")
+
+    fake_mapping_path = tmp_path / "workflow_node_mapping.yaml"
+    fake_mapping = {
+        "workflows": {
+            "stage05_realistic_cinematic_qwen_edit_reference": {
+                "file": "workflows/comfyui/fake_reference.workflow_api.json",
+                "nodes": {
+                    "positive_prompt": {"node_id": "1", "input_name": "text"},
+                    "reference_image_path": {"node_id": "2", "input_name": "image"},
+                },
+                "capabilities": {
+                    "supports_reference_images": True,
+                    "supported_control_modes": ["prompt_only", "reference_guided"],
+                },
+            },
+            "stage05_realistic_cinematic_qwen_edit_dual_reference": {
+                "file": "workflows/comfyui/fake_dual_reference.workflow_api.json",
+                "nodes": {
+                    "positive_prompt": {"node_id": "1", "input_name": "text"},
+                    "reference_image_path": {"node_id": "2", "input_name": "image"},
+                    "reference_image_path_2": {"node_id": "3", "input_name": "image"},
+                },
+                "capabilities": {
+                    "supports_reference_images": True,
+                    "supported_control_modes": ["prompt_only", "reference_guided"],
+                },
+            },
+        }
+    }
+    monkeypatch.setattr(new_keyframe_image_jobs, "load_workflow_mapping", lambda root=None: (fake_mapping, fake_mapping_path))
+    monkeypatch.setattr(new_keyframe_image_jobs, "get_workflow_mapping", lambda data, workflow_name: data["workflows"][workflow_name])
+    monkeypatch.setattr(
+        new_keyframe_image_jobs,
+        "classify_stage06_generation",
+        lambda shot_prompt, storyboard_shot, bundle: {"route_hint": "interaction_handoff"},
+    )
+
+    manifest_json = images_dir / "keyframe_image_manifest.json"
+    assert new_keyframe_image_jobs.main([
+        "new_keyframe_image_jobs.py",
+        str(locked_brief),
+        str(keyframe_json),
+        str(manifest_json),
+        "--allow-beyond-requested-scope",
+    ]) == 0
+    data = json.loads(manifest_json.read_text(encoding="utf-8"))
+    mid_job = next(job for job in data["jobs"] if job["image_id"] == "IMG_S001_MID")
+    assert mid_job["stage06_route_hint"] == "interaction_handoff"
+    assert mid_job["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_qwen_edit_dual_reference"
+    assert mid_job["comfyui_workflow_name"] == "fake_dual_reference"
+    assert mid_job["reference_bundle_mode"] == "primary_plus_context_frame"
+    assert mid_job["reference_images"] == [
+        "03_characters/reference_images/CHAR_001_primary.png",
+        "05_images/keyframes/S001_end.png",
+    ]
+    assert mid_job["secondary_reference_images"] == ["05_images/keyframes/S001_end.png"]
+    assert "avoid symmetrical posing" in mid_job["prompt"]
+    assert "floating handle" in mid_job["negative_prompt"]
+
+
+def test_resolve_stage05_route_switches_shortdrama_realistic_to_reference_guided_target_when_refs_ready() -> None:
+    brief = {
+        "normalized": {
+            "style": "短剧爽感",
+            "genre": "治愈",
+        }
+    }
+    prompts = {
+        "reference_image_status": {
+            "all_present": True,
+        },
+        "stage05_execution_readiness": {
+            "reference_image_required": True,
+        },
+        "shot_prompts": [
+            {
+                "style_prompt": "realistic dramatic short drama still",
+            }
+        ],
+    }
+    resolved = new_keyframe_image_jobs.resolve_stage05_route(brief, prompts)
+    assert resolved["used_registry"] is True
+    assert resolved["route_key"] == "shortdrama_realistic"
+    assert resolved["reference_guided_route_selected"] is True
+    assert resolved["comfyui_workflow_mapping_key"] == "stage05_shortdrama_realistic_qwen_edit_reference"
+    assert resolved["comfyui_workflow_name"] == "txt2img_keyframe_shortdrama_qwen_edit_reference"
+    assert resolved["comfyui_model_id"] == "Qwen/Qwen-Image-Edit-2511"
+    assert resolved["preferred_comfyui_workflow_candidate"] == "txt2img_keyframe_shortdrama_qwen_edit_reference"
+    assert resolved["preferred_comfyui_model_candidate"] == "Qwen/Qwen-Image-Edit-2511"
+    assert resolved["comfyui_control_mode"] == "reference_guided"
+
+
+def test_resolve_stage05_route_switches_realistic_cinematic_to_reference_guided_target_when_refs_ready() -> None:
+    brief = {
+        "normalized": {
+            "style": "写实电影感",
+            "genre": "治愈",
+        }
+    }
+    prompts = {
+        "reference_image_status": {
+            "all_present": True,
+        },
+        "stage05_execution_readiness": {
+            "reference_image_required": True,
+        },
+        "shot_prompts": [
+            {
+                "style_prompt": "realistic cinematic still",
+            }
+        ],
+    }
+    resolved = new_keyframe_image_jobs.resolve_stage05_route(brief, prompts)
+    assert resolved["used_registry"] is True
+    assert resolved["route_key"] == "realistic_cinematic"
+    assert resolved["reference_guided_route_selected"] is True
+    assert resolved["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_qwen_edit_reference"
+    assert resolved["comfyui_workflow_name"] == "txt2img_keyframe_shortdrama_qwen_edit_reference"
+    assert resolved["comfyui_model_id"] == "Qwen/Qwen-Image-Edit-2511"
+    assert resolved["preferred_comfyui_workflow_candidate"] == "txt2img_keyframe_shortdrama_qwen_edit_reference"
+    assert resolved["preferred_comfyui_model_candidate"] == "Qwen/Qwen-Image-Edit-2511"
+    assert resolved["comfyui_control_mode"] == "reference_guided"
+
+
+def test_sync_keyframe_image_manifest_blocks_risky_umbrella_scene_until_approved(tmp_path: Path) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260530_umbrella_review_demo"
+    intake_dir = project_dir / "00_intake"
+    keyframe_dir = project_dir / "04_keyframes"
+    images_dir = project_dir / "05_images"
+    intake_dir.mkdir(parents=True, exist_ok=True)
+    keyframe_dir.mkdir(parents=True, exist_ok=True)
+    images_dir.mkdir(parents=True, exist_ok=True)
+
+    brief = load_example_brief()
+    brief.update({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "status": "locked",
+        "confirmed_by_user": True,
+        "allowed_next_stage": "STAGE_01_SCRIPT_GENERATION",
+        "locked_at": "2026-05-30T20:00:00+08:00",
+    })
+    brief["normalized"]["style"] = "国风水墨/古风"
+    brief["normalized"]["final_output"] = "生成关键帧图片素材包"
+    locked_brief = intake_dir / "project_brief.locked.json"
+    locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    keyframe = json.loads((TEMPLATES / "keyframe_prompts.example.json").read_text(encoding="utf-8"))
+    keyframe["project_id"] = project_dir.name
+    keyframe["source_brief"] = str(locked_brief).replace("\\", "/")
+    keyframe["shot_prompts"] = keyframe["shot_prompts"][:1]
+    keyframe["shot_prompts"][0]["start_keyframe_prompt"] = "ancient Chinese woman holding one oil-paper umbrella in misty rain"
+    keyframe["shot_prompts"][0]["end_keyframe_prompt"] = "the same woman turns slightly while holding the same oil-paper umbrella"
+    keyframe_json = keyframe_dir / "keyframe_prompts.json"
+    keyframe_json.write_text(json.dumps(keyframe, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    manifest_json = images_dir / "keyframe_image_manifest.json"
+    assert new_keyframe_image_jobs.main(["new_keyframe_image_jobs.py", str(locked_brief), str(keyframe_json), str(manifest_json)]) == 0
+
+    manifest = json.loads(manifest_json.read_text(encoding="utf-8"))
+    assert manifest["comfyui_control_mode"] == "prompt_only"
+    assert manifest["quality_review"]["manual_review_cleared"] is False
+    assert all(job["quality_gate"]["requires_manual_review"] is True for job in manifest["jobs"])
+    assert all(job["quality_gate"]["manual_review_status"] == "pending" for job in manifest["jobs"])
+
+    for job in manifest["jobs"]:
+        output_path = Path(job["output_path"])
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"png")
+    manifest_json.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    old_argv = sys.argv[:]
+    try:
+        sys.argv = ["sync_keyframe_image_manifest.py", str(manifest_json)]
+        assert sync_keyframe_image_manifest.main() == 0
+    finally:
+        sys.argv = old_argv
+
+    blocked = json.loads(manifest_json.read_text(encoding="utf-8"))
+    assert blocked["self_check"]["all_required_images_exist"] is True
+    assert blocked["self_check"]["manual_review_cleared"] is False
+    assert blocked["self_check"]["ready_for_video_clip_generation"] is False
+    assert blocked["allowed_next_stage"] is None
+    assert blocked["quality_review"]["next_review_image_ids"] == ["IMG_S001_START", "IMG_S001_END"]
+    assert blocked["quality_review"]["review_queue"][0]["priority_label"] == "高优先级复核"
+    assert blocked["jobs"][0]["creator_review_card"]["checklist"]
+    manual_review_text = (images_dir / "manual_review.md").read_text(encoding="utf-8")
+    assert "# Stage 05 Manual Review" in manual_review_text
+    assert "建议先看" in manual_review_text
+    assert "Top 3 快速问题卡" in manual_review_text
+    assert "IMG_S001_START" in manual_review_text
+    assert "复核清单" in manual_review_text
+    review_workbench_html = (images_dir / "stage05_review_workbench.html").read_text(encoding="utf-8")
+    review_workbench_json = json.loads((images_dir / "stage05_review_workbench.json").read_text(encoding="utf-8"))
+    assert "Stage 05 审图工作台" in review_workbench_html
+    assert review_workbench_json["cards"][0]["image_id"] == "IMG_S001_START"
+    prompt_patch_plan = json.loads((images_dir / "prompt_patch_plan.json").read_text(encoding="utf-8"))
+    assert prompt_patch_plan["patch_count"] == 2
+    assert prompt_patch_plan["queue_patch_count"] == 2
+    assert prompt_patch_plan["top_prompt_patches"][0]["image_id"] == "IMG_S001_START"
+    assert "auto_repair_stage05_review_queue.py" in prompt_patch_plan["top_prompt_patches"][0]["rerun_command"]
+    prompt_patch_cards = (images_dir / "prompt_patch_cards.md").read_text(encoding="utf-8")
+    assert "最短改法" in prompt_patch_cards
+
+    old_argv = sys.argv[:]
+    try:
+        sys.argv = ["sync_keyframe_image_manifest.py", str(manifest_json), "--approve-risky-jobs"]
+        assert sync_keyframe_image_manifest.main() == 0
+    finally:
+        sys.argv = old_argv
+
+    approved = json.loads(manifest_json.read_text(encoding="utf-8"))
+    assert approved["quality_review"]["manual_review_cleared"] is True
+    assert approved["self_check"]["manual_review_cleared"] is True
+    assert approved["self_check"]["ready_for_video_clip_generation"] is True
+    assert approved["allowed_next_stage"] == "STAGE_06_VIDEO_CLIPS"
+    assert all(job["quality_gate"]["manual_review_status"] == "approved" for job in approved["jobs"])
+
+
+def test_rerun_top_prompt_patches_invokes_stage05_runner_in_priority_order(tmp_path: Path, monkeypatch) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260530_prompt_patch_rerun_demo"
+    intake_dir = project_dir / "00_intake"
+    keyframe_dir = project_dir / "04_keyframes"
+    images_dir = project_dir / "05_images"
+    intake_dir.mkdir(parents=True, exist_ok=True)
+    keyframe_dir.mkdir(parents=True, exist_ok=True)
+    images_dir.mkdir(parents=True, exist_ok=True)
+
+    brief = load_example_brief()
+    brief.update({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "status": "locked",
+        "confirmed_by_user": True,
+        "allowed_next_stage": "STAGE_01_SCRIPT_GENERATION",
+        "locked_at": "2026-05-30T20:00:00+08:00",
+    })
+    brief["normalized"]["style"] = "国风水墨/古风"
+    brief["normalized"]["final_output"] = "生成关键帧图片素材包"
+    locked_brief = intake_dir / "project_brief.locked.json"
+    locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    keyframe = json.loads((TEMPLATES / "keyframe_prompts.example.json").read_text(encoding="utf-8"))
+    keyframe["project_id"] = project_dir.name
+    keyframe["source_brief"] = str(locked_brief).replace("\\", "/")
+    keyframe["shot_prompts"] = keyframe["shot_prompts"][:2]
+    keyframe["shot_prompts"][0]["start_keyframe_prompt"] = "ancient Chinese woman holding one oil-paper umbrella in misty rain"
+    keyframe["shot_prompts"][0]["end_keyframe_prompt"] = "the same woman turns slightly while holding the same oil-paper umbrella"
+    keyframe["shot_prompts"][1]["start_keyframe_prompt"] = "another woman holding one oil-paper umbrella under street rain"
+    keyframe["shot_prompts"][1]["end_keyframe_prompt"] = "the same woman keeps holding the same oil-paper umbrella while stepping forward"
+    keyframe_json = keyframe_dir / "keyframe_prompts.json"
+    keyframe_json.write_text(json.dumps(keyframe, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    manifest_json = images_dir / "keyframe_image_manifest.json"
+    assert new_keyframe_image_jobs.main(["new_keyframe_image_jobs.py", str(locked_brief), str(keyframe_json), str(manifest_json)]) == 0
+
+    invoked: list[list[str]] = []
+
+    def fake_main(argv: list[str] | None = None) -> int:
+        assert argv is not None
+        invoked.append(list(argv))
+        manifest_data = json.loads(manifest_json.read_text(encoding="utf-8"))
+        target_image_id = argv[2]
+        for job in manifest_data["jobs"]:
+            if job["image_id"] != target_image_id:
+                continue
+            output_path = Path(job["output_path"])
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_bytes(b"png")
+            job["status"] = "succeeded"
+            break
+        manifest_json.write_text(json.dumps(manifest_data, ensure_ascii=False, indent=2), encoding="utf-8")
+        return 0
+
+    monkeypatch.setattr(
+        rerun_top_prompt_patches,
+        "select_stage05_runner",
+        lambda data, config_path=None: {
+            "provider": "openai_gpt_image2",
+            "status": "ready",
+            "reason": "test_forced_openai",
+            "priority": ["openai_gpt_image2", "comfyui_txt2img", "manual"],
+            "probe_results": [],
+            "config_path": None,
+        },
+    )
+    monkeypatch.setattr(rerun_top_prompt_patches.run_openai_gpt_image2, "main", fake_main)
+    assert rerun_top_prompt_patches.main([str(manifest_json), "--limit", "3", "--allow-beyond-requested-scope"]) == 0
+
+    assert [args[2] for args in invoked] == ["IMG_S001_START", "IMG_S001_END", "IMG_S002_START"]
+    assert all("--allow-beyond-requested-scope" in args for args in invoked)
+    rerun_report = json.loads((images_dir / "prompt_patch_rerun_report.json").read_text(encoding="utf-8"))
+    assert rerun_report["selected_count"] == 3
+    assert rerun_report["success_count"] == 3
+    assert rerun_report["failure_count"] == 0
+    assert rerun_report["selected_provider"] == "openai_gpt_image2"
+    assert rerun_report["results"][0]["command"].startswith("python ")
+    assert rerun_report["remaining_pending_count"] == 4
+    assert rerun_report["next_pending_image_ids"][:3] == ["IMG_S001_START", "IMG_S001_END", "IMG_S002_START"]
+    rerun_report_md = (images_dir / "prompt_patch_rerun_report.md").read_text(encoding="utf-8")
+    assert "# Stage 05 Prompt Patch Rerun Report" in rerun_report_md
+    assert "IMG_S001_START" in rerun_report_md
+
+    assert approve_stage05_review_queue.main([str(manifest_json), "--top", "3", "--note", "creator approved after visual review"]) == 1
+    assert approve_stage05_review_queue.main([
+        str(manifest_json),
+        "--top",
+        "3",
+        "--note",
+        "creator approved after visual review",
+        "--content-aligned",
+        "--content-alignment-note",
+        "Reviewed against shot intent and image content matches the prompt package.",
+    ]) == 0
+
+    invoked.clear()
+    assert rerun_top_prompt_patches.main([str(manifest_json), "--limit", "3", "--dry-run"]) == 0
+    assert invoked == []
+    rerun_report = json.loads((images_dir / "prompt_patch_rerun_report.json").read_text(encoding="utf-8"))
+    assert rerun_report["selected_count"] == 1
+    assert rerun_report["results"][0]["image_id"] == "IMG_S002_END"
+    assert rerun_report["skipped_manually_cleared_image_ids"] == ["IMG_S001_END", "IMG_S001_START", "IMG_S002_START"]
+    assert rerun_report["previously_succeeded_image_ids"] == ["IMG_S001_END", "IMG_S001_START", "IMG_S002_START"]
+    assert rerun_report["skipped_previously_succeeded_image_ids"] == []
+    assert rerun_report["remaining_pending_count"] == 1
+    assert rerun_report["next_pending_image_ids"] == ["IMG_S002_END"]
+    approved_manifest = json.loads(manifest_json.read_text(encoding="utf-8"))
+    approved_jobs = {
+        job["image_id"]: job
+        for job in approved_manifest["jobs"]
+        if job["image_id"] in {"IMG_S001_START", "IMG_S001_END", "IMG_S002_START"}
+    }
+    assert all(job["quality_gate"]["manual_review_status"] == "approved" for job in approved_jobs.values())
+    assert all(job["quality_gate"]["review_note"] == "creator approved after visual review" for job in approved_jobs.values())
+    assert all(job["quality_gate"]["content_text_alignment_confirmed"] is True for job in approved_jobs.values())
+    assert all(job["quality_gate"]["content_text_alignment_note"] for job in approved_jobs.values())
+    manual_review_text = (images_dir / "manual_review.md").read_text(encoding="utf-8")
+    assert "## 看完后的推进" in manual_review_text
+    assert "approve_stage05_review_queue.py" in manual_review_text
+
+    final_pending_manifest = json.loads(manifest_json.read_text(encoding="utf-8"))
+    for job in final_pending_manifest["jobs"]:
+        if job["image_id"] != "IMG_S002_END":
+            continue
+        output_path = Path(job["output_path"])
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"png")
+        job["status"] = "succeeded"
+        break
+    manifest_json.write_text(json.dumps(final_pending_manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    assert approve_stage05_review_queue.main([
+        str(manifest_json),
+        "--all-pending",
+        "--content-aligned",
+        "--content-alignment-note",
+        "Remaining approved images were checked against the prompt description and continuity notes.",
+    ]) == 0
+    fully_approved_manifest = json.loads(manifest_json.read_text(encoding="utf-8"))
+    assert fully_approved_manifest["quality_review"]["manual_review_cleared"] is True
+    assert fully_approved_manifest["self_check"]["ready_for_video_clip_generation"] is True
+    assert fully_approved_manifest["allowed_next_stage"] == "STAGE_06_VIDEO_CLIPS"
+
+
+def test_rerun_top_prompt_patches_switches_to_comfyui_when_openai_unavailable(tmp_path: Path, monkeypatch) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260531_stage05_auto_repair_comfy"
+    intake_dir = project_dir / "00_intake"
+    keyframe_dir = project_dir / "04_keyframes"
+    images_dir = project_dir / "05_images"
+    intake_dir.mkdir(parents=True, exist_ok=True)
+    keyframe_dir.mkdir(parents=True, exist_ok=True)
+    images_dir.mkdir(parents=True, exist_ok=True)
+
+    brief = load_example_brief()
+    brief.update({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "status": "locked",
+        "confirmed_by_user": True,
+        "allowed_next_stage": "STAGE_01_SCRIPT_GENERATION",
+        "locked_at": "2026-05-31T11:00:00+08:00",
+    })
+    brief["normalized"]["final_output"] = "生成关键帧图片素材包"
+    locked_brief = intake_dir / "project_brief.locked.json"
+    locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    keyframe = json.loads((TEMPLATES / "keyframe_prompts.example.json").read_text(encoding="utf-8"))
+    keyframe["project_id"] = project_dir.name
+    keyframe["source_brief"] = str(locked_brief).replace("\\", "/")
+    keyframe["shot_prompts"] = keyframe["shot_prompts"][:1]
+    keyframe["shot_prompts"][0]["start_keyframe_prompt"] = "young woman with one umbrella in rainy storefront"
+    keyframe["shot_prompts"][0]["end_keyframe_prompt"] = "same woman keeps one umbrella while leaving storefront"
+    keyframe_json = keyframe_dir / "keyframe_prompts.json"
+    keyframe_json.write_text(json.dumps(keyframe, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    manifest_json = images_dir / "keyframe_image_manifest.json"
+    assert new_keyframe_image_jobs.main(["new_keyframe_image_jobs.py", str(locked_brief), str(keyframe_json), str(manifest_json)]) == 0
+
+    invoked: list[list[str]] = []
+
+    def fake_comfy_main(argv: list[str] | None = None) -> int:
+        assert argv is not None
+        invoked.append(list(argv))
+        manifest_data = json.loads(manifest_json.read_text(encoding="utf-8"))
+        image_id = argv[2]
+        for job in manifest_data["jobs"]:
+            if job["image_id"] != image_id:
+                continue
+            output_path = Path(job["output_path"])
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_bytes(b"png")
+            job["status"] = "succeeded"
+            job["provider"] = "comfyui_txt2img"
+            break
+        manifest_json.write_text(json.dumps(manifest_data, ensure_ascii=False, indent=2), encoding="utf-8")
+        return 0
+
+    monkeypatch.setattr(
+        rerun_top_prompt_patches,
+        "select_stage05_runner",
+        lambda data, config_path=None: {
+            "provider": "comfyui_txt2img",
+            "status": "ready",
+            "reason": "openai_invalid_api_key",
+            "priority": ["openai_gpt_image2", "comfyui_txt2img", "manual"],
+            "probe_results": [
+                {"provider": "openai_gpt_image2", "status": "invalid_api_key"},
+                {"provider": "comfyui_txt2img", "status": "ready"},
+            ],
+            "config_path": None,
+        },
+    )
+    monkeypatch.setattr(rerun_top_prompt_patches.run_comfyui_txt2img, "main", fake_comfy_main)
+    assert rerun_top_prompt_patches.main([str(manifest_json), "--image-id", "IMG_S001_START"]) == 0
+
+    assert invoked and invoked[0][2] == "IMG_S001_START"
+    rerun_report = json.loads((images_dir / "prompt_patch_rerun_report.json").read_text(encoding="utf-8"))
+    assert rerun_report["selected_provider"] == "comfyui_txt2img"
+    assert rerun_report["provider_probe"]["reason"] == "openai_invalid_api_key"
+    assert rerun_report["results"][0]["provider"] == "comfyui_txt2img"
+
+
+def test_stage05_review_workbench_server_serves_state_and_actions(tmp_path: Path, monkeypatch) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260531_stage05_workbench_server"
+    intake_dir = project_dir / "00_intake"
+    keyframe_dir = project_dir / "04_keyframes"
+    images_dir = project_dir / "05_images"
+    intake_dir.mkdir(parents=True, exist_ok=True)
+    keyframe_dir.mkdir(parents=True, exist_ok=True)
+    images_dir.mkdir(parents=True, exist_ok=True)
+
+    brief = load_example_brief()
+    brief.update({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "status": "locked",
+        "confirmed_by_user": True,
+        "allowed_next_stage": "STAGE_01_SCRIPT_GENERATION",
+        "locked_at": "2026-05-31T12:00:00+08:00",
+    })
+    brief["normalized"]["style"] = "国风水墨/古风"
+    brief["normalized"]["final_output"] = "生成关键帧图片素材包"
+    locked_brief = intake_dir / "project_brief.locked.json"
+    locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    keyframe = json.loads((TEMPLATES / "keyframe_prompts.example.json").read_text(encoding="utf-8"))
+    keyframe["project_id"] = project_dir.name
+    keyframe["source_brief"] = str(locked_brief).replace("\\", "/")
+    keyframe["shot_prompts"] = keyframe["shot_prompts"][:1]
+    keyframe["shot_prompts"][0]["start_keyframe_prompt"] = "ancient Chinese woman holding one oil-paper umbrella in misty rain"
+    keyframe["shot_prompts"][0]["end_keyframe_prompt"] = "the same woman turns slightly while holding the same oil-paper umbrella"
+    keyframe_json = keyframe_dir / "keyframe_prompts.json"
+    keyframe_json.write_text(json.dumps(keyframe, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    manifest_json = images_dir / "keyframe_image_manifest.json"
+    assert new_keyframe_image_jobs.main(["new_keyframe_image_jobs.py", str(locked_brief), str(keyframe_json), str(manifest_json)]) == 0
+
+    manifest = json.loads(manifest_json.read_text(encoding="utf-8"))
+    for job in manifest["jobs"]:
+        output_path = Path(job["output_path"])
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"png")
+    manifest_json.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    assert sync_keyframe_image_manifest.main([str(manifest_json)]) == 0
+
+    invoked: list[list[str]] = []
+
+    def fake_rerun(argv: list[str] | None = None) -> int:
+        assert argv is not None
+        invoked.append(list(argv))
+        return 0
+
+    monkeypatch.setattr(serve_stage05_review_workbench.rerun_top_prompt_patches, "main", fake_rerun)
+
+    server = serve_stage05_review_workbench.build_server(manifest_json.resolve(), host="127.0.0.1", port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        host, port = server.server_address[:2]
+        base_url = f"http://{host}:{port}"
+        state = json.loads(request.urlopen(f"{base_url}/api/state").read().decode("utf-8"))
+        assert state["cards"][0]["image_id"] == "IMG_S001_START"
+
+        html_text = request.urlopen(f"{base_url}/").read().decode("utf-8")
+        assert "Stage 05 审图工作台" in html_text
+        assert "runWorkbenchAction" in html_text
+
+        image_path = Path(manifest["jobs"][0]["output_path"]).resolve()
+        image_bytes = request.urlopen(f"{base_url}/api/file?path={quote(str(image_path))}").read()
+        assert image_bytes == b"png"
+
+        approve_request = request.Request(
+            f"{base_url}/api/action",
+            data=json.dumps({"action": "approve_image", "image_id": "IMG_S001_START"}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        approve_payload = json.loads(request.urlopen(approve_request).read().decode("utf-8"))
+        assert approve_payload["ok"] is True
+        assert approve_payload["state"]["quality_review"]["pending_count"] == 1
+
+        rerun_request = request.Request(
+            f"{base_url}/api/action",
+            data=json.dumps({"action": "auto_repair_image", "image_id": "IMG_S001_END"}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        rerun_payload = json.loads(request.urlopen(rerun_request).read().decode("utf-8"))
+        assert rerun_payload["ok"] is True
+        assert invoked and "--allow-beyond-requested-scope" in invoked[0]
+        assert invoked[0][2] == "IMG_S001_END"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
 
 
 def test_validate_video_clip_manifest_example_final() -> None:
@@ -636,6 +1802,79 @@ def test_new_video_clip_jobs_passes_draft_then_placeholder_passes_final(tmp_path
     data = json.loads(clip_manifest_json.read_text(encoding="utf-8"))
     ok, errors, warnings = validate_video_clip_manifest.validate(data, clip_manifest_json, mode="final")
     assert ok, errors
+
+
+def test_sync_video_clip_manifest_demotes_placeholder_clips_from_ready_state(tmp_path: Path) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260530_placeholder_demote"
+    intake_dir = project_dir / "00_intake"
+    storyboard_dir = project_dir / "02_storyboard"
+    keyframe_dir = project_dir / "04_keyframes"
+    images_dir = project_dir / "05_images"
+    video_dir = project_dir / "06_video_clips"
+    for folder in [intake_dir, storyboard_dir, keyframe_dir, images_dir, video_dir]:
+        folder.mkdir(parents=True, exist_ok=True)
+
+    brief = load_example_brief()
+    brief.update({
+        "schema_version": "0.7.0",
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "status": "locked",
+        "confirmed_by_user": True,
+        "allowed_next_stage": "STAGE_01_SCRIPT_GENERATION",
+        "locked_at": "2026-05-30T10:35:00+08:00",
+    })
+    brief["normalized"]["final_output"] = "生成视频片段素材包"
+    locked_brief = intake_dir / "project_brief.locked.json"
+    locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    storyboard = json.loads((TEMPLATES / "storyboard.example.json").read_text(encoding="utf-8"))
+    storyboard["project_id"] = project_dir.name
+    storyboard_json = storyboard_dir / "storyboard.json"
+    storyboard_json.write_text(json.dumps(storyboard, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    keyframe = json.loads((TEMPLATES / "keyframe_prompts.example.json").read_text(encoding="utf-8"))
+    keyframe["project_id"] = project_dir.name
+    keyframe["source_brief"] = str(locked_brief).replace("\\", "/")
+    keyframe_json = keyframe_dir / "keyframe_prompts.json"
+    keyframe_json.write_text(json.dumps(keyframe, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    image_manifest_json = images_dir / "keyframe_image_manifest.json"
+    assert new_keyframe_image_jobs.main(["new_keyframe_image_jobs.py", str(locked_brief), str(keyframe_json), str(image_manifest_json)]) == 0
+    old_argv = sys.argv[:]
+    try:
+        sys.argv = ["generate_placeholder_keyframe_images.py", str(image_manifest_json), "--width", "64", "--height", "96"]
+        assert generate_placeholder_keyframe_images.main() == 0
+    finally:
+        sys.argv = old_argv
+    image_manifest = json.loads(image_manifest_json.read_text(encoding="utf-8"))
+    image_manifest["status"] = "confirmed"
+    image_manifest_json.write_text(json.dumps(image_manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    clip_manifest_json = video_dir / "video_clip_manifest.json"
+    assert new_video_clip_jobs.main([
+        "new_video_clip_jobs.py", str(locked_brief), str(storyboard_json), str(keyframe_json), str(image_manifest_json), str(clip_manifest_json)
+    ]) == 0
+    old_argv = sys.argv[:]
+    try:
+        sys.argv = ["generate_placeholder_video_clips.py", str(clip_manifest_json)]
+        assert generate_placeholder_video_clips.main() == 0
+    finally:
+        sys.argv = old_argv
+    old_argv = sys.argv[:]
+    try:
+        sys.argv = ["sync_video_clip_manifest.py", str(clip_manifest_json)]
+        assert sync_video_clip_manifest.main() == 0
+    finally:
+        sys.argv = old_argv
+
+    data = json.loads(clip_manifest_json.read_text(encoding="utf-8"))
+    assert data["status"] == "draft"
+    assert data["summary"]["generated_clip_count"] == 0
+    assert data["self_check"]["all_required_clips_exist"] is False
+    assert data["self_check"]["ready_for_audio_stage"] is False
+    assert all(job["status"] == "failed" for job in data["jobs"])
+    assert any("non-production clip evidence" in (job.get("notes") or "") for job in data["jobs"])
 
 
 def test_stage05_placeholder_generation_auto_advances_project_manifest_and_unblocks_stage06(tmp_path: Path) -> None:
@@ -884,7 +2123,7 @@ def test_validate_assembly_manifest_example_final() -> None:
     assert ok, errors
 
 
-def test_new_assembly_manifest_passes_draft_then_placeholder_passes_final(tmp_path: Path) -> None:
+def test_new_assembly_manifest_passes_draft_then_placeholder_is_blocked_from_final(tmp_path: Path) -> None:
     project_dir = tmp_path / "video_projects" / "video_20260528_103000_sunset_beach_girl"
     intake_dir = project_dir / "00_intake"
     storyboard_dir = project_dir / "02_storyboard"
@@ -989,7 +2228,8 @@ def test_new_assembly_manifest_passes_draft_then_placeholder_passes_final(tmp_pa
         sys.argv = old_argv
     data = json.loads(assembly_manifest_json.read_text(encoding="utf-8"))
     ok, errors, warnings = validate_assembly_manifest.validate(data, assembly_manifest_json, mode="final")
-    assert ok, errors
+    assert not ok
+    assert any("placeholder" in e or "too small" in e for e in errors)
 
 
 
@@ -1033,7 +2273,7 @@ def test_new_qa_manifest_passes_draft_then_package_delivery_passes_final(tmp_pat
     # Create a minimal Stage 08 assembly manifest with real rough_cut evidence.
     rough_cut = assembly_dir / "rough_cut" / "rough_cut.mp4"
     rough_cut.parent.mkdir(parents=True, exist_ok=True)
-    rough_cut.write_bytes(b"PLACEHOLDER ROUGH CUT FOR QA TEST")
+    rough_cut.write_bytes(b"\x00\x00\x00\x18ftypmp42QA" + (b"1" * 140))
     assembly_manifest = {
         "schema_version": "0.9.0",
         "stage": "STAGE_08_ASSEMBLY",
@@ -1055,7 +2295,16 @@ def test_new_qa_manifest_passes_draft_then_package_delivery_passes_final(tmp_pat
         "timeline": [{"shot_id": "S001", "clip_path": str(rough_cut).replace("\\", "/"), "start_sec": 0, "duration_sec": 5, "source_clip_id": "CLIP_S001"}],
         "audio_tracks": [],
         "subtitle_tracks": [],
-        "ffmpeg_commands": [],
+        "ffmpeg_commands": [{
+            "command": ["ffmpeg"],
+            "provider": "ffmpeg",
+            "strategy": "reencode_mix",
+            "return_code": 0,
+            "stdout_excerpt": "",
+            "stderr_excerpt": "",
+            "ran_at": "2026-05-28T10:40:00+08:00",
+        }],
+        "assembly_provider": "ffmpeg",
         "evidence": {"file_path": str(rough_cut).replace("\\", "/"), "file_exists": True, "file_size_bytes": rough_cut.stat().st_size, "created_at": "2026-05-28T10:40:00+08:00"},
         "summary": {"timeline_clip_count": 1, "audio_track_count": 0, "rough_cut_duration_sec": 5},
         "self_check": {"has_timeline_from_confirmed_clips": True, "has_audio_mix_plan": True, "has_edit_decision_list": True, "has_final_output_file": True, "ready_for_qa_stage": True},
@@ -1078,13 +2327,23 @@ def test_new_qa_manifest_passes_draft_then_package_delivery_passes_final(tmp_pat
     assert not ok
     assert any("qa_checks" in e or "delivery_package" in e for e in errors)
 
-    assert package_delivery.main(["package_delivery.py", str(qa_manifest_json)]) == 0
+    assert package_delivery.main(["package_delivery.py", str(qa_manifest_json)]) == 1
+    assert package_delivery.main([
+        "package_delivery.py",
+        str(qa_manifest_json),
+        "--content-aligned",
+        "--content-alignment-note",
+        "QA reviewer confirmed the delivered rough cut matches the script, storyboard, and prompt intent.",
+    ]) == 0
     data = json.loads(qa_manifest_json.read_text(encoding="utf-8"))
     check_status = {item["check_id"]: item["status"] for item in data["qa_checks"]}
     assert check_status["intent_alignment"] == "pass"
+    assert check_status["content_text_alignment"] == "pass"
     assert check_status["visual_continuity_contract"] in {"pass", "waived"}
     ok, errors, warnings = validate_qa_manifest.validate(data, qa_manifest_json, mode="final")
     assert ok, errors
+    assert data["content_alignment_review"]["confirmed"] is True
+    assert data["content_alignment_review"]["status"] == "pass"
     project_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert project_manifest["current_stage"] == "STAGE_09_QA_CONFIRMED"
     assert project_manifest["qa_confirmed"] is True
@@ -1117,7 +2376,7 @@ def test_package_delivery_blocks_when_requested_scope_stops_at_rough_cut(tmp_pat
 
     rough_cut = assembly_dir / "rough_cut" / "rough_cut.mp4"
     rough_cut.parent.mkdir(parents=True, exist_ok=True)
-    rough_cut.write_bytes(b"PLACEHOLDER ROUGH CUT FOR QA TEST")
+    rough_cut.write_bytes(b"\x00\x00\x00\x18ftypmp42QB" + (b"2" * 140))
     assembly_manifest = {
         "schema_version": "0.9.0",
         "stage": "STAGE_08_ASSEMBLY",
@@ -1139,7 +2398,16 @@ def test_package_delivery_blocks_when_requested_scope_stops_at_rough_cut(tmp_pat
         "timeline": [{"shot_id": "S001", "clip_path": str(rough_cut).replace("\\", "/"), "start_sec": 0, "duration_sec": 5, "source_clip_id": "CLIP_S001"}],
         "audio_tracks": [],
         "subtitle_tracks": [],
-        "ffmpeg_commands": [],
+        "ffmpeg_commands": [{
+            "command": ["ffmpeg"],
+            "provider": "ffmpeg",
+            "strategy": "reencode_mix",
+            "return_code": 0,
+            "stdout_excerpt": "",
+            "stderr_excerpt": "",
+            "ran_at": "2026-05-28T10:40:00+08:00",
+        }],
+        "assembly_provider": "ffmpeg",
         "evidence": {"file_path": str(rough_cut).replace("\\", "/"), "file_exists": True, "file_size_bytes": rough_cut.stat().st_size, "created_at": "2026-05-28T10:40:00+08:00"},
         "summary": {"timeline_clip_count": 1, "audio_track_count": 0, "rough_cut_duration_sec": 5},
         "self_check": {"has_timeline_from_confirmed_clips": True, "has_audio_mix_plan": True, "has_edit_decision_list": True, "has_final_output_file": True, "ready_for_qa_stage": True},
@@ -1159,4 +2427,110 @@ def test_package_delivery_blocks_when_requested_scope_stops_at_rough_cut(tmp_pat
     ]) == 0
 
     assert package_delivery.main(["package_delivery.py", str(qa_manifest_json)]) == 1
-    assert package_delivery.main(["package_delivery.py", str(qa_manifest_json), "--allow-beyond-requested-scope"]) == 0
+    assert package_delivery.main([
+        "package_delivery.py",
+        str(qa_manifest_json),
+        "--allow-beyond-requested-scope",
+        "--content-aligned",
+        "--content-alignment-note",
+        "Scope override run also includes manual confirmation that content matches the text description.",
+    ]) == 0
+
+
+def test_new_video_clip_jobs_ignores_template_leaked_story_anchors(tmp_path: Path) -> None:
+    project_dir = tmp_path / "video_projects" / "creator_trial_20260530_rainy_store"
+    intake_dir = project_dir / "00_intake"
+    storyboard_dir = project_dir / "02_storyboard"
+    keyframe_dir = project_dir / "04_keyframes"
+    image_dir = project_dir / "05_images"
+    clip_dir = project_dir / "06_video_clips"
+    intake_dir.mkdir(parents=True, exist_ok=True)
+    storyboard_dir.mkdir(parents=True, exist_ok=True)
+    keyframe_dir.mkdir(parents=True, exist_ok=True)
+    image_dir.mkdir(parents=True, exist_ok=True)
+    clip_dir.mkdir(parents=True, exist_ok=True)
+
+    brief = load_rainy_store_brief(project_dir)
+    locked_brief = intake_dir / "project_brief.locked.json"
+    locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    storyboard = {
+        "stage": "STAGE_02_STORYBOARD_GENERATION",
+        "project_id": project_dir.name,
+        "shots": [{
+            "shot_id": "S001",
+            "duration_sec": 4,
+            "scene": "雨夜便利店门口",
+            "location": "便利店门口",
+            "weather": "雨夜",
+            "key_prop": "最后一把伞",
+            "action": "20岁出头的女孩把最后一把伞留给陌生人",
+            "emotion": "克制善意",
+        }],
+        "story_anchors": {
+            "subject": "海边女孩",
+            "location": "核心场景",
+            "weather": "雨夜",
+            "scene_label": "核心场景",
+            "key_props": ["最后一把伞", "热可可"],
+            "action_beats": ["动作与情绪逐步变化"],
+            "emotion_beats": ["克制善意"],
+            "composition_beats": ["进入故事空间"],
+        },
+    }
+    storyboard_json = storyboard_dir / "storyboard.json"
+    storyboard_json.write_text(json.dumps(storyboard, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    prompts = {
+        "stage": "STAGE_04_KEYFRAME_PROMPTS",
+        "project_id": project_dir.name,
+        "shot_prompts": [{
+            "shot_id": "S001",
+            "duration_sec": 4,
+            "motion_prompt": "",
+            "performance_prompt": "",
+            "dialogue_delivery_prompt": "",
+            "consistency_prompt": "",
+            "negative_prompt": "多手，额外人物",
+        }],
+        "global_negative_prompt": "多手，额外人物",
+    }
+    prompts_json = keyframe_dir / "keyframe_prompts.json"
+    prompts_json.write_text(json.dumps(prompts, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    start_image = image_dir / "S001_start.png"
+    end_image = image_dir / "S001_end.png"
+    start_image.write_bytes(b"png-start")
+    end_image.write_bytes(b"png-end")
+    image_manifest = {
+        "stage": "STAGE_05_KEYFRAME_IMAGES",
+        "status": "generated",
+        "project_id": project_dir.name,
+        "jobs": [
+            {"image_id": "IMG_S001_START", "shot_id": "S001", "frame_role": "start", "output_path": str(start_image).replace("\\", "/"), "evidence": {"file_path": str(start_image).replace("\\", "/")}},
+            {"image_id": "IMG_S001_END", "shot_id": "S001", "frame_role": "end", "output_path": str(end_image).replace("\\", "/"), "evidence": {"file_path": str(end_image).replace("\\", "/")}},
+        ],
+    }
+    image_manifest_json = image_dir / "keyframe_image_manifest.json"
+    image_manifest_json.write_text(json.dumps(image_manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    clip_manifest_json = clip_dir / "video_clip_manifest.json"
+    assert new_video_clip_jobs.main([
+        "new_video_clip_jobs.py",
+        str(locked_brief),
+        str(storyboard_json),
+        str(prompts_json),
+        str(image_manifest_json),
+        str(clip_manifest_json),
+    ]) == 0
+
+    data = json.loads(clip_manifest_json.read_text(encoding="utf-8"))
+    assert data["story_anchors"]["subject"] == "20岁出头的女孩"
+    assert data["story_anchors"]["scene_label"] == "雨夜便利店门口"
+    assert "海边女孩" not in data["jobs"][0]["consistency_prompt"]
+    assert "核心场景" not in data["jobs"][0]["consistency_prompt"]
+    assert "20岁出头的女孩" in data["jobs"][0]["consistency_prompt"]
+    assert "雨夜便利店门口" in data["jobs"][0]["consistency_prompt"]
+    assert "gentle camera movement" not in data["jobs"][0]["motion_prompt"]
+    assert "可见的身体位移" in data["jobs"][0]["motion_prompt"]
+    assert "最后一把伞" in data["jobs"][0]["motion_prompt"]

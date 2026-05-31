@@ -15,8 +15,10 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "scripts"))
 from pipeline_core.pipeline_blueprints import routing_from_brief  # noqa: E402
 from pipeline_core.project_state import load_json_file  # noqa: E402
+from pipeline_core.project_state import update_project_manifest_for_stage  # noqa: E402
 from pipeline_core.quality_contracts import build_quality_contract, build_stage_quality_targets  # noqa: E402
 from pipeline_core.requirement_compiler import compile_requirements, requested_output_allows_stage, stage_meets_requested_output  # noqa: E402
+from pipeline_core.story_continuity import build_continuity_anchor_text, pick_story_anchors, shot_anchor_bundle, style_label_from_sources  # noqa: E402
 
 
 def load_json(path: Path) -> dict:
@@ -196,6 +198,20 @@ def request_record(job: dict, provider: str) -> dict:
     }
 
 
+def performance_profile_for_bundle(profile: dict, anchors: dict, bundle: dict[str, str], style_label: str) -> dict:
+    result = dict(profile or {})
+    result["baseline_expression"] = bundle.get("emotion") or result.get("baseline_expression") or "平静"
+    scene_label = f"{bundle.get('weather') or ''}{bundle.get('location') or anchors.get('scene_label') or ''}".strip() or anchors.get("scene_label") or "当前场景"
+    key_props = [bundle.get("key_prop")] if bundle.get("key_prop") else (anchors.get("key_props") or [])
+    result["continuity_anchor"] = build_continuity_anchor_text(
+        anchors.get("subject") or "主体",
+        scene_label,
+        style_label,
+        key_props,
+    )
+    return result
+
+
 def main(argv: list[str]) -> int:
     allow_beyond_scope = "--allow-beyond-requested-scope" in argv
     argv = [arg for arg in argv if arg != "--allow-beyond-requested-scope"]
@@ -233,6 +249,8 @@ def main(argv: list[str]) -> int:
     routing = routing_from_brief(brief)
     quality_contract = build_quality_contract(brief, compiled)
     quality_targets = build_stage_quality_targets("STAGE_07", quality_contract)
+    anchors = pick_story_anchors(brief, max(1, len(storyboard.get("shots") or [])), character_bible, storyboard)
+    style_label = style_label_from_sources(brief, character_bible, storyboard, clip_manifest)
     voice_provider_priority = list((compiled.get("provider_preferences") or {}).get("stage07_voice_provider_priority") or ["indextts2", "manual"])
     music_provider_priority = list((compiled.get("provider_preferences") or {}).get("stage07_music_provider_priority") or ["comfyui_music", "local_music_library", "manual"])
     project_id = brief.get("project_id") or storyboard.get("project_id") or clip_manifest.get("project_id") or out_path.parents[1].name
@@ -252,6 +270,7 @@ def main(argv: list[str]) -> int:
             if not isinstance(shot, dict):
                 continue
             shot_id = shot.get("shot_id") or "S000"
+            bundle = shot_anchor_bundle(anchors, len(jobs), shot=shot)
             emotion = safe_text(shot.get("emotion"))
             duration = shot.get("duration_sec") or 0
             try:
@@ -268,12 +287,13 @@ def main(argv: list[str]) -> int:
                         "shot_id": shot_id,
                         "source_storyboard_ref": f"{storyboard_ref}#{shot_id}",
                         "source_script_ref": script_ref,
-                        "speaker_id": narrator.get("character_id") or "NARRATOR",
-                        "speaker_name": narrator.get("name") or "旁白",
+                        "speaker_id": "NARRATOR",
+                        "speaker_name": "旁白",
                         "text": vo,
                         "emotion": emotion,
                         "voice_profile": narrator.get("voice_profile") or {},
-                        "performance_prompt": narrator.get("performance_profile") or {},
+                        "performance_prompt": performance_profile_for_bundle(narrator.get("performance_profile") or {}, anchors, bundle, style_label),
+                        "story_anchor_bundle": bundle,
                         "target_start": shot.get("start"),
                         "target_end": shot.get("end"),
                         "duration_sec": duration,
@@ -301,7 +321,8 @@ def main(argv: list[str]) -> int:
                         "text": line.get("text") or "",
                         "emotion": emotion,
                         "voice_profile": speaker.get("voice_profile") or {},
-                        "performance_prompt": speaker.get("performance_profile") or {},
+                        "performance_prompt": performance_profile_for_bundle(speaker.get("performance_profile") or {}, anchors, bundle, style_label),
+                        "story_anchor_bundle": bundle,
                         "target_start": shot.get("start"),
                         "target_end": shot.get("end"),
                         "duration_sec": duration,
@@ -358,6 +379,7 @@ def main(argv: list[str]) -> int:
         "source_video_clip_manifest": str(clip_manifest_path).replace("\\", "/"),
         "created_at": datetime.now(timezone.utc).isoformat(),
         "requirements": requirements,
+        "story_anchors": anchors,
         "compiled_requirements": compiled,
         "quality_contract": quality_contract,
         "quality_targets": quality_targets,
@@ -419,6 +441,13 @@ def main(argv: list[str]) -> int:
     (out_path.parent / "audio_review.md").write_text(
         "# Stage 07 Audio Review\n\nPending generation. After voice/music files are created, run `sync_audio_manifest.py` and final validation.\n",
         encoding="utf-8"
+    )
+    update_project_manifest_for_stage(
+        out_path,
+        current_stage="STAGE_07_AUDIO",
+        allowed_next_stage=None,
+        flags={"audio_confirmed": False},
+        status="active",
     )
     print(f"AUDIO JOBS CREATED: {out_path}")
     print(f"EXPECTED_AUDIO_JOBS: {len(jobs)}")

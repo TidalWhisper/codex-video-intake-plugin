@@ -11,6 +11,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "scripts"))
 from pipeline_blueprints import next_stage_after  # noqa: E402
+from pipeline_core.media_evidence import clip_output_ready  # noqa: E402
 from pipeline_core.project_state import update_project_manifest_for_stage  # noqa: E402
 
 
@@ -74,6 +75,7 @@ def main() -> int:
     routing = data.get("routing") if isinstance(data.get("routing"), dict) else {"legacy_mode": True}
     generated = 0
     failed = 0
+    blocked = 0
     source_ok = 0
     for job in data.get("jobs") or []:
         if not isinstance(job, dict):
@@ -86,30 +88,42 @@ def main() -> int:
             source_ok += 1
         # Clip evidence
         raw = job.get("output_path") or job.get("evidence", {}).get("file_path")
+        if job.get("status") == "blocked":
+            blocked += 1
         if not raw:
             continue
         clip = resolve(path, str(raw))
         ev = job.setdefault("evidence", {})
         ev["file_path"] = str(clip).replace("\\", "/")
-        if clip.exists() and clip.is_file() and clip.stat().st_size > 0:
+        if clip.exists() and clip.is_file():
             ev["file_exists"] = True
             ev["file_size_bytes"] = clip.stat().st_size
             ev["created_at"] = datetime.fromtimestamp(clip.stat().st_mtime, timezone.utc).isoformat()
-            job["status"] = "succeeded"
-            if args.provider and not job.get("provider"):
-                job["provider"] = args.provider
-            generated += 1
+            if clip_output_ready(clip, job.get("provider")):
+                job["status"] = "succeeded"
+                if args.provider and not job.get("provider"):
+                    job["provider"] = args.provider
+                generated += 1
+            else:
+                if job.get("status") == "succeeded":
+                    job["status"] = "failed"
+                failed += 1
+                job["notes"] = f"{job.get('notes') or ''}".strip()
+                if "non-production clip evidence" not in job["notes"]:
+                    job["notes"] = (job["notes"] + " | " if job["notes"] else "") + "non-production clip evidence; regenerate with a real Stage 06 provider run"
         else:
             ev["file_exists"] = False
             ev["file_size_bytes"] = 0
             if job.get("status") == "succeeded":
                 job["status"] = "failed"
-            failed += 1
+            if job.get("status") != "blocked":
+                failed += 1
     jobs = data.get("jobs") or []
     summary = data.setdefault("summary", {})
     summary["expected_clip_count"] = len(jobs)
     summary["generated_clip_count"] = generated
     summary["failed_clip_count"] = failed
+    summary["blocked_clip_count"] = blocked
     summary["shot_count"] = len({j.get("shot_id") for j in jobs if isinstance(j, dict) and j.get("shot_id")})
     summary["total_duration_sec"] = sum(float(j.get("duration_sec") or 0) for j in jobs if isinstance(j, dict))
     self_check = data.setdefault("self_check", {})
@@ -131,6 +145,13 @@ def main() -> int:
         )
     else:
         data["allowed_next_stage"] = None
+        update_project_manifest_for_stage(
+            path,
+            current_stage="STAGE_06_VIDEO_CLIPS",
+            allowed_next_stage=None,
+            flags={"video_clips_confirmed": False},
+            status="active",
+        )
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"VIDEO CLIP MANIFEST SYNCED: {path}")
     print(f"GENERATED_CLIPS: {generated}")

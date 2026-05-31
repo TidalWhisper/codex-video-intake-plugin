@@ -29,6 +29,7 @@ def load_module(name: str, path: Path) -> ModuleType:
 
 new_audio_jobs = load_module("new_audio_jobs_stage07_test", AUDIO / "new_audio_jobs.py")
 validate_audio_manifest = load_module("validate_audio_manifest_stage07_test", AUDIO / "validate_audio_manifest.py")
+sync_audio_manifest = load_module("sync_audio_manifest_stage07_test", AUDIO / "sync_audio_manifest.py")
 run_comfyui_indextts2 = load_module("run_comfyui_indextts2_stage07_test", PROVIDERS / "run_comfyui_indextts2.py")
 run_comfyui_music = load_module("run_comfyui_music_stage07_test", PROVIDERS / "run_comfyui_music.py")
 sync_comfyui_music_result = load_module("sync_comfyui_music_result_stage07_test", PROVIDERS / "sync_comfyui_music_result.py")
@@ -745,6 +746,31 @@ def test_run_comfyui_indextts2_failure_records_errors(tmp_path: Path) -> None:
         server.server_close()
 
 
+def test_run_comfyui_indextts2_preflight_failure_marks_requests_and_writes_recovery(tmp_path: Path) -> None:
+    manifest_json = _prepare_manifest(tmp_path)
+    mapping_path = _write_mapping_and_workflows(tmp_path)
+    output_root = tmp_path / "comfy_voice_output"
+    config_path = _write_config(tmp_path, base_url="http://127.0.0.1:1", output_root=output_root)
+    assert run_comfyui_indextts2.main([
+        str(manifest_json),
+        "--config", str(config_path),
+        "--mapping", str(mapping_path),
+        "--preflight-timeout", "1",
+    ]) == 1
+    data = json.loads(manifest_json.read_text(encoding="utf-8"))
+    voice_job = next(job for job in data["jobs"] if job["audio_type"] == "voiceover")
+    assert voice_job["status"] == "failed"
+    assert "preflight failed" in voice_job["errors"][0]["message"].lower()
+    request_manifest = json.loads((manifest_json.parent / "indextts2_requests.json").read_text(encoding="utf-8"))
+    assert request_manifest["requests"][0]["status"] == "failed"
+    assert request_manifest["requests"][0]["requested_at"]
+    recovery_doc = manifest_json.parent / "audio_recovery.md"
+    runtime_status = manifest_json.parent / "audio_runtime_status.json"
+    assert recovery_doc.exists()
+    assert runtime_status.exists()
+    assert "run_comfyui_indextts2.py" in recovery_doc.read_text(encoding="utf-8")
+
+
 def test_run_comfyui_indextts2_reuses_existing_audio_when_cached_history_has_no_outputs(tmp_path: Path) -> None:
     manifest_json = _prepare_manifest(tmp_path)
     mapping_path = _write_mapping_and_workflows(tmp_path)
@@ -812,6 +838,47 @@ def test_run_comfyui_music_failure_records_errors(tmp_path: Path) -> None:
         server.shutdown()
         thread.join(timeout=5)
         server.server_close()
+
+
+def test_run_comfyui_music_preflight_failure_marks_requests_and_writes_recovery(tmp_path: Path) -> None:
+    manifest_json = _prepare_manifest(tmp_path)
+    mapping_path = _write_mapping_and_workflows(tmp_path)
+    output_root = tmp_path / "comfy_music_output"
+    config_path = _write_config(tmp_path, base_url="http://127.0.0.1:1", output_root=output_root)
+    assert run_comfyui_music.main([
+        str(manifest_json),
+        "--config", str(config_path),
+        "--mapping", str(mapping_path),
+        "--preflight-timeout", "1",
+    ]) == 1
+    data = json.loads(manifest_json.read_text(encoding="utf-8"))
+    music_job = next(job for job in data["jobs"] if job["audio_type"] == "music")
+    assert music_job["status"] == "failed"
+    assert "preflight failed" in music_job["errors"][0]["message"].lower()
+    request_manifest = json.loads((manifest_json.parent / "music_requests.json").read_text(encoding="utf-8"))
+    assert request_manifest["requests"][0]["status"] == "failed"
+    assert request_manifest["requests"][0]["requested_at"]
+    recovery_doc = manifest_json.parent / "audio_recovery.md"
+    assert recovery_doc.exists()
+    assert "run_comfyui_music.py" in recovery_doc.read_text(encoding="utf-8")
+
+
+def test_sync_audio_manifest_writes_recovery_when_audio_missing(tmp_path: Path) -> None:
+    manifest_json = _prepare_manifest(tmp_path)
+    old_argv = sys.argv[:]
+    try:
+        sys.argv = ["sync_audio_manifest.py", str(manifest_json)]
+        assert sync_audio_manifest.main() == 0
+    finally:
+        sys.argv = old_argv
+    data = json.loads(manifest_json.read_text(encoding="utf-8"))
+    assert data["self_check"]["ready_for_assembly_stage"] is False
+    assert any("recovery:" in note for note in data["self_check"]["notes"])
+    recovery_doc = manifest_json.parent / "audio_recovery.md"
+    runtime_status = manifest_json.parent / "audio_runtime_status.json"
+    assert recovery_doc.exists()
+    assert runtime_status.exists()
+    assert "sync_audio_manifest.py" in recovery_doc.read_text(encoding="utf-8")
 
 
 def test_run_comfyui_music_execution_error_records_node_details(tmp_path: Path) -> None:

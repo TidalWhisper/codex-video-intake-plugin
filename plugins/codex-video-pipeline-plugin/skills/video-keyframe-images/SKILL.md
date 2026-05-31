@@ -114,21 +114,37 @@ guofeng
 stylized
 ```
 
-Current validated local stacks:
+Current execution semantics:
 
-- `realistic` → `Qwen 2512`
-- `anime` → `Zimage`
-- `guofeng` → `Qwen 2512 + qwen_image_gufeng LoRA`
-- `stylized` → `Qwen 2512 + illustration-1.0-qwen-image LoRA`
+- Provider priority is fixed: `OpenAI GPT Image 2 -> ComfyUI txt2img -> manual`
+- `stage05_route_key` is the primary routing field recorded in `keyframe_image_manifest.json`
+- `comfyui_workflow_mapping_key` is the primary execution key used to resolve `config/workflow_node_mapping.yaml`
+- `style_family` remains a compatibility field for existing Stage 05 validation and runner logic
+- `style_family` only decides the internal ComfyUI route family, not provider order
 
-Default behavior is auto-routing from the locked brief style plus Stage 04 prompt hints:
+Current default ComfyUI route families still map to transitional workflow targets through route-specific mapping keys:
 
-- `realistic` → `txt2img_keyframe_realistic`
-- `anime` → `txt2img_keyframe_anime`
-- `guofeng` → `txt2img_keyframe_guofeng`
-- `stylized` → `txt2img_keyframe_stylized`
+- `realistic_cinematic` → `stage05_realistic_cinematic` → `txt2img_keyframe_realistic_zimage_photo_bridge`
+- `anime_jp` → `stage05_anime_jp` → `txt2img_keyframe_anime`
+- `anime_cn_newguofeng` → `stage05_anime_cn_newguofeng` → `txt2img_keyframe_anime_cn_newguofeng`
+- `guofeng_ink` → `stage05_guofeng_ink` → `txt2img_keyframe_guofeng_ink`
+- `stylized_concept` → `stage05_stylized_concept` → `txt2img_keyframe_stylized_zimage_image_b_bridge`
 
-The generated `keyframe_image_manifest.json` records both `style_family` and `comfyui_workflow_name` for every job.
+Current first-batch route-specific stack direction:
+
+- `anime_cn_newguofeng` now uses a Lumina-style route structure instead of reusing the JP anime Zimage graph unchanged
+- `guofeng_ink` keeps the Qwen guofeng LoRA route but is isolated in its own workflow file for later model-stack replacement
+- `stylized_concept` now uses a reduced API bridge derived from `AmazingZImageWorkflow/amazing-z-image-b_SAFETENSORS.json`, while the older HiDream route stays as a comparison candidate
+- `stylized_concept` can now further split internally by Stage 00 style preset, so `赛博朋克` and `暗黑惊悚` no longer have to share the exact same anchor text inside the bridge
+- `game_cg` now lands on its own clean-plate bridge file, so `游戏CG感` is no longer forced through the old generic stylized compatibility workflow artifact
+- direct workflow overrides are now also available for the first route-specific files:
+  - `txt2img_keyframe_anime_cn_newguofeng`
+  - `txt2img_keyframe_guofeng_ink`
+  - `txt2img_keyframe_stylized_concept`
+
+The generated `keyframe_image_manifest.json` records `stage05_route_key`, `style_family`, `comfyui_workflow_mapping_key`, `comfyui_workflow_name`, `comfyui_model_id`, and `route_resolution` for each run.
+
+Do not treat the current 4-route compatibility layer as the final model-stack architecture. Route expansion and model/workflow replacement should be driven by the Stage 05 route registry and the model-selection backlog, not by forcing every style through one base model plus LoRA.
 
 Do not assume these four routes are production-ready only because four workflow files exist. The route is only acceptable when the selected model stack is actually appropriate for that style family and a real smoke render exists.
 
@@ -145,6 +161,24 @@ python scripts/providers/run_comfyui_txt2img.py \
 ```bash
 python skills/video-keyframe-images/scripts/sync_keyframe_image_manifest.py \
   <project_dir>/05_images/keyframe_image_manifest.json
+```
+
+If Stage 05 generated successfully but risky frames still need human sign-off, approve the current review queue directly instead of hand-editing the manifest:
+
+```bash
+python skills/video-keyframe-images/scripts/approve_stage05_review_queue.py \
+  <project_dir>/05_images/keyframe_image_manifest.json \
+  --top 3 \
+  --content-aligned --content-alignment-note "confirmed content matches shot description"
+```
+
+You can also approve a specific frame:
+
+```bash
+python skills/video-keyframe-images/scripts/approve_stage05_review_queue.py \
+  <project_dir>/05_images/keyframe_image_manifest.json \
+  --image-id IMG_S001_START \
+  --content-aligned --content-alignment-note "confirmed content matches shot description"
 ```
 
 6. Validate final manifest:

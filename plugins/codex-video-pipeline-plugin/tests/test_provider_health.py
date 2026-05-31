@@ -19,6 +19,7 @@ import check_openai_image_provider as check_openai_image_provider_cli
 import check_provider_config as check_provider_config_cli
 import check_provider_health as check_provider_health_cli
 import provider_config
+import workflow_mapping
 
 
 class _StatsHandler(BaseHTTPRequestHandler):
@@ -38,9 +39,49 @@ class _StatsHandler(BaseHTTPRequestHandler):
         return
 
 
+class _OpenAIProbeHandler(BaseHTTPRequestHandler):
+    expected_token = "valid-key"
+
+    def do_GET(self) -> None:  # noqa: N802
+        auth = self.headers.get("Authorization") or ""
+        if auth != f"Bearer {self.expected_token}":
+            body = json.dumps({"error": {"message": "Incorrect API key provided"}}).encode("utf-8")
+            self.send_response(401)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
+        if self.path == "/models/gpt-image-2":
+            body = json.dumps({"id": "gpt-image-2", "object": "model"}).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
+        if self.path == "/models":
+            body = json.dumps({"data": [{"id": "gpt-image-2"}]}).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
+        self.send_response(404)
+        self.end_headers()
+
+    def log_message(self, format: str, *args: object) -> None:
+        return
+
+
 def _write_config(tmp_path: Path, *, openai_enabled: bool = False, comfyui_enabled: bool = False, base_url: str = "http://127.0.0.1:8188") -> Path:
     data = yaml.safe_load((ROOT / "config" / "providers.example.yaml").read_text(encoding="utf-8"))
     data["openai_image"]["enabled"] = openai_enabled
+    data["openai_image"]["base_url"] = base_url
     data["comfyui"]["enabled"] = comfyui_enabled
     data["comfyui"]["base_url"] = base_url
     config_path = tmp_path / "providers.yaml"
@@ -105,26 +146,65 @@ def test_check_openai_image_provider_fails_when_enabled_without_api_key(tmp_path
 
 
 def test_check_openai_image_provider_succeeds_when_enabled_with_api_key(tmp_path: Path, monkeypatch, capsys) -> None:
-    config_path = _write_config(tmp_path, openai_enabled=True)
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    assert check_openai_image_provider_cli.main(["--config", str(config_path), "--json"]) == 0
-    payload = json.loads(capsys.readouterr().out)
-    assert payload["status"] == "ready"
-    assert payload["api_key_present"] is True
-    assert payload["api_key_source"] == "env:OPENAI_API_KEY"
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _OpenAIProbeHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        config_path = _write_config(tmp_path, openai_enabled=True, base_url=f"http://127.0.0.1:{server.server_port}")
+        monkeypatch.setenv("OPENAI_API_KEY", "valid-key")
+        assert check_openai_image_provider_cli.main(["--config", str(config_path), "--json", "--timeout", "2"]) == 0
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["status"] == "ready"
+        assert payload["api_key_present"] is True
+        assert payload["api_key_source"] == "env:OPENAI_API_KEY"
+        assert payload["auth_checked"] is True
+        assert payload["probe_kind"] == "model_detail"
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
+
+
+def test_check_openai_image_provider_fails_when_api_key_is_invalid(tmp_path: Path, monkeypatch, capsys) -> None:
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _OpenAIProbeHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        config_path = _write_config(tmp_path, openai_enabled=True, base_url=f"http://127.0.0.1:{server.server_port}")
+        monkeypatch.setenv("OPENAI_API_KEY", "bad-key")
+        assert check_openai_image_provider_cli.main(["--config", str(config_path), "--json", "--timeout", "2"]) == 1
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["status"] == "invalid_api_key"
+        assert payload["ready"] is False
+        assert payload["auth_checked"] is True
+        assert payload["http_status"] == 401
+        assert "Incorrect API key provided" in payload["error"]
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
 
 
 def test_check_openai_image_provider_uses_codex_auth_file_when_env_missing(tmp_path: Path, monkeypatch, capsys) -> None:
-    config_path = _write_config(tmp_path, openai_enabled=True)
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    auth_path = tmp_path / "auth-new.json"
-    auth_path.write_text(json.dumps({"OPENAI_API_KEY": "auth-file-key"}), encoding="utf-8")
-    monkeypatch.setattr(provider_config, "AUTH_FILE_CANDIDATES", [auth_path])
-    assert check_openai_image_provider_cli.main(["--config", str(config_path), "--json"]) == 0
-    payload = json.loads(capsys.readouterr().out)
-    assert payload["status"] == "ready"
-    assert payload["api_key_present"] is True
-    assert payload["api_key_source"].startswith("file:")
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _OpenAIProbeHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        config_path = _write_config(tmp_path, openai_enabled=True, base_url=f"http://127.0.0.1:{server.server_port}")
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        auth_path = tmp_path / "auth-new.json"
+        auth_path.write_text(json.dumps({"OPENAI_API_KEY": "valid-key"}), encoding="utf-8")
+        monkeypatch.setattr(provider_config, "AUTH_FILE_CANDIDATES", [auth_path])
+        assert check_openai_image_provider_cli.main(["--config", str(config_path), "--json", "--timeout", "2"]) == 0
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["status"] == "ready"
+        assert payload["api_key_present"] is True
+        assert payload["api_key_source"].startswith("file:")
+        assert payload["auth_checked"] is True
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
 
 
 def test_check_comfyui_server_reports_disabled_when_disabled(tmp_path: Path, capsys) -> None:
@@ -158,6 +238,24 @@ def test_check_provider_health_fails_when_enabled_provider_is_not_ready(tmp_path
     payload = json.loads(capsys.readouterr().out)
     assert payload["valid_config"] is True
     assert payload["openai_image"]["status"] == "missing_api_key"
+
+
+def test_check_provider_health_uses_live_openai_auth_probe(tmp_path: Path, monkeypatch, capsys) -> None:
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _OpenAIProbeHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        config_path = _write_config(tmp_path, openai_enabled=True, comfyui_enabled=False, base_url=f"http://127.0.0.1:{server.server_port}")
+        monkeypatch.setenv("OPENAI_API_KEY", "bad-key")
+        assert check_provider_health_cli.main(["--config", str(config_path), "--json", "--openai-timeout", "2"]) == 1
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["openai_image"]["status"] == "invalid_api_key"
+        assert payload["openai_image"]["auth_checked"] is True
+        assert payload["openai_image"]["http_status"] == 401
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
 
 
 def test_check_provider_health_reports_stage07_music_ready_for_acestep(tmp_path: Path, capsys) -> None:
@@ -212,6 +310,32 @@ def test_check_provider_health_accepts_workspace_relative_plugin_config_path(tmp
     payload = json.loads(capsys.readouterr().out)
     assert payload["config_path"] == str(config_path).replace("\\", "/")
     assert payload["warnings"] == []
+
+
+def test_resolve_config_path_accepts_plugin_relative_path_from_plugin_cwd(tmp_path: Path, monkeypatch) -> None:
+    workspace_root = tmp_path / "workspace"
+    plugin_root = workspace_root / "plugins" / "codex-video-pipeline-plugin"
+    config_path = _write_repo_config(plugin_root, openai_enabled=False, comfyui_enabled=False)
+
+    monkeypatch.chdir(plugin_root)
+    relative_config = str(config_path.relative_to(workspace_root)).replace("\\", "/")
+    resolved = provider_config.resolve_config_path(relative_config)
+
+    assert resolved == config_path.resolve()
+
+
+def test_resolve_workflow_mapping_path_accepts_plugin_relative_path_from_repo_root(tmp_path: Path, monkeypatch) -> None:
+    workspace_root = tmp_path / "workspace"
+    plugin_root = workspace_root / "plugins" / "codex-video-pipeline-plugin"
+    _write_repo_config(plugin_root, openai_enabled=False, comfyui_enabled=False)
+    _write_workflow_mapping(plugin_root, "AceStep_Music_Workflow.json")
+    mapping_path = plugin_root / "config" / "workflow_node_mapping.yaml"
+
+    monkeypatch.chdir(workspace_root)
+    relative_mapping = str(mapping_path.relative_to(workspace_root)).replace("\\", "/")
+    resolved = workflow_mapping.resolve_workflow_mapping_path(relative_mapping)
+
+    assert resolved == mapping_path.resolve()
 
 
 def test_inspect_workflow_file_collects_node_types(tmp_path: Path) -> None:

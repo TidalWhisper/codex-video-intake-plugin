@@ -4,6 +4,7 @@ from __future__ import annotations
 import base64
 import json
 import urllib.error
+import urllib.parse
 import urllib.request
 from typing import Any
 
@@ -32,6 +33,92 @@ def _error_message_from_payload(payload: Any, fallback: str) -> str:
     return fallback
 
 
+def _request_json(
+    *,
+    url: str,
+    api_key: str,
+    timeout_seconds: int,
+    method: str = "GET",
+    payload: dict[str, Any] | None = None,
+) -> tuple[int, Any]:
+    request = urllib.request.Request(
+        url,
+        data=None if payload is None else json.dumps(payload).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        method=method,
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            body = response.read().decode("utf-8")
+            status_code = getattr(response, "status", None) or response.getcode()
+    except urllib.error.HTTPError as exc:
+        raw = exc.read().decode("utf-8", errors="replace")
+        try:
+            payload_obj = json.loads(raw)
+        except json.JSONDecodeError:
+            payload_obj = {"raw": raw}
+        raise OpenAIImageError(
+            _error_message_from_payload(payload_obj, f"OpenAI request failed with HTTP {exc.code}"),
+            status_code=exc.code,
+            details=payload_obj,
+        ) from exc
+    except urllib.error.URLError as exc:
+        raise OpenAIImageError(f"OpenAI request failed: {exc.reason or exc}") from exc
+
+    try:
+        data = json.loads(body)
+    except json.JSONDecodeError as exc:
+        raise OpenAIImageError("OpenAI response was not valid JSON", status_code=status_code, details=body) from exc
+    return status_code, data
+
+
+def probe_image_provider_auth(
+    *,
+    base_url: str,
+    api_key: str,
+    model: str,
+    timeout_seconds: int = 15,
+) -> dict[str, Any]:
+    if not api_key.strip():
+        raise OpenAIImageError("OPENAI_API_KEY is missing")
+
+    base = base_url.rstrip("/")
+    model_url = f"{base}/models/{urllib.parse.quote(model, safe='')}"
+    try:
+        status_code, payload = _request_json(
+            url=model_url,
+            api_key=api_key,
+            timeout_seconds=timeout_seconds,
+        )
+        return {
+            "status_code": status_code,
+            "probe_url": model_url,
+            "probe_kind": "model_detail",
+            "model": model,
+            "response": payload,
+        }
+    except OpenAIImageError as exc:
+        if exc.status_code != 404:
+            raise
+
+    list_url = f"{base}/models"
+    status_code, payload = _request_json(
+        url=list_url,
+        api_key=api_key,
+        timeout_seconds=timeout_seconds,
+    )
+    return {
+        "status_code": status_code,
+        "probe_url": list_url,
+        "probe_kind": "model_list",
+        "model": model,
+        "response": payload,
+    }
+
+
 def generate_image(
     *,
     base_url: str,
@@ -56,37 +143,13 @@ def generate_image(
     if background:
         payload["background"] = background
 
-    request = urllib.request.Request(
-        f"{base_url.rstrip('/')}/images/generations",
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
+    status_code, data = _request_json(
+        url=f"{base_url.rstrip('/')}/images/generations",
+        api_key=api_key,
+        timeout_seconds=timeout_seconds,
         method="POST",
+        payload=payload,
     )
-    try:
-        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
-            body = response.read().decode("utf-8")
-            status_code = getattr(response, "status", None) or response.getcode()
-    except urllib.error.HTTPError as exc:
-        raw = exc.read().decode("utf-8", errors="replace")
-        try:
-            payload = json.loads(raw)
-        except json.JSONDecodeError:
-            payload = {"raw": raw}
-        raise OpenAIImageError(
-            _error_message_from_payload(payload, f"OpenAI image request failed with HTTP {exc.code}"),
-            status_code=exc.code,
-            details=payload,
-        ) from exc
-    except urllib.error.URLError as exc:
-        raise OpenAIImageError(f"OpenAI image request failed: {exc.reason or exc}") from exc
-
-    try:
-        data = json.loads(body)
-    except json.JSONDecodeError as exc:
-        raise OpenAIImageError("OpenAI image response was not valid JSON", status_code=status_code, details=body) from exc
     if not isinstance(data, dict):
         raise OpenAIImageError("OpenAI image response must be a JSON object", status_code=status_code, details=data)
     images = data.get("data")
@@ -114,4 +177,3 @@ def generate_image(
         "size": data.get("size") or size,
         "background": data.get("background") or background,
     }
-

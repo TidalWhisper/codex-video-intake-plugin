@@ -192,3 +192,83 @@ def update_manifest_state(data: dict[str, Any], manifest_path: Path) -> None:
         data["status"] = "draft"
     data["allowed_next_stage"] = next_stage_after("STAGE_07_AUDIO", routing, "STAGE_08_ASSEMBLY") if all_audio else None
     data["updated_at"] = utc_now()
+
+
+def missing_audio_jobs(data: dict[str, Any], manifest_path: Path) -> list[dict[str, Any]]:
+    missing: list[dict[str, Any]] = []
+    jobs = data.get("jobs") if isinstance(data.get("jobs"), list) else []
+    for job in jobs:
+        if not isinstance(job, dict):
+            continue
+        output_path = job.get("output_path") or (job.get("evidence") or {}).get("file_path")
+        resolved = resolve_path(manifest_path, output_path)
+        exists = resolved.exists() and resolved.is_file() and resolved.stat().st_size > 0
+        if exists:
+            continue
+        missing.append({
+            "audio_id": str(job.get("audio_id") or ""),
+            "audio_type": str(job.get("audio_type") or ""),
+            "shot_id": str(job.get("shot_id") or ""),
+            "provider_priority": [str(item) for item in (job.get("provider_priority") or []) if str(item).strip()],
+            "output_path": str(resolved).replace("\\", "/"),
+            "status": str(job.get("status") or ""),
+        })
+    return missing
+
+
+def write_audio_recovery_artifacts(
+    manifest_path: Path,
+    data: dict[str, Any],
+    *,
+    reason: str,
+    provider_health: dict[str, Any] | None = None,
+) -> tuple[Path, Path]:
+    recovery_path = manifest_path.parent / "audio_recovery.md"
+    runtime_status_path = manifest_path.parent / "audio_runtime_status.json"
+    missing = missing_audio_jobs(data, manifest_path)
+    manifest_arg = str(manifest_path).replace("\\", "/")
+    health = provider_health if isinstance(provider_health, dict) else {}
+    lines = [
+        "# Stage 07 Audio Recovery",
+        "",
+        f"- Project: `{data.get('project_id')}`",
+        f"- Manifest: `{manifest_arg}`",
+        f"- Reason: {reason}",
+        f"- Missing audio jobs: {len(missing)}",
+        "",
+        "## Next Actions",
+        "",
+        f"1. `python plugins/codex-video-pipeline-plugin/scripts/providers/check_provider_health.py --json`",
+        f"2. `python plugins/codex-video-pipeline-plugin/scripts/providers/run_comfyui_indextts2.py {manifest_arg} --poll-interval 1 --max-wait-seconds 240`",
+        f"3. `python plugins/codex-video-pipeline-plugin/scripts/providers/run_comfyui_music.py {manifest_arg} --poll-interval 1 --max-wait-seconds 240`",
+        f"4. `python plugins/codex-video-pipeline-plugin/skills/video-audio/scripts/sync_audio_manifest.py {manifest_arg}`",
+        "",
+    ]
+    if health:
+        lines.extend([
+            "## Provider Health",
+            "",
+            f"- ComfyUI: `{health.get('comfyui_status') or health.get('status') or 'unknown'}`",
+            f"- Detail: `{health.get('comfyui_error') or health.get('error') or ''}`",
+            "",
+        ])
+    if missing:
+        lines.extend(["## Missing Jobs", ""])
+        for item in missing:
+            provider_text = " -> ".join(item["provider_priority"]) if item["provider_priority"] else "manual"
+            lines.append(
+                f"- `{item['audio_id']}` `{item['audio_type']}` target=`{item['output_path']}` providers=`{provider_text}` status=`{item['status'] or 'pending'}`"
+            )
+        lines.append("")
+    recovery_path.write_text("\n".join(lines), encoding="utf-8")
+    write_json(runtime_status_path, {
+        "project_id": data.get("project_id"),
+        "stage": "STAGE_07_AUDIO",
+        "status": "ready_for_assembly" if not missing else "recovery_required",
+        "reason": reason,
+        "missing_jobs": missing,
+        "provider_health": health,
+        "updated_at": utc_now(),
+        "recovery_doc_path": str(recovery_path).replace("\\", "/"),
+    })
+    return recovery_path, runtime_status_path

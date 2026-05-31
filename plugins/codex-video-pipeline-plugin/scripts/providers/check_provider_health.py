@@ -52,6 +52,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--workflow-name", default="music_generation", help="Workflow mapping entry to inspect")
     parser.add_argument("--json", action="store_true", help="Print machine-readable output")
     parser.add_argument("--timeout", type=int, default=None, help="Override ComfyUI timeout for the health check")
+    parser.add_argument("--openai-timeout", type=int, default=None, help="Override OpenAI auth probe timeout for the health check")
     args = parser.parse_args(argv)
 
     try:
@@ -61,7 +62,11 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     errors = validate_provider_config(data)
-    openai_result = check_openai_image_provider(data)
+    openai_result = check_openai_image_provider(
+        data,
+        probe=True,
+        timeout_seconds=args.openai_timeout,
+    )
     comfyui_result = check_comfyui_server(data, timeout=args.timeout)
     repo_root = path.resolve().parents[1]
     configured_music = inspect_configured_music_workflow(repo_root, args.workflow_name)

@@ -19,7 +19,7 @@ REQUIRED_JOB = [
     "provider_priority", "provider", "status", "output_path", "evidence", "errors", "notes"
 ]
 SHOT_ID_RE = re.compile(r"^S\d{3}$")
-IMAGE_ID_RE = re.compile(r"^IMG_S\d{3}_(START|END)$")
+IMAGE_ID_RE = re.compile(r"^IMG_S\d{3}_(START|MID|END)$")
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -78,10 +78,99 @@ def validate(data: dict[str, Any], path: Path | None = None, mode: str = "final"
             errors.append(f"{key} must not be blank")
     if not isinstance(data.get("image_provider_strategy"), dict):
         errors.append("image_provider_strategy must be an object")
+    route_key = data.get("stage05_route_key")
+    if route_key is not None and is_blank(route_key):
+        errors.append("stage05_route_key must not be blank when present")
+    workflow_mapping_key = data.get("comfyui_workflow_mapping_key")
+    if workflow_mapping_key is not None and is_blank(workflow_mapping_key):
+        errors.append("comfyui_workflow_mapping_key must not be blank when present")
+    model_id = data.get("comfyui_model_id")
+    if model_id is not None and is_blank(model_id):
+        errors.append("comfyui_model_id must not be blank when present")
+    preferred_workflow_candidate = data.get("preferred_comfyui_workflow_candidate")
+    if preferred_workflow_candidate is not None and is_blank(preferred_workflow_candidate):
+        errors.append("preferred_comfyui_workflow_candidate must not be blank when present")
+    for field_name in [
+        "comfyui_style_preset_key",
+        "comfyui_style_preset_label",
+        "comfyui_style_positive_anchor",
+        "comfyui_style_negative_anchor",
+        "comfyui_control_mode",
+        "comfyui_optimization_profile",
+        "comfyui_optimization_profile_label",
+    ]:
+        if data.get(field_name) is not None and is_blank(data.get(field_name)):
+            errors.append(f"{field_name} must not be blank when present")
+    preferred_model_candidate = data.get("preferred_comfyui_model_candidate")
+    if preferred_model_candidate is not None and is_blank(preferred_model_candidate):
+        errors.append("preferred_comfyui_model_candidate must not be blank when present")
+    route_migration_state = data.get("route_migration_state")
+    if route_migration_state is not None and is_blank(route_migration_state):
+        errors.append("route_migration_state must not be blank when present")
+    preferred_workflow_source_ref = data.get("preferred_comfyui_workflow_source_ref")
+    if preferred_workflow_source_ref is not None and is_blank(preferred_workflow_source_ref):
+        errors.append("preferred_comfyui_workflow_source_ref must not be blank when present")
+    preferred_workflow_format = data.get("preferred_comfyui_workflow_format")
+    if preferred_workflow_format is not None and is_blank(preferred_workflow_format):
+        errors.append("preferred_comfyui_workflow_format must not be blank when present")
+    for field_name in [
+        "preferred_comfyui_workflow_custom_node_dependencies",
+        "preferred_comfyui_workflow_import_blockers",
+    ]:
+        value = data.get(field_name)
+        if value is not None and (not isinstance(value, list) or not all(isinstance(item, str) and item.strip() for item in value)):
+            errors.append(f"{field_name} must be a list of non-empty strings when present")
+    route_resolution = data.get("route_resolution")
+    if route_resolution is not None and not isinstance(route_resolution, dict):
+        errors.append("route_resolution must be an object when present")
+    shot_frame_requirements = data.get("shot_frame_requirements")
+    if shot_frame_requirements is not None:
+        if not isinstance(shot_frame_requirements, dict):
+            errors.append("shot_frame_requirements must be an object when present")
+        else:
+            for shot_id, roles in shot_frame_requirements.items():
+                if not isinstance(shot_id, str) or not SHOT_ID_RE.match(shot_id):
+                    errors.append("shot_frame_requirements keys must look like S001")
+                    continue
+                if not isinstance(roles, list) or not roles:
+                    errors.append(f"shot_frame_requirements.{shot_id} must be a non-empty list")
+                    continue
+                normalized_roles = [str(role).strip() for role in roles]
+                if any(role not in {"start", "mid", "end"} for role in normalized_roles):
+                    errors.append(f"shot_frame_requirements.{shot_id} may only contain start, mid, or end")
+                if "start" not in normalized_roles or "end" not in normalized_roles:
+                    errors.append(f"shot_frame_requirements.{shot_id} must include start and end")
+    optimization = data.get("comfyui_optimization")
+    if optimization is not None:
+        if not isinstance(optimization, dict):
+            errors.append("comfyui_optimization must be an object when present")
+        else:
+            if is_blank(optimization.get("workflow_mapping_key")):
+                errors.append("comfyui_optimization.workflow_mapping_key must not be blank")
+            if is_blank(optimization.get("profile_key")):
+                errors.append("comfyui_optimization.profile_key must not be blank")
+            if is_blank(optimization.get("profile_label")):
+                errors.append("comfyui_optimization.profile_label must not be blank")
+            if not isinstance(optimization.get("dimension_scale"), (int, float)):
+                errors.append("comfyui_optimization.dimension_scale must be numeric")
+            if not isinstance(optimization.get("round_to_multiple"), int) or optimization.get("round_to_multiple") <= 0:
+                errors.append("comfyui_optimization.round_to_multiple must be a positive integer")
+            for key in ["max_width", "max_height"]:
+                value = optimization.get(key)
+                if value is not None and (not isinstance(value, int) or value <= 0):
+                    errors.append(f"comfyui_optimization.{key} must be a positive integer when present")
+            workflow_replacements = optimization.get("workflow_replacements")
+            if not isinstance(workflow_replacements, dict):
+                errors.append("comfyui_optimization.workflow_replacements must be an object")
+            notes = optimization.get("notes")
+            if notes is not None and (not isinstance(notes, list) or not all(isinstance(item, str) and item.strip() for item in notes)):
+                errors.append("comfyui_optimization.notes must be a list of non-empty strings when present")
     if not isinstance(data.get("jobs"), list):
         errors.append("jobs must be a list")
     if not isinstance(data.get("summary"), dict):
         errors.append("summary must be an object")
+    if data.get("quality_review") is not None and not isinstance(data.get("quality_review"), dict):
+        errors.append("quality_review must be an object when present")
     if not isinstance(data.get("self_check"), dict):
         errors.append("self_check must be an object")
 
@@ -111,7 +200,7 @@ def validate(data: dict[str, Any], path: Path | None = None, mode: str = "final"
                     errors.append(f"jobs[{idx}] missing field: {key}")
             image_id = job.get("image_id")
             if not isinstance(image_id, str) or not IMAGE_ID_RE.match(image_id):
-                errors.append(f"jobs[{idx}].image_id must look like IMG_S001_START or IMG_S001_END")
+                errors.append(f"jobs[{idx}].image_id must look like IMG_S001_START, IMG_S001_MID, or IMG_S001_END")
             elif image_id in seen:
                 errors.append(f"duplicate image_id: {image_id}")
             else:
@@ -121,8 +210,64 @@ def validate(data: dict[str, Any], path: Path | None = None, mode: str = "final"
                 errors.append(f"jobs[{idx}].shot_id must look like S001")
             else:
                 by_shot.setdefault(shot_id, set()).add(str(job.get("frame_role")))
-            if job.get("frame_role") not in {"start", "end"}:
-                errors.append(f"jobs[{idx}].frame_role must be start or end")
+            if job.get("frame_role") not in {"start", "mid", "end"}:
+                errors.append(f"jobs[{idx}].frame_role must be start, mid, or end")
+            if "stage05_route_key" in job and is_blank(job.get("stage05_route_key")):
+                errors.append(f"jobs[{idx}].stage05_route_key must not be blank when present")
+            if route_key is not None and job.get("stage05_route_key") != route_key:
+                errors.append(f"jobs[{idx}].stage05_route_key must match top-level stage05_route_key")
+            if "comfyui_workflow_mapping_key" in job and is_blank(job.get("comfyui_workflow_mapping_key")):
+                errors.append(f"jobs[{idx}].comfyui_workflow_mapping_key must not be blank when present")
+            if workflow_mapping_key is not None and job.get("comfyui_workflow_mapping_key") != workflow_mapping_key:
+                errors.append(f"jobs[{idx}].comfyui_workflow_mapping_key must match top-level comfyui_workflow_mapping_key")
+            if "comfyui_model_id" in job and is_blank(job.get("comfyui_model_id")):
+                errors.append(f"jobs[{idx}].comfyui_model_id must not be blank when present")
+            if model_id is not None and job.get("comfyui_model_id") != model_id:
+                errors.append(f"jobs[{idx}].comfyui_model_id must match top-level comfyui_model_id")
+            if "preferred_comfyui_workflow_candidate" in job and is_blank(job.get("preferred_comfyui_workflow_candidate")):
+                errors.append(f"jobs[{idx}].preferred_comfyui_workflow_candidate must not be blank when present")
+            if preferred_workflow_candidate is not None and job.get("preferred_comfyui_workflow_candidate") != preferred_workflow_candidate:
+                errors.append(f"jobs[{idx}].preferred_comfyui_workflow_candidate must match top-level preferred_comfyui_workflow_candidate")
+            for field_name in [
+                "comfyui_style_preset_key",
+                "comfyui_style_preset_label",
+                "comfyui_style_positive_anchor",
+                "comfyui_style_negative_anchor",
+                "comfyui_control_mode",
+                "comfyui_optimization_profile",
+                "comfyui_optimization_profile_label",
+            ]:
+                if job.get(field_name) is not None and is_blank(job.get(field_name)):
+                    errors.append(f"jobs[{idx}].{field_name} must not be blank when present")
+                top_level_value = data.get(field_name)
+                if top_level_value is not None and job.get(field_name) != top_level_value:
+                    errors.append(f"jobs[{idx}].{field_name} must match top-level {field_name}")
+            if "preferred_comfyui_model_candidate" in job and is_blank(job.get("preferred_comfyui_model_candidate")):
+                errors.append(f"jobs[{idx}].preferred_comfyui_model_candidate must not be blank when present")
+            if preferred_model_candidate is not None and job.get("preferred_comfyui_model_candidate") != preferred_model_candidate:
+                errors.append(f"jobs[{idx}].preferred_comfyui_model_candidate must match top-level preferred_comfyui_model_candidate")
+            if "route_migration_state" in job and is_blank(job.get("route_migration_state")):
+                errors.append(f"jobs[{idx}].route_migration_state must not be blank when present")
+            if route_migration_state is not None and job.get("route_migration_state") != route_migration_state:
+                errors.append(f"jobs[{idx}].route_migration_state must match top-level route_migration_state")
+            if "preferred_comfyui_workflow_source_ref" in job and is_blank(job.get("preferred_comfyui_workflow_source_ref")):
+                errors.append(f"jobs[{idx}].preferred_comfyui_workflow_source_ref must not be blank when present")
+            if preferred_workflow_source_ref is not None and job.get("preferred_comfyui_workflow_source_ref") != preferred_workflow_source_ref:
+                errors.append(f"jobs[{idx}].preferred_comfyui_workflow_source_ref must match top-level preferred_comfyui_workflow_source_ref")
+            if job.get("preferred_comfyui_workflow_format") is not None and is_blank(job.get("preferred_comfyui_workflow_format")):
+                errors.append(f"jobs[{idx}].preferred_comfyui_workflow_format must not be blank when present")
+            if preferred_workflow_format is not None and job.get("preferred_comfyui_workflow_format") != preferred_workflow_format:
+                errors.append(f"jobs[{idx}].preferred_comfyui_workflow_format must match top-level preferred_comfyui_workflow_format")
+            for field_name in [
+                "preferred_comfyui_workflow_custom_node_dependencies",
+                "preferred_comfyui_workflow_import_blockers",
+            ]:
+                value = job.get(field_name)
+                if value is not None:
+                    if not isinstance(value, list) or not all(isinstance(item, str) and item.strip() for item in value):
+                        errors.append(f"jobs[{idx}].{field_name} must be a list of non-empty strings when present")
+                    elif isinstance(data.get(field_name), list) and value != data.get(field_name):
+                        errors.append(f"jobs[{idx}].{field_name} must match top-level {field_name}")
             for key in ["prompt", "negative_prompt", "aspect_ratio", "resolution", "output_path"]:
                 if is_blank(job.get(key)):
                     errors.append(f"jobs[{idx}].{key} must not be blank in final mode")
@@ -136,6 +281,29 @@ def validate(data: dict[str, Any], path: Path | None = None, mode: str = "final"
             if not isinstance(evidence, dict):
                 errors.append(f"jobs[{idx}].evidence must be an object")
                 continue
+            quality_gate = job.get("quality_gate")
+            if quality_gate is not None:
+                if not isinstance(quality_gate, dict):
+                    errors.append(f"jobs[{idx}].quality_gate must be an object when present")
+                elif quality_gate.get("requires_manual_review") is True:
+                    status = str(quality_gate.get("manual_review_status") or "").strip().lower()
+                    if status not in {"approved", "waived"}:
+                        errors.append(
+                            f"jobs[{idx}].quality_gate.manual_review_status must be approved or waived when manual review is required in final mode"
+                        )
+                    if status == "approved":
+                        if quality_gate.get("content_text_alignment_confirmed") is not True:
+                            errors.append(
+                                f"jobs[{idx}].quality_gate.content_text_alignment_confirmed must be true when approving manual review in final mode"
+                            )
+                        if is_blank(quality_gate.get("content_text_alignment_note")):
+                            errors.append(
+                                f"jobs[{idx}].quality_gate.content_text_alignment_note must not be blank when approving manual review in final mode"
+                            )
+                        if is_blank(quality_gate.get("content_text_alignment_checked_at")):
+                            errors.append(
+                                f"jobs[{idx}].quality_gate.content_text_alignment_checked_at must not be blank when approving manual review in final mode"
+                            )
             file_path = evidence.get("file_path") or job.get("output_path")
             resolved = resolve_path(manifest_path, file_path)
             if resolved is None:
@@ -156,9 +324,21 @@ def validate(data: dict[str, Any], path: Path | None = None, mode: str = "final"
                 if not isinstance(evidence.get("file_size_bytes"), int) or evidence.get("file_size_bytes") <= 0:
                     errors.append(f"jobs[{idx}].evidence.file_size_bytes must be a positive integer")
 
+    normalized_requirements: dict[str, set[str]] = {}
+    if isinstance(shot_frame_requirements, dict):
+        for shot_id, roles in shot_frame_requirements.items():
+            if isinstance(roles, list):
+                normalized_requirements[str(shot_id)] = {str(role).strip() for role in roles if str(role).strip()}
+
     for shot_id, roles in by_shot.items():
-        if roles != {"start", "end"}:
+        required_roles = normalized_requirements.get(shot_id, {"start", "end"})
+        if not {"start", "end"}.issubset(roles):
             errors.append(f"shot {shot_id} must have both start and end images")
+            continue
+        if not required_roles.issubset(roles):
+            errors.append(
+                f"shot {shot_id} is missing required frame roles: {', '.join(sorted(required_roles.difference(roles)))}"
+            )
 
     summary = data.get("summary")
     if isinstance(summary, dict):
@@ -168,9 +348,21 @@ def validate(data: dict[str, Any], path: Path | None = None, mode: str = "final"
             errors.append("summary.generated_image_count must equal count of existing non-empty image files")
     self_check = data.get("self_check")
     if isinstance(self_check, dict):
-        for key in ["covers_all_keyframe_prompts", "has_start_and_end_for_each_shot", "all_required_images_exist", "ready_for_video_clip_generation"]:
+        for key in [
+            "covers_all_keyframe_prompts",
+            "has_start_and_end_for_each_shot",
+            "all_required_images_exist",
+            "manual_review_cleared",
+            "ready_for_video_clip_generation",
+        ]:
             if self_check.get(key) is not True:
                 errors.append(f"self_check.{key} must be true in final mode")
+    quality_review = data.get("quality_review")
+    if mode == "final":
+        if not isinstance(quality_review, dict):
+            errors.append("quality_review must be an object in final mode")
+        elif quality_review.get("manual_review_cleared") is not True:
+            errors.append("quality_review.manual_review_cleared must be true in final mode")
     quality_signals = data.get("quality_signals")
     if mode == "final":
         if not isinstance(quality_signals, dict):

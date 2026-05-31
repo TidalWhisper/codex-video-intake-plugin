@@ -54,6 +54,12 @@ def validate(data: dict[str, Any], mode: str = "final") -> tuple[bool, list[str]
         errors.append("characters must be a list")
     if not isinstance(data.get("reference_image_required"), bool):
         errors.append("reference_image_required must be a boolean")
+    if data.get("reference_image_plan") is not None and not isinstance(data.get("reference_image_plan"), dict):
+        errors.append("reference_image_plan must be an object when present")
+    if data.get("reference_image_status") is not None and not isinstance(data.get("reference_image_status"), dict):
+        errors.append("reference_image_status must be an object when present")
+    if data.get("stage05_execution_readiness") is not None and not isinstance(data.get("stage05_execution_readiness"), dict):
+        errors.append("stage05_execution_readiness must be an object when present")
     if not isinstance(data.get("self_check"), dict):
         errors.append("self_check must be an object")
 
@@ -108,6 +114,25 @@ def validate(data: dict[str, Any], mode: str = "final") -> tuple[bool, list[str]
         for key in ["matches_locked_brief", "matches_script", "matches_storyboard", "ready_for_keyframe_stage"]:
             if self_check.get(key) is not True:
                 errors.append(f"self_check.{key} must be true in final mode")
+        for key in ["reference_images_planned", "reference_images_ready", "safe_for_character_locked_image_generation"]:
+            value = self_check.get(key)
+            if value is not None and not isinstance(value, bool):
+                errors.append(f"self_check.{key} must be a boolean when present")
+    reference_status = data.get("reference_image_status")
+    if isinstance(reference_status, dict):
+        for key in ["required", "all_present"]:
+            if key in reference_status and not isinstance(reference_status.get(key), bool):
+                errors.append(f"reference_image_status.{key} must be a boolean when present")
+        for key in ["target_paths", "existing_paths", "missing_paths", "items"]:
+            if key in reference_status and not isinstance(reference_status.get(key), list):
+                errors.append(f"reference_image_status.{key} must be a list when present")
+    stage05_execution_readiness = data.get("stage05_execution_readiness")
+    if isinstance(stage05_execution_readiness, dict):
+        if "safe_to_auto_generate" in stage05_execution_readiness and not isinstance(stage05_execution_readiness.get("safe_to_auto_generate"), bool):
+            errors.append("stage05_execution_readiness.safe_to_auto_generate must be a boolean when present")
+        for key in ["blocker_reasons", "missing_reference_images"]:
+            if key in stage05_execution_readiness and not isinstance(stage05_execution_readiness.get(key), list):
+                errors.append(f"stage05_execution_readiness.{key} must be a list when present")
     return not errors, errors, warnings
 
 

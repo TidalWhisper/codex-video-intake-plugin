@@ -15,8 +15,10 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "scripts"))
+sys.path.insert(0, str(ROOT / "scripts" / "providers"))
 from pipeline_blueprints import next_stage_after  # noqa: E402
 from pipeline_core.project_state import update_project_manifest_for_stage  # noqa: E402
+from stage05_image_utils import update_manifest_state  # noqa: E402
 
 
 def png_bytes(width: int, height: int, color: tuple[int, int, int]) -> bytes:
@@ -67,19 +69,9 @@ def main() -> int:
         "failed_image_count": expected - generated,
         "shot_count": len({j.get("shot_id") for j in data.get("jobs") or [] if isinstance(j, dict) and j.get("shot_id")})
     })
-    data.setdefault("self_check", {})
-    all_generated = generated == expected and expected > 0
-    data["self_check"].update({
-        "covers_all_keyframe_prompts": True,
-        "has_start_and_end_for_each_shot": True,
-        "all_required_images_exist": all_generated,
-        "ready_for_video_clip_generation": all_generated,
-    })
-    data["status"] = "generated" if all_generated else ("in_progress" if generated > 0 else "draft")
-    data["allowed_next_stage"] = next_stage_after("STAGE_05_KEYFRAME_IMAGES", routing, "STAGE_06_VIDEO_CLIPS") if all_generated else None
-    data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    update_manifest_state(data, path)
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    if all_generated:
+    if data.get("self_check", {}).get("ready_for_video_clip_generation") is True:
         update_project_manifest_for_stage(
             path,
             current_stage="STAGE_05_KEYFRAME_IMAGES_CONFIRMED",

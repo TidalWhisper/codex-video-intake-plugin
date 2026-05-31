@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "scripts"))
 from pipeline_core.pipeline_blueprints import build_stage04_keyframe_prompts  # noqa: E402
 from pipeline_core.project_state import load_json_file, update_project_manifest_for_stage  # noqa: E402
+from pipeline_core.reference_image_readiness import build_stage05_execution_readiness  # noqa: E402
 from pipeline_core.requirement_compiler import compile_requirements, requested_output_allows_stage  # noqa: E402
 
 
@@ -37,7 +38,13 @@ def write_stage04_companions(out_path: Path, template: dict) -> None:
             continue
         prompt_lines.extend([
             f"## {shot.get('shot_id')}",
+            f"- 镜头意图：{shot.get('intent_summary') or '未提供'}",
             f"- 场景摘要：{shot.get('scene_summary')}",
+            f"- 地点：{(shot.get('story_anchor_bundle') or {}).get('location') or '未指定'}",
+            f"- 天气：{(shot.get('story_anchor_bundle') or {}).get('weather') or '未指定'}",
+            f"- 关键道具：{(shot.get('story_anchor_bundle') or {}).get('key_prop') or '无'}",
+            f"- 情绪变化：{(shot.get('story_anchor_bundle') or {}).get('emotion') or '未指定'}",
+            f"- 构图重点：{(shot.get('story_anchor_bundle') or {}).get('composition_focus') or '未指定'}",
             f"- 起始关键帧：{shot.get('start_keyframe_prompt')}",
             f"- 结束关键帧：{shot.get('end_keyframe_prompt')}",
             f"- 动作提示：{shot.get('motion_prompt')}",
@@ -66,7 +73,14 @@ def write_stage04_companions(out_path: Path, template: dict) -> None:
         f"- 过渡提示词数量：{len(transitions)}",
         "- 是否覆盖 storyboard 全部镜头：是",
         "- 是否保留角色一致性锚点：是",
-        "- 下一步：待用户确认后进入 Stage 05。",
+        f"- 角色参考图就绪：{'是' if ((template.get('reference_image_status') or {}).get('all_present')) else '否'}",
+        f"- 是否可安全自动进入 Stage 05：{'是' if ((template.get('stage05_execution_readiness') or {}).get('safe_to_auto_generate')) else '否'}",
+        (
+            "- 下一步：先补齐这些角色参考图，再运行 Stage 05 自动生图："
+            + "、".join(str(path_text) for path_text in ((template.get("stage05_execution_readiness") or {}).get("missing_reference_images") or []))
+        )
+        if ((template.get("stage05_execution_readiness") or {}).get("missing_reference_images"))
+        else "- 下一步：待用户确认后进入 Stage 05。"
     ]
     write_text(out_path.parent / "keyframe_prompts.md", "\n".join(prompt_lines))
     (out_path.parent / "motion_prompts.json").write_text(json.dumps({"project_id": template.get("project_id"), "records": motion_records}, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -113,6 +127,27 @@ def main(argv: list[str]) -> int:
     template["source_storyboard"] = str(storyboard_path).replace("\\", "/")
     template["source_character_bible"] = str(character_path).replace("\\", "/")
     template["created_at"] = datetime.now(timezone.utc).isoformat()
+    reference_image_status = character_bible.get("reference_image_status") if isinstance(character_bible.get("reference_image_status"), dict) else {}
+    stage05_execution_readiness = build_stage05_execution_readiness(
+        continuity_mode=str((template.get("compiled_requirements") or {}).get("continuity_mode") or ""),
+        reference_image_required=bool(character_bible.get("reference_image_required")),
+        reference_image_status=reference_image_status,
+    )
+    template["reference_image_status"] = reference_image_status
+    template["stage05_execution_readiness"] = stage05_execution_readiness
+    self_check = template.get("self_check") if isinstance(template.get("self_check"), dict) else {}
+    self_check["character_reference_images_ready"] = bool(reference_image_status.get("all_present"))
+    self_check["safe_for_auto_image_generation"] = bool(stage05_execution_readiness.get("safe_to_auto_generate"))
+    notes = self_check.get("notes") if isinstance(self_check.get("notes"), list) else []
+    missing_reference_images = stage05_execution_readiness.get("missing_reference_images") if isinstance(stage05_execution_readiness.get("missing_reference_images"), list) else []
+    if missing_reference_images:
+        notes = [
+            *notes,
+            "Stage 05 automatic generation is not safe yet because character reference images are still missing: "
+            + ", ".join(str(path_text) for path_text in missing_reference_images),
+        ]
+    self_check["notes"] = notes
+    template["self_check"] = self_check
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(template, ensure_ascii=False, indent=2), encoding="utf-8")

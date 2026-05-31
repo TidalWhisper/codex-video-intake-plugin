@@ -401,7 +401,7 @@ def test_provider_backed_stage05_to_stage09_e2e(tmp_path: Path, monkeypatch) -> 
         subfolder="i2v",
         media_slot="videos",
         output_root=video_output_root,
-        payload=b"\x00\x00\x00\x18ftypmp42VIDEOCLIP",
+        payload=b"\x00\x00\x00\x18ftypmp42VIDEOCLIP" + (b"0" * 512),
     )
     try:
         video_config = _write_comfy_config(tmp_path, base_url=f"http://127.0.0.1:{video_server.server_port}", output_root=video_output_root)
@@ -520,7 +520,13 @@ def test_provider_backed_stage05_to_stage09_e2e(tmp_path: Path, monkeypatch) -> 
         str(assembly_manifest_json),
         str(qa_manifest_json),
     ]) == 0
-    assert package_delivery.main(["package_delivery.py", str(qa_manifest_json)]) == 0
+    assert package_delivery.main([
+        "package_delivery.py",
+        str(qa_manifest_json),
+        "--content-aligned",
+        "--content-alignment-note",
+        "End-to-end QA confirmed the delivered rough cut matches the text description and storyboard.",
+    ]) == 0
 
     qa_data = json.loads(qa_manifest_json.read_text(encoding="utf-8"))
     ok, errors, warnings = validate_qa_manifest.validate(qa_data, qa_manifest_json, mode="final")

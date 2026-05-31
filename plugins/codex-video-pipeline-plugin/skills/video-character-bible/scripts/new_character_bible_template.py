@@ -11,6 +11,11 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "scripts"))
 from pipeline_core.pipeline_blueprints import build_stage03_character_bible  # noqa: E402
 from pipeline_core.project_state import load_json_file, update_project_manifest_for_stage  # noqa: E402
+from pipeline_core.reference_image_readiness import (  # noqa: E402
+    build_reference_image_plan,
+    build_reference_image_status,
+    build_stage05_execution_readiness,
+)
 from pipeline_core.requirement_compiler import compile_requirements, requested_output_allows_stage  # noqa: E402
 
 
@@ -27,10 +32,16 @@ def write_text(path: Path, content: str) -> None:
     path.write_text(content.rstrip() + "\n", encoding="utf-8")
 
 
-def write_stage03_companions(out_path: Path, template: dict) -> None:
+def write_stage03_companions(
+    out_path: Path,
+    template: dict,
+    *,
+    reference_plan: dict,
+    reference_status: dict,
+    stage05_execution_readiness: dict,
+) -> None:
     characters = template.get("characters") if isinstance(template.get("characters"), list) else []
     bible_lines = ["# Stage 03 Character Bible", ""]
-    reference_plan = {"project_id": template.get("project_id"), "reference_images": []}
     for character in characters:
         if not isinstance(character, dict):
             continue
@@ -46,19 +57,19 @@ def write_stage03_companions(out_path: Path, template: dict) -> None:
             f"- 声音：{(character.get('voice_profile') or {}).get('suggested_voice')}",
             "",
         ])
-        reference_plan["reference_images"].append({
-            "character_id": character.get("character_id"),
-            "name": character.get("name"),
-            "target_path": f"03_characters/reference_images/{character.get('character_id')}_primary.png",
-            "visual_consistency_prompt": character.get("visual_consistency_prompt"),
-            "negative_consistency_prompt": character.get("negative_consistency_prompt"),
-        })
+    missing_paths = reference_status.get("missing_paths") if isinstance(reference_status.get("missing_paths"), list) else []
     review_lines = [
         "# Stage 03 Character Review",
         "",
         "- 是否匹配 brief/script/storyboard：是",
+        f"- 角色参考图计划：{'已生成' if reference_plan.get('reference_images') else '未生成'}",
+        f"- 角色参考图就绪：{'是' if reference_status.get('all_present') else '否'}",
         "- 是否准备好进入 Stage 04：是",
-        "- 下一步：待用户确认后进入 Stage 04。",
+        f"- 是否准备好安全自动进入 Stage 05：{'是' if stage05_execution_readiness.get('safe_to_auto_generate') else '否'}",
+        (
+            "- 下一步：先补齐这些角色参考图，再进入安全自动 Stage 05："
+            + "、".join(str(path_text) for path_text in missing_paths)
+        ) if missing_paths else "- 下一步：待用户确认后进入 Stage 04。",
     ]
     write_text(out_path.parent / "character_bible.md", "\n".join(bible_lines))
     write_text(out_path.parent / "character_review.md", "\n".join(review_lines))
@@ -99,9 +110,40 @@ def main(argv: list[str]) -> int:
     template["source_storyboard"] = str(storyboard_path).replace("\\", "/")
     template["created_at"] = datetime.now(timezone.utc).isoformat()
 
+    characters = template.get("characters") if isinstance(template.get("characters"), list) else []
+    reference_plan = build_reference_image_plan(str(template.get("project_id") or ""), characters)
+    reference_status = build_reference_image_status(out_path.parent, reference_plan)
+    stage05_execution_readiness = build_stage05_execution_readiness(
+        continuity_mode=str((template.get("compiled_requirements") or {}).get("continuity_mode") or ""),
+        reference_image_required=bool(template.get("reference_image_required")),
+        reference_image_status=reference_status,
+    )
+    template["reference_image_plan"] = reference_plan
+    template["reference_image_status"] = reference_status
+    template["stage05_execution_readiness"] = stage05_execution_readiness
+    self_check = template.get("self_check") if isinstance(template.get("self_check"), dict) else {}
+    self_check["reference_images_planned"] = bool(reference_plan.get("reference_images"))
+    self_check["reference_images_ready"] = bool(reference_status.get("all_present"))
+    self_check["safe_for_character_locked_image_generation"] = bool(stage05_execution_readiness.get("safe_to_auto_generate"))
+    notes = self_check.get("notes") if isinstance(self_check.get("notes"), list) else []
+    missing_paths = reference_status.get("missing_paths") if isinstance(reference_status.get("missing_paths"), list) else []
+    if missing_paths:
+        notes = [
+            *notes,
+            "Reference images still missing for character-locked continuity: " + ", ".join(str(path_text) for path_text in missing_paths),
+        ]
+    self_check["notes"] = notes
+    template["self_check"] = self_check
+
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(template, ensure_ascii=False, indent=2), encoding="utf-8")
-    write_stage03_companions(out_path, template)
+    write_stage03_companions(
+        out_path,
+        template,
+        reference_plan=reference_plan,
+        reference_status=reference_status,
+        stage05_execution_readiness=stage05_execution_readiness,
+    )
     update_project_manifest_for_stage(
         out_path,
         current_stage="STAGE_03_CHARACTER_BIBLE_GENERATION",

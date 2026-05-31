@@ -118,10 +118,9 @@ def _continuity_mode(shape: str, characters_required: Any) -> str:
 
 
 def _stage05_provider_priority(shape: str, visual_hint: str) -> list[str]:
-    if visual_hint in {"anime", "guofeng", "stylized"}:
-        return ["comfyui_txt2img", "openai_gpt_image2", "manual"]
-    if shape in {"brand_promo", "factual_explainer"}:
-        return ["openai_gpt_image2", "comfyui_txt2img", "manual"]
+    # Stage 05 provider routing is availability-first, not style-first:
+    # use GPT Image 2 whenever it is available, otherwise fall back to local
+    # ComfyUI, and finally manual placement as the last recovery path.
     return ["openai_gpt_image2", "comfyui_txt2img", "manual"]
 
 

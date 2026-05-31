@@ -36,12 +36,61 @@
     }
   ],
   "reference_image_required": true,
+  "reference_image_plan": {
+    "project_id": "video_20260528_103000_sunset_beach_girl",
+    "required": true,
+    "reference_images": [
+      {
+        "character_id": "CHAR_001",
+        "name": "海边女孩",
+        "target_path": "03_characters/reference_images/CHAR_001_primary.png",
+        "visual_consistency_prompt": "a young woman in her early 20s, walking alone on a sunset beach, soft melancholic expression, long black hair, light summer dress, cinematic warm sunset lighting",
+        "negative_consistency_prompt": "different face, different hairstyle, heavy makeup, old age, childlike face, inconsistent clothing, extra people"
+      }
+    ]
+  },
+  "reference_image_status": {
+    "required": true,
+    "target_paths": [
+      "03_characters/reference_images/CHAR_001_primary.png"
+    ],
+    "existing_paths": [],
+    "missing_paths": [
+      "03_characters/reference_images/CHAR_001_primary.png"
+    ],
+    "all_present": false,
+    "item_count": 1,
+    "missing_count": 1,
+    "items": [
+      {
+        "character_id": "CHAR_001",
+        "target_path": "03_characters/reference_images/CHAR_001_primary.png",
+        "file_exists": false
+      }
+    ]
+  },
+  "stage05_execution_readiness": {
+    "continuity_mode": "character_locked",
+    "reference_image_required": true,
+    "safe_to_auto_generate": false,
+    "blocker_reasons": [
+      "missing_character_reference_images"
+    ],
+    "missing_reference_images": [
+      "03_characters/reference_images/CHAR_001_primary.png"
+    ]
+  },
   "self_check": {
     "matches_locked_brief": true,
     "matches_script": true,
     "matches_storyboard": true,
     "ready_for_keyframe_stage": true,
-    "notes": []
+    "reference_images_planned": true,
+    "reference_images_ready": false,
+    "safe_for_character_locked_image_generation": false,
+    "notes": [
+      "Reference images still missing for character-locked continuity: 03_characters/reference_images/CHAR_001_primary.png"
+    ]
   },
   "allowed_next_stage": null
 }

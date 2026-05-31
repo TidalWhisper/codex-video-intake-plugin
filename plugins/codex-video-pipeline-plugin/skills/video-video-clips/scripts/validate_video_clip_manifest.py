@@ -72,8 +72,8 @@ def validate(data: dict[str, Any], path: Path | None = None, mode: str = "final"
             errors.append(f"missing top-level key: {key}")
     if data.get("stage") != "STAGE_06_VIDEO_CLIPS":
         errors.append("stage must be STAGE_06_VIDEO_CLIPS")
-    if data.get("status") not in {"draft", "in_progress", "generated", "confirmed"}:
-        errors.append("status must be draft, in_progress, generated, or confirmed")
+    if data.get("status") not in {"draft", "in_progress", "generated", "confirmed", "blocked"}:
+        errors.append("status must be draft, in_progress, generated, confirmed, or blocked")
     if is_blank(data.get("project_id")):
         errors.append("project_id must not be blank")
     if not isinstance(data.get("jobs"), list):
@@ -181,6 +181,8 @@ def validate(data: dict[str, Any], path: Path | None = None, mode: str = "final"
             for key in ["intent_route_matches_strategy", "continuity_sources_present", "performance_prompts_present", "quality_targets_defined"]:
                 if quality_signals.get(key) is not True:
                     errors.append(f"quality_signals.{key} must be true in final mode")
+            if quality_signals.get("workflow_capability_safe_for_all_jobs") is not True:
+                errors.append("quality_signals.workflow_capability_safe_for_all_jobs must be true in final mode")
     if mode == "draft" and jobs:
         warnings.append("draft video clip manifest contains planned jobs; final mode still requires generated clip files")
     return not errors, errors, warnings
