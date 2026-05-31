@@ -335,6 +335,16 @@ def check_openai_image_provider(
     except Exception as exc:  # noqa: BLE001 - keep import surface light
         if exc.__class__.__name__ == "OpenAIImageError":
             status_code = getattr(exc, "status_code", None)
+            if status_code in {404, 405, 501}:
+                result.update({
+                    "ready": True,
+                    "status": "ready",
+                    "auth_checked": True,
+                    "http_status": status_code,
+                    "probe_kind": "unsupported_model_probe_fallback",
+                    "error": str(exc),
+                })
+                return result
             status = "invalid_api_key" if status_code in {401, 403} else ("model_probe_failed" if status_code else "connection_error")
             result.update({
                 "ready": False,

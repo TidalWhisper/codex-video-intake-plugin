@@ -396,8 +396,8 @@ def test_update_project_manifest_sets_pipeline_flags(tmp_path: Path, monkeypatch
     assert data["character_bible_confirmed"] is False
     assert data["keyframe_prompts_confirmed"] is True
     assert data["keyframe_images_confirmed"] is False
-    assert data["video_clips_confirmed"] is True
-    assert data["audio_confirmed"] is True
+    assert data["video_clips_confirmed"] is False
+    assert data["audio_confirmed"] is False
     assert data["assembly_confirmed"] is False
 
 
@@ -621,9 +621,22 @@ def test_rainy_store_story_anchors_survive_stage06_to_stage08_and_tiny_rough_cut
         output_path = Path(job["output_path"])
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_bytes(b"png")
-        job["status"] = "succeeded"
-    image_manifest["status"] = "confirmed"
     image_manifest_json.write_text(json.dumps(image_manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    old_argv = sys.argv[:]
+    try:
+        sys.argv = ["sync_keyframe_image_manifest.py", str(image_manifest_json), "--provider", "openai_image"]
+        assert sync_keyframe_image_manifest.main() == 0
+        sys.argv = [
+            "approve_stage05_review_queue.py",
+            str(image_manifest_json),
+            "--all-pending",
+            "--content-aligned",
+            "--content-alignment-note",
+            "Rainy store creator sample approved after Stage 05 review workbench inspection.",
+        ]
+        assert approve_stage05_review_queue.main() == 0
+    finally:
+        sys.argv = old_argv
 
     clip_manifest_json = video_dir / "video_clip_manifest.json"
     assert new_video_clip_jobs.main([
@@ -723,12 +736,159 @@ def test_rainy_store_story_anchors_survive_stage06_to_stage08_and_tiny_rough_cut
     finally:
         sys.argv = old_argv
 
-    synced_assembly = json.loads(assembly_manifest_json.read_text(encoding="utf-8"))
-    assert synced_assembly["self_check"]["ready_for_qa_stage"] is False
-    assert synced_assembly["allowed_next_stage"] is None
+        synced_assembly = json.loads(assembly_manifest_json.read_text(encoding="utf-8"))
+        assert synced_assembly["self_check"]["ready_for_qa_stage"] is False
+        assert synced_assembly["allowed_next_stage"] is None
+        project_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        assert project_manifest["current_stage"] == "STAGE_08_ASSEMBLY"
+        assert project_manifest["keyframe_images_confirmed"] is True
+        assert project_manifest["video_clips_confirmed"] is True
+        assert project_manifest["audio_confirmed"] is True
+        assert project_manifest["assembly_confirmed"] is False
+
+def test_stage06_stays_draft_only_when_stage05_manual_review_not_cleared(tmp_path: Path) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260531_stage06_draft_only_gate"
+    intake_dir = project_dir / "00_intake"
+    storyboard_dir = project_dir / "02_storyboard"
+    keyframe_dir = project_dir / "04_keyframes"
+    images_dir = project_dir / "05_images"
+    video_dir = project_dir / "06_video_clips"
+    for path in [intake_dir, storyboard_dir, keyframe_dir, images_dir, video_dir]:
+        path.mkdir(parents=True, exist_ok=True)
+
+    manifest_path = project_dir / "project_manifest.json"
+    manifest_path.write_text(json.dumps({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "current_stage": "STAGE_05_KEYFRAME_IMAGES",
+        "status": "active",
+        "brief_locked": True,
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    brief = load_example_brief()
+    brief.update({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "status": "locked",
+        "confirmed_by_user": True,
+        "allowed_next_stage": "STAGE_01_SCRIPT_GENERATION",
+        "locked_at": "2026-05-31T12:00:00+08:00",
+    })
+    brief["user_answers"]["final_output"] = "生成视频片段素材包"
+    brief["normalized"]["final_output"] = "生成视频片段素材包"
+    locked_brief = intake_dir / "project_brief.locked.json"
+    locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    storyboard_json = storyboard_dir / "storyboard.json"
+    storyboard_json.write_text(json.dumps({
+        "stage": "STAGE_02_STORYBOARD_GENERATION",
+        "project_id": project_dir.name,
+        "shots": [{
+            "shot_id": "S001",
+            "duration_sec": 4,
+            "scene": "雨夜便利店门口",
+            "location": "便利店门口",
+            "weather": "雨夜",
+            "key_prop": "最后一把伞",
+            "action": "女孩把最后一把伞递给陌生人",
+            "emotion": "克制善意",
+        }],
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    prompts_json = keyframe_dir / "keyframe_prompts.json"
+    prompts_json.write_text(json.dumps({
+        "stage": "STAGE_04_KEYFRAME_PROMPTS",
+        "project_id": project_dir.name,
+        "shot_prompts": [{
+            "shot_id": "S001",
+            "duration_sec": 4,
+            "motion_prompt": "完成一次清晰的递伞动作",
+            "negative_prompt": "多手，重复道具",
+        }],
+        "global_negative_prompt": "多手，重复道具",
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    start_image = images_dir / "S001_start.png"
+    end_image = images_dir / "S001_end.png"
+    start_image.write_bytes(b"png-start")
+    end_image.write_bytes(b"png-end")
+    image_manifest_json = images_dir / "keyframe_image_manifest.json"
+    image_manifest_json.write_text(json.dumps({
+        "stage": "STAGE_05_KEYFRAME_IMAGES",
+        "status": "generated",
+        "project_id": project_dir.name,
+        "image_provider_strategy": {"primary": "openai_image", "fallback": ["comfyui", "manual"]},
+        "jobs": [
+            {
+                "image_id": "IMG_S001_START",
+                "shot_id": "S001",
+                "frame_role": "start",
+                "output_path": str(start_image).replace("\\", "/"),
+                "provider": "openai_image",
+                "evidence": {"file_path": str(start_image).replace("\\", "/"), "file_exists": True, "file_size_bytes": start_image.stat().st_size},
+            },
+            {
+                "image_id": "IMG_S001_END",
+                "shot_id": "S001",
+                "frame_role": "end",
+                "output_path": str(end_image).replace("\\", "/"),
+                "provider": "openai_image",
+                "evidence": {"file_path": str(end_image).replace("\\", "/"), "file_exists": True, "file_size_bytes": end_image.stat().st_size},
+            },
+        ],
+        "quality_review": {
+            "blocking_image_ids": ["IMG_S001_START"],
+            "next_review_image_ids": ["IMG_S001_START"],
+            "manual_review_cleared": False,
+        },
+        "self_check": {
+            "all_required_images_exist": True,
+            "manual_review_cleared": False,
+            "ready_for_video_clip_generation": False,
+        },
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    clip_manifest_json = video_dir / "video_clip_manifest.json"
+    assert new_video_clip_jobs.main([
+        "new_video_clip_jobs.py",
+        str(locked_brief),
+        str(storyboard_json),
+        str(prompts_json),
+        str(image_manifest_json),
+        str(clip_manifest_json),
+    ]) == 0
+
+    planned = json.loads(clip_manifest_json.read_text(encoding="utf-8"))
+    assert planned["planning_overrides"]["stage05_gate_ready_for_stage06"] is False
+    assert planned["formal_promotion_status"] == "draft_only"
+    assert any("Stage 05 review is not cleared yet" in item for item in planned["self_check"]["notes"])
+
+    for job in planned["jobs"]:
+        output_path = Path(job["output_path"])
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"\x00\x00\x00\x18ftypmp42REALCLIP" + (b"0" * 512))
+        job["status"] = "succeeded"
+        job["provider"] = "comfyui_ltx_i2v"
+    clip_manifest_json.write_text(json.dumps(planned, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    old_argv = sys.argv[:]
+    try:
+        sys.argv = ["sync_video_clip_manifest.py", str(clip_manifest_json)]
+        assert sync_video_clip_manifest.main() == 0
+    finally:
+        sys.argv = old_argv
+
+    synced = json.loads(clip_manifest_json.read_text(encoding="utf-8"))
+    assert synced["self_check"]["all_required_clips_exist"] is True
+    assert synced["self_check"]["ready_for_audio_stage"] is False
+    assert synced["self_check"]["formal_progression_ready"] is False
+    assert synced["allowed_next_stage"] is None
+    assert synced["formal_promotion_status"] == "draft_only"
+    assert any("formal_progression_blocker:" in item for item in synced["self_check"]["notes"])
+
     project_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    assert project_manifest["current_stage"] == "STAGE_08_ASSEMBLY"
-    assert project_manifest["assembly_confirmed"] is False
+    assert project_manifest["current_stage"] == "STAGE_05_KEYFRAME_IMAGES"
+    assert project_manifest["video_clips_confirmed"] is False
 
 
 def test_lock_project_brief_derives_routing_and_updates_manifest(tmp_path: Path) -> None:

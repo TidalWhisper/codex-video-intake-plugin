@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 from pipeline_blueprints import next_stage_after  # noqa: E402
 from pipeline_core.media_evidence import clip_output_ready  # noqa: E402
+from pipeline_core.project_state import annotate_evidence_origin  # noqa: E402
 
 KNOWN_PLUGIN_ROOT_CHILDREN = {
     "video_projects",
@@ -269,6 +270,9 @@ def append_error(job: dict[str, Any], provider_name: str, message: str) -> None:
 def update_manifest_state(data: dict[str, Any], manifest_path: Path) -> None:
     jobs = data.get("jobs") if isinstance(data.get("jobs"), list) else []
     routing = data.get("routing") if isinstance(data.get("routing"), dict) else {"legacy_mode": True}
+    strategy = data.get("video_provider_strategy") if isinstance(data.get("video_provider_strategy"), dict) else {}
+    primary_provider = str(strategy.get("primary") or "").strip() or None
+    fallback_providers = [str(item).strip() for item in (strategy.get("fallback") or []) if str(item).strip()]
     generated = 0
     failed = 0
     blocked = 0
@@ -276,6 +280,12 @@ def update_manifest_state(data: dict[str, Any], manifest_path: Path) -> None:
     source_ok = 0
     shots: set[str] = set()
     total_duration = 0.0
+    evidence_origin_summary = {
+        "provider_output": 0,
+        "fallback_output": 0,
+        "manual_import": 0,
+        "placeholder_or_incomplete": 0,
+    }
     for job in jobs:
         if not isinstance(job, dict):
             continue
@@ -299,6 +309,16 @@ def update_manifest_state(data: dict[str, Any], manifest_path: Path) -> None:
         job["evidence"]["file_path"] = str(resolved).replace("\\", "/")
         job["evidence"]["file_exists"] = raw_exists
         job["evidence"]["file_size_bytes"] = resolved.stat().st_size if raw_exists else 0
+        origin = annotate_evidence_origin(
+            job["evidence"],
+            provider=job.get("provider"),
+            file_exists=raw_exists,
+            file_size_bytes=job["evidence"]["file_size_bytes"],
+            primary_provider=primary_provider,
+            fallback_providers=fallback_providers,
+            production_ready=exists,
+        )
+        evidence_origin_summary[origin] += 1
         if exists:
             generated += 1
         elif str(job.get("status") or "").strip().lower() == "blocked":
@@ -321,6 +341,7 @@ def update_manifest_state(data: dict[str, Any], manifest_path: Path) -> None:
         "failed_clip_count": failed if active > 0 else (failed if failed else unresolved_nonblocked),
         "pending_clip_count": active,
         "total_duration_sec": total_duration,
+        "evidence_origin_summary": evidence_origin_summary,
     })
     data.setdefault("self_check", {})
     data["self_check"].update({

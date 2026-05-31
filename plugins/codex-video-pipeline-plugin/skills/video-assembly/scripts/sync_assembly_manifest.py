@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "scripts"))
 from pipeline_blueprints import next_stage_after  # noqa: E402
 from pipeline_core.media_evidence import MIN_PRODUCTION_VIDEO_BYTES, assembly_output_ready, clip_output_ready  # noqa: E402
-from pipeline_core.project_state import update_project_manifest_for_stage  # noqa: E402
+from pipeline_core.project_state import annotate_evidence_origin, update_project_manifest_for_stage  # noqa: E402
 from pipeline_core.story_continuity import has_template_leak, pick_story_anchors, shot_anchor_bundle  # noqa: E402
 
 
@@ -244,6 +244,15 @@ def main() -> int:
         "created_at": datetime.now(timezone.utc).isoformat() if exists else None
     })
     production_ready = assembly_output_ready(data, out, min_bytes=MIN_PRODUCTION_VIDEO_BYTES)
+    origin = annotate_evidence_origin(
+        data["evidence"],
+        provider=data.get("assembly_provider") or "ffmpeg",
+        file_exists=bool(exists),
+        file_size_bytes=size,
+        primary_provider="ffmpeg",
+        fallback_providers=["manual"],
+        production_ready=production_ready,
+    )
     fallback_stage, fallback_flags, blockers = upstream_blocking_state(path, data)
     data.setdefault("self_check", {})
     data["self_check"].update({
@@ -260,6 +269,23 @@ def main() -> int:
         if isinstance(note, str) and not note.startswith("upstream_blocker:")
     ]
     data["self_check"]["notes"].extend([f"upstream_blocker:{item}" for item in blockers])
+    data.setdefault("summary", {})
+    timeline = data.get("timeline") if isinstance(data.get("timeline"), list) else []
+    fallback_segments = sum(
+        1
+        for item in timeline
+        if isinstance(item, dict)
+        and isinstance(item.get("fallback_visual"), dict)
+        and not bool(item["fallback_visual"].get("source_clip_ready"))
+        and str(item["fallback_visual"].get("preferred_image_path") or "").strip()
+    )
+    data["summary"]["fallback_visual_segment_count"] = fallback_segments
+    data["summary"]["evidence_origin_summary"] = {
+        "provider_output": 1 if origin == "provider_output" else 0,
+        "fallback_output": 1 if origin == "fallback_output" else 0,
+        "manual_import": 1 if origin == "manual_import" else 0,
+        "placeholder_or_incomplete": 1 if origin == "placeholder_or_incomplete" else 0,
+    }
     if production_ready:
         data["status"] = "generated"
         data["allowed_next_stage"] = next_stage_after("STAGE_08_ASSEMBLY", routing, "STAGE_09_QA")

@@ -33,7 +33,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from pipeline_blueprints import next_stage_after  # noqa: E402
 from pipeline_core.media_evidence import MIN_PRODUCTION_VIDEO_BYTES, assembly_output_ready, clip_output_ready, provider_is_nonproduction  # noqa: E402
 from pipeline_core.requirement_compiler import compiled_requirements_from_context, requested_output_scope_guard_message  # noqa: E402
-from pipeline_core.project_state import update_project_manifest_for_stage  # noqa: E402
+from pipeline_core.project_state import annotate_evidence_origin, update_project_manifest_for_stage  # noqa: E402
 
 
 DEFAULT_OUTPUT_SPEC = {
@@ -601,6 +601,15 @@ def finalize_manifest(
             )
         ]
     production_ready = assembly_output_ready(data, out, min_bytes=MIN_PRODUCTION_VIDEO_BYTES)
+    origin = annotate_evidence_origin(
+        data["evidence"],
+        provider=provider,
+        file_exists=exists,
+        file_size_bytes=size,
+        primary_provider="ffmpeg",
+        fallback_providers=["manual"],
+        production_ready=production_ready,
+    )
     fallback_stage, fallback_flags, blockers = upstream_blocking_state(path, data)
     data.setdefault("self_check", {})
     data["self_check"].update({
@@ -621,6 +630,12 @@ def finalize_manifest(
         data["self_check"]["notes"].append(
             f"fallback_visual_segments:{int(data['summary']['fallback_visual_segment_count'])}"
         )
+    data["summary"]["evidence_origin_summary"] = {
+        "provider_output": 1 if origin == "provider_output" else 0,
+        "fallback_output": 1 if origin == "fallback_output" else 0,
+        "manual_import": 1 if origin == "manual_import" else 0,
+        "placeholder_or_incomplete": 1 if origin == "placeholder_or_incomplete" else 0,
+    }
     data["self_check"]["notes"] = dedupe_preserve_order(data["self_check"]["notes"])
     if production_ready:
         data["status"] = "generated"

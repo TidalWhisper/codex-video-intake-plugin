@@ -128,6 +128,11 @@ def realized_keyframe_path(image_manifest_path: Path, job: dict) -> str:
     return str(resolved).replace("\\", "/")
 
 
+def stage05_formal_progression_ready(image_manifest: dict) -> bool:
+    self_check = image_manifest.get("self_check") if isinstance(image_manifest.get("self_check"), dict) else {}
+    return bool(self_check.get("ready_for_video_clip_generation"))
+
+
 def request_record(job: dict, provider: str) -> dict:
     return {
         "request_id": f"REQ_{provider.upper()}_{job['clip_id']}",
@@ -248,6 +253,7 @@ def main(argv: list[str]) -> int:
         print("ERROR: keyframe image manifest stage must be STAGE_05_KEYFRAME_IMAGES", file=sys.stderr)
         return 1
     image_manifest_status = str(image_manifest.get("status") or "").strip()
+    stage05_ready_for_stage06 = stage05_formal_progression_ready(image_manifest)
     allowed_stage05_statuses = {"generated", "confirmed"}
     if allow_stage05_in_progress:
         allowed_stage05_statuses.add("in_progress")
@@ -368,6 +374,13 @@ def main(argv: list[str]) -> int:
         })
 
     blocked_count = sum(1 for j in jobs if j.get("status") == "blocked")
+    formal_progression_blocked = not stage05_ready_for_stage06
+    formal_progression_status = "draft_only" if formal_progression_blocked else "ready_for_formal_progression"
+    stage05_gate_note = (
+        "Stage 05 review is not cleared yet; Stage 06 stays in draft_only mode and must not formally advance to Stage 07."
+        if formal_progression_blocked
+        else ""
+    )
     manifest = {
         "schema_version": "0.7.0",
         "stage": "STAGE_06_VIDEO_CLIPS",
@@ -389,7 +402,10 @@ def main(argv: list[str]) -> int:
         "planning_overrides": {
             "allow_beyond_requested_scope": allow_beyond_scope,
             "allow_stage05_in_progress": allow_stage05_in_progress,
+            "stage05_gate_ready_for_stage06": stage05_ready_for_stage06,
+            "formal_progression_status": formal_progression_status,
         },
+        "formal_promotion_status": formal_progression_status,
         "jobs": jobs,
         "summary": {
             "shot_count": len({j["shot_id"] for j in jobs}),
@@ -411,12 +427,15 @@ def main(argv: list[str]) -> int:
             "has_source_start_and_end_keyframes_for_each_shot": False,
             "all_required_clips_exist": False,
             "ready_for_audio_stage": False,
+            "source_stage05_ready_for_video_clip_generation": stage05_ready_for_stage06,
+            "formal_progression_ready": False,
             "notes": [
                 *[
                     f"{j['clip_id']}: {' | '.join(j.get('blocking_reasons') or [])}"
                     for j in jobs
                     if j.get("blocking_reasons")
                 ],
+                *([stage05_gate_note] if stage05_gate_note else []),
                 *([
                     "Stage 06 planning was explicitly allowed while Stage 05 remains in_progress; treat this manifest as a planning refresh, not final readiness."
                 ] if allow_stage05_in_progress and image_manifest_status == "in_progress" else [])

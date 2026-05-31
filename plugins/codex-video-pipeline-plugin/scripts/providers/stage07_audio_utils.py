@@ -11,6 +11,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 from pipeline_blueprints import next_stage_after  # noqa: E402
+from pipeline_core.project_state import annotate_evidence_origin  # noqa: E402
 
 KNOWN_PLUGIN_ROOT_CHILDREN = {
     "video_projects",
@@ -136,10 +137,18 @@ def remove_error_messages(job: dict[str, Any], provider_name: str, startswith: t
 def update_manifest_state(data: dict[str, Any], manifest_path: Path) -> None:
     jobs = data.get("jobs") if isinstance(data.get("jobs"), list) else []
     routing = data.get("routing") if isinstance(data.get("routing"), dict) else {"legacy_mode": True}
+    voice_strategy = data.get("voice_provider_strategy") if isinstance(data.get("voice_provider_strategy"), dict) else {}
+    music_strategy = data.get("music_provider_strategy") if isinstance(data.get("music_provider_strategy"), dict) else {}
     generated_voice = generated_music = generated_total = 0
     voice_jobs = music_jobs = 0
     has_active = False
     has_terminal_non_success = False
+    evidence_origin_summary = {
+        "provider_output": 0,
+        "fallback_output": 0,
+        "manual_import": 0,
+        "placeholder_or_incomplete": 0,
+    }
     for job in jobs:
         if not isinstance(job, dict):
             continue
@@ -160,6 +169,17 @@ def update_manifest_state(data: dict[str, Any], manifest_path: Path) -> None:
         job["evidence"]["file_path"] = str(resolved).replace("\\", "/")
         job["evidence"]["file_exists"] = exists
         job["evidence"]["file_size_bytes"] = resolved.stat().st_size if exists else 0
+        provider_strategy = music_strategy if audio_type == "music" else voice_strategy
+        origin = annotate_evidence_origin(
+            job["evidence"],
+            provider=job.get("provider"),
+            file_exists=exists,
+            file_size_bytes=job["evidence"]["file_size_bytes"],
+            primary_provider=str(provider_strategy.get("primary") or "").strip() or None,
+            fallback_providers=[str(item).strip() for item in (provider_strategy.get("fallback") or []) if str(item).strip()],
+            production_ready=exists and job_status == "succeeded",
+        )
+        evidence_origin_summary[origin] += 1
         if exists and job_status == "succeeded":
             generated_total += 1
             if audio_type in {"voiceover", "dialogue"}:
@@ -176,6 +196,7 @@ def update_manifest_state(data: dict[str, Any], manifest_path: Path) -> None:
         "generated_music_count": generated_music,
         "required_audio_count": len(jobs),
         "generated_audio_count": generated_total,
+        "evidence_origin_summary": evidence_origin_summary,
     })
     data.setdefault("self_check", {})
     data["self_check"].update({

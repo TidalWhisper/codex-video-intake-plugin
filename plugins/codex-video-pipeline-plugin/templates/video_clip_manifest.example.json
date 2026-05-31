@@ -74,7 +74,8 @@
     "intent_route_matches_strategy": true,
     "continuity_sources_present": true,
     "performance_prompts_present": true,
-    "quality_targets_defined": true
+    "quality_targets_defined": true,
+    "workflow_capability_safe_for_all_jobs": true
   },
   "self_check": {
     "covers_all_storyboard_shots": true,

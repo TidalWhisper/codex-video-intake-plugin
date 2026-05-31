@@ -500,7 +500,7 @@ def test_provider_backed_stage05_to_stage09_e2e(tmp_path: Path, monkeypatch) -> 
     def fake_ffmpeg_run(cmd: list[str], text: bool, stdout: int, stderr: int) -> SimpleNamespace:
         output_path = Path(cmd[-1])
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_bytes(b"\x00\x00\x00\x18ftypmp42ROUGHCUT")
+        output_path.write_bytes(b"\x00\x00\x00\x18ftypmp42ROUGHCUT" + (b"1" * 160))
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
     monkeypatch.setattr(assemble_with_ffmpeg.shutil, "which", lambda name: "ffmpeg")

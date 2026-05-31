@@ -12,6 +12,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 from pipeline_blueprints import next_stage_after  # noqa: E402
+from pipeline_core.project_state import annotate_evidence_origin  # noqa: E402
 from pipeline_core.stage05_quality_gates import build_auto_repair_plan, build_creator_review_card, build_quality_gate, summarize_quality_review, UMBRELLA_HINTS  # noqa: E402
 
 KNOWN_PLUGIN_ROOT_CHILDREN = {
@@ -79,21 +80,48 @@ def resolve_path(base_json: Path, raw: Any) -> Path:
         return p
     if p.exists():
         return p.resolve()
-    special_roots: list[Path] = []
-    plugin_root = next(
-        (anchor.resolve() for anchor in [base_json.parent, *base_json.parents] if anchor.name == "codex-video-pipeline-plugin"),
-        None,
-    )
-    repo_root = plugin_root.parent.parent.resolve() if plugin_root and plugin_root.parent.name == "plugins" else None
+    base_abs = base_json if base_json.is_absolute() else (Path.cwd() / base_json).resolve()
+
+    def plugin_root_candidates() -> list[Path]:
+        candidates: list[Path] = []
+        seen: set[str] = set()
+
+        def add(path: Path) -> None:
+            resolved = path.resolve()
+            if resolved.name != "codex-video-pipeline-plugin":
+                return
+            key = str(resolved).lower()
+            if key not in seen:
+                candidates.append(resolved)
+                seen.add(key)
+
+        for anchor in [base_abs.parent, *base_abs.parents]:
+            add(anchor)
+        cwd = Path.cwd().resolve()
+        for anchor in [cwd, *cwd.parents]:
+            add(anchor)
+        add(ROOT)
+        return candidates
+
+    plugin_roots = plugin_root_candidates()
     if p.parts:
         first = p.parts[0].lower()
-        if first == "plugins" and repo_root is not None:
-            special_roots.append(repo_root)
-        elif first in KNOWN_PLUGIN_ROOT_CHILDREN and plugin_root is not None:
-            special_roots.append(plugin_root)
+    special_roots: list[Path] = []
+    repo_roots: list[Path] = []
+    for plugin_root in plugin_roots:
+        if plugin_root.parent.name == "plugins":
+            repo_root = plugin_root.parent.parent.resolve()
+            if repo_root not in repo_roots:
+                repo_roots.append(repo_root)
+    if p.parts:
+        first = p.parts[0].lower()
+        if first == "plugins":
+            special_roots.extend(repo_roots)
+        elif first in KNOWN_PLUGIN_ROOT_CHILDREN:
+            special_roots.extend(plugin_roots)
     anchors: list[Path] = []
     seen: set[str] = set()
-    for anchor in [*special_roots, Path.cwd(), base_json.parent, *base_json.parents]:
+    for anchor in [*special_roots, *repo_roots, *plugin_roots, Path.cwd().resolve(), base_abs.parent, *base_abs.parents]:
         key = str(anchor.resolve()).lower()
         if key not in seen:
             anchors.append(anchor)
@@ -1269,9 +1297,18 @@ def write_stage05_review_workbench_files(data: dict[str, Any], manifest_path: Pa
 def update_manifest_state(data: dict[str, Any], manifest_path: Path) -> None:
     jobs = data.get("jobs") if isinstance(data.get("jobs"), list) else []
     routing = data.get("routing") if isinstance(data.get("routing"), dict) else {"legacy_mode": True}
+    strategy = data.get("image_provider_strategy") if isinstance(data.get("image_provider_strategy"), dict) else {}
+    primary_provider = str(strategy.get("primary") or "").strip() or None
+    fallback_providers = [str(item).strip() for item in (strategy.get("fallback") or []) if str(item).strip()]
     generated = 0
     failed = 0
     shots: dict[str, set[str]] = {}
+    evidence_origin_summary = {
+        "provider_output": 0,
+        "fallback_output": 0,
+        "manual_import": 0,
+        "placeholder_or_incomplete": 0,
+    }
     for job in jobs:
         if not isinstance(job, dict):
             continue
@@ -1286,6 +1323,16 @@ def update_manifest_state(data: dict[str, Any], manifest_path: Path) -> None:
         job["evidence"]["file_path"] = str(resolved).replace("\\", "/")
         job["evidence"]["file_exists"] = exists
         job["evidence"]["file_size_bytes"] = resolved.stat().st_size if exists else 0
+        origin = annotate_evidence_origin(
+            job["evidence"],
+            provider=job.get("provider"),
+            file_exists=exists,
+            file_size_bytes=job["evidence"]["file_size_bytes"],
+            primary_provider=primary_provider,
+            fallback_providers=fallback_providers,
+            production_ready=exists and not str(job.get("provider") or "").strip().lower().startswith("placeholder_test_"),
+        )
+        evidence_origin_summary[origin] += 1
         job["quality_gate"] = build_quality_gate(job)
         creator_review_card = build_creator_review_card(
             job,
@@ -1314,6 +1361,7 @@ def update_manifest_state(data: dict[str, Any], manifest_path: Path) -> None:
         "expected_image_count": expected,
         "generated_image_count": generated,
         "failed_image_count": failed if failed else max(0, expected - generated),
+        "evidence_origin_summary": evidence_origin_summary,
     })
     data["quality_review"] = quality_review
     provider_status = data.get("creator_runtime_status")

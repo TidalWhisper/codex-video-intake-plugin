@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "scripts" / "providers"))
 from pipeline_blueprints import next_stage_after  # noqa: E402
-from pipeline_core.project_state import update_project_manifest_for_stage  # noqa: E402
+from pipeline_core.project_state import annotate_evidence_origin, update_project_manifest_for_stage  # noqa: E402
 from providers.provider_config import ConfigError, check_comfyui_server, load_provider_config  # noqa: E402
 from providers.stage07_audio_utils import write_audio_recovery_artifacts  # noqa: E402
 
@@ -73,8 +73,16 @@ def main() -> int:
     data = json.loads(path.read_text(encoding="utf-8"))
     routing = data.get("routing") if isinstance(data.get("routing"), dict) else {"legacy_mode": True}
     provider_health: dict[str, str] = {}
+    voice_strategy = data.get("voice_provider_strategy") if isinstance(data.get("voice_provider_strategy"), dict) else {}
+    music_strategy = data.get("music_provider_strategy") if isinstance(data.get("music_provider_strategy"), dict) else {}
     generated_voice = generated_music = generated_total = failed = 0
     voice_jobs = music_jobs = 0
+    evidence_origin_summary = {
+        "provider_output": 0,
+        "fallback_output": 0,
+        "manual_import": 0,
+        "placeholder_or_incomplete": 0,
+    }
     for job in data.get("jobs") or []:
         if not isinstance(job, dict):
             continue
@@ -94,6 +102,17 @@ def main() -> int:
             ev["file_exists"] = True
             ev["file_size_bytes"] = audio.stat().st_size
             ev["created_at"] = datetime.fromtimestamp(audio.stat().st_mtime, timezone.utc).isoformat()
+            provider_strategy = music_strategy if audio_type == "music" else voice_strategy
+            origin = annotate_evidence_origin(
+                ev,
+                provider=job.get("provider"),
+                file_exists=True,
+                file_size_bytes=ev["file_size_bytes"],
+                primary_provider=str(provider_strategy.get("primary") or "").strip() or None,
+                fallback_providers=[str(item).strip() for item in (provider_strategy.get("fallback") or []) if str(item).strip()],
+                production_ready=True,
+            )
+            evidence_origin_summary[origin] += 1
             job["status"] = "succeeded"
             if args.provider and not job.get("provider"):
                 job["provider"] = args.provider
@@ -105,6 +124,17 @@ def main() -> int:
         else:
             ev["file_exists"] = False
             ev["file_size_bytes"] = 0
+            provider_strategy = music_strategy if audio_type == "music" else voice_strategy
+            origin = annotate_evidence_origin(
+                ev,
+                provider=job.get("provider"),
+                file_exists=False,
+                file_size_bytes=0,
+                primary_provider=str(provider_strategy.get("primary") or "").strip() or None,
+                fallback_providers=[str(item).strip() for item in (provider_strategy.get("fallback") or []) if str(item).strip()],
+                production_ready=False,
+            )
+            evidence_origin_summary[origin] += 1
             if job.get("status") == "succeeded":
                 job["status"] = "failed"
             failed += 1
@@ -116,6 +146,7 @@ def main() -> int:
     summary["generated_music_count"] = generated_music
     summary["required_audio_count"] = len(jobs)
     summary["generated_audio_count"] = generated_total
+    summary["evidence_origin_summary"] = evidence_origin_summary
     req = data.get("requirements") if isinstance(data.get("requirements"), dict) else {}
     self_check = data.setdefault("self_check", {})
     self_check["has_voice_tracks_for_required_lines"] = (not req.get("voice_required")) or voice_jobs > 0

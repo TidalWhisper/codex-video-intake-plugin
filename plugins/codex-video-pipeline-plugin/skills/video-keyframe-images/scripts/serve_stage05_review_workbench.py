@@ -50,12 +50,26 @@ def run_action(action: str, manifest_path: Path, *, image_id: str | None, limit:
             return {"ok": False, "exit_code": 1, "error": "approve_image requires image_id"}
         exit_code, output = capture_action(
             approve_stage05_review_queue.main,
-            [str(manifest_path), "--image-id", image_id],
+            [
+                str(manifest_path),
+                "--image-id",
+                image_id,
+                "--content-aligned",
+                "--content-alignment-note",
+                "creator approved from Stage 05 review workbench after visual inspection",
+            ],
         )
     elif action == "approve_top":
         exit_code, output = capture_action(
             approve_stage05_review_queue.main,
-            [str(manifest_path), "--top", str(max(1, int(limit)))],
+            [
+                str(manifest_path),
+                "--top",
+                str(max(1, int(limit))),
+                "--content-aligned",
+                "--content-alignment-note",
+                "creator approved from Stage 05 review workbench after visual inspection",
+            ],
         )
     elif action == "auto_repair_image":
         if not image_id:

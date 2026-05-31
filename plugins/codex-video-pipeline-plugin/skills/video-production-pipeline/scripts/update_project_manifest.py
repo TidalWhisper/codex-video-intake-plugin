@@ -7,14 +7,17 @@ Usage:
 from __future__ import annotations
 import argparse
 import json
-from datetime import datetime, timezone
 from pathlib import Path
+import sys
+
+ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT / "scripts"))
+
+from pipeline_core.project_state import load_json_file_if_exists, sync_project_manifest_truth, utc_now, write_json_file  # noqa: E402
 
 
 def load_manifest(path: Path) -> dict:
-    if path.exists():
-        return json.loads(path.read_text(encoding="utf-8"))
-    return {}
+    return load_json_file_if_exists(path) or {}
 
 
 def parse_bool(value: str | None):
@@ -47,7 +50,7 @@ def main() -> int:
     data.setdefault("project_id", project_dir.name)
     data.setdefault("project_dir", str(project_dir).replace("\\", "/"))
     data["current_stage"] = args.stage
-    data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    data["updated_at"] = utc_now()
     data["allowed_next_stage"] = args.allowed_next_stage
 
     for key, raw in [
@@ -67,7 +70,8 @@ def main() -> int:
         if parsed is not None:
             data[key] = parsed
 
-    manifest_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    write_json_file(manifest_path, data)
+    sync_project_manifest_truth(manifest_path)
     print(f"MANIFEST UPDATED: {manifest_path}")
     return 0
 
