@@ -150,7 +150,7 @@ def test_new_project_brief_template_generates_schema_compliant_draft(tmp_path: P
     assert ok, errors
 
 
-def test_create_project_folder_uses_project_suffix_for_chinese_numeric_title(tmp_path: Path, monkeypatch) -> None:
+def test_create_project_folder_uses_readable_slug_for_chinese_numeric_title(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(sys, "argv", [
         "create_project_folder.py",
         "--root",
@@ -162,8 +162,11 @@ def test_create_project_folder_uses_project_suffix_for_chinese_numeric_title(tmp
     projects = list((tmp_path / "video_projects").iterdir())
     assert len(projects) == 1
     project_dir = projects[0]
-    assert project_dir.name.endswith("_project")
     assert not project_dir.name.endswith("_20")
+    assert not project_dir.name.endswith("_project")
+    assert any("\u4e00" <= ch <= "\u9fff" for ch in project_dir.name.rsplit("_", 1)[-1])
+    manifest = json.loads((project_dir / "project_manifest.json").read_text(encoding="utf-8"))
+    assert manifest["project_title"] == "一位20岁出头的女孩在落日余辉的海滩边散步"
     assert validate_project_structure.main(["validate_project_structure.py", str(project_dir)]) == 0
 
 
@@ -368,9 +371,13 @@ def test_new_character_bible_template_generates_final_ready_draft(tmp_path: Path
     assert (character_dir / "character_bible.md").exists()
     assert (character_dir / "character_review.md").exists()
     assert (character_dir / "reference_image_plan.json").exists()
+    assert (character_dir / "reference_image_start_here.md").exists()
     review_text = (character_dir / "character_review.md").read_text(encoding="utf-8")
+    reference_start_here = (character_dir / "reference_image_start_here.md").read_text(encoding="utf-8")
     assert "角色参考图就绪：否" in review_text
     assert "CHAR_001_primary.png" in review_text
+    assert "角色参考图补齐入口" in reference_start_here
+    assert "03_characters/reference_images/CHAR_001_primary.png" in reference_start_here
 
 def test_update_project_manifest_sets_pipeline_flags(tmp_path: Path, monkeypatch) -> None:
     project_dir = tmp_path / "video_projects" / "video_20260528_103000_sunset_beach_girl"
@@ -474,9 +481,12 @@ def test_new_keyframe_prompts_template_generates_final_ready_draft(tmp_path: Pat
     assert (keyframe_dir / "keyframe_prompts.md").exists()
     assert (keyframe_dir / "motion_prompts.json").exists()
     assert (keyframe_dir / "prompt_review.md").exists()
+    assert (keyframe_dir / "stage05_start_here.md").exists()
     prompt_review_text = (keyframe_dir / "prompt_review.md").read_text(encoding="utf-8")
+    stage05_start_here = (keyframe_dir / "stage05_start_here.md").read_text(encoding="utf-8")
     assert "角色参考图就绪：否" in prompt_review_text
     assert "CHAR_001_primary.png" in prompt_review_text
+    assert "03_characters/reference_image_start_here.md" in stage05_start_here
 
 
 def test_rainy_store_story_anchors_survive_stage01_to_stage04(tmp_path: Path) -> None:

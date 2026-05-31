@@ -28,6 +28,34 @@ def write_text(path: Path, content: str) -> None:
     path.write_text(content.rstrip() + "\n", encoding="utf-8")
 
 
+def write_stage04_reference_handoff(out_path: Path, template: dict) -> None:
+    readiness = template.get("stage05_execution_readiness") if isinstance(template.get("stage05_execution_readiness"), dict) else {}
+    missing_paths = readiness.get("missing_reference_images") if isinstance(readiness.get("missing_reference_images"), list) else []
+    lines = [
+        "# Stage 04 到 Stage 05 之前先看这里",
+        "",
+        f"- 角色参考图是否已齐：{'是' if ((template.get('reference_image_status') or {}).get('all_present')) else '否'}",
+        f"- 是否可安全自动进入 Stage 05：{'是' if readiness.get('safe_to_auto_generate') else '否'}",
+        "",
+    ]
+    if missing_paths:
+        lines.extend([
+            "系统已经知道你现在卡在角色参考图，而不是卡在 prompt。",
+            "",
+            "下一步请直接去这里补图：",
+            "`03_characters/reference_image_start_here.md`",
+            "",
+            "缺失目标路径：",
+            *[f"- `{path_text}`" for path_text in missing_paths],
+        ])
+    else:
+        lines.extend([
+            "角色参考图已经就绪。",
+            "确认当前 prompt 包后，可以继续进入 Stage 05 自动生图。",
+        ])
+    write_text(out_path.parent / "stage05_start_here.md", "\n".join(lines))
+
+
 def write_stage04_companions(out_path: Path, template: dict) -> None:
     shots = template.get("shot_prompts") if isinstance(template.get("shot_prompts"), list) else []
     transitions = template.get("transition_prompts") if isinstance(template.get("transition_prompts"), list) else []
@@ -85,6 +113,7 @@ def write_stage04_companions(out_path: Path, template: dict) -> None:
     write_text(out_path.parent / "keyframe_prompts.md", "\n".join(prompt_lines))
     (out_path.parent / "motion_prompts.json").write_text(json.dumps({"project_id": template.get("project_id"), "records": motion_records}, ensure_ascii=False, indent=2), encoding="utf-8")
     write_text(out_path.parent / "prompt_review.md", "\n".join(review_lines))
+    write_stage04_reference_handoff(out_path, template)
 
 
 def main(argv: list[str]) -> int:

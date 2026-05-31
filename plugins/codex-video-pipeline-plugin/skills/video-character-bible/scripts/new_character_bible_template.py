@@ -32,6 +32,48 @@ def write_text(path: Path, content: str) -> None:
     path.write_text(content.rstrip() + "\n", encoding="utf-8")
 
 
+def write_reference_image_start_here(
+    stage03_dir: Path,
+    *,
+    reference_plan: dict,
+    reference_status: dict,
+    stage05_execution_readiness: dict,
+) -> None:
+    reference_dir = stage03_dir / "reference_images"
+    reference_dir.mkdir(parents=True, exist_ok=True)
+    missing_paths = reference_status.get("missing_paths") if isinstance(reference_status.get("missing_paths"), list) else []
+    lines = [
+        "# 角色参考图补齐入口",
+        "",
+        "这一步是给普通创作者准备的默认入口，不需要先理解 manifest。",
+        "",
+        f"- 角色参考图是否已齐：{'是' if reference_status.get('all_present') else '否'}",
+        f"- 是否可安全自动进入 Stage 05：{'是' if stage05_execution_readiness.get('safe_to_auto_generate') else '否'}",
+        f"- 参考图目录：`{str(reference_dir).replace(chr(92), '/')}`",
+        "",
+        "## 现在该做什么",
+        "",
+    ]
+    if missing_paths:
+        lines.extend([
+            "- 请先为主角补一张清晰、正面的角色参考图。",
+            "- 建议优先保证脸型、发型、服装轮廓和主要随身物一眼可认。",
+            "- 把图片放到下面这些目标路径里：",
+            *[f"  - `{path_text}`" for path_text in missing_paths],
+            "",
+            "## 放好以后",
+            "",
+            "- 继续进入 Stage 04 / Stage 05 时，系统会自动重新检查这些参考图。",
+            "- 如果后面 Stage 05 已经先出过一版关键帧，也可以用已有关键帧回填角色参考图。",
+        ])
+    else:
+        lines.extend([
+            "- 当前角色参考图已经就绪。",
+            "- 可以继续进入 Stage 04，并在确认后安全自动进入 Stage 05。",
+        ])
+    write_text(stage03_dir / "reference_image_start_here.md", "\n".join(lines))
+
+
 def write_stage03_companions(
     out_path: Path,
     template: dict,
@@ -74,6 +116,12 @@ def write_stage03_companions(
     write_text(out_path.parent / "character_bible.md", "\n".join(bible_lines))
     write_text(out_path.parent / "character_review.md", "\n".join(review_lines))
     (out_path.parent / "reference_image_plan.json").write_text(json.dumps(reference_plan, ensure_ascii=False, indent=2), encoding="utf-8")
+    write_reference_image_start_here(
+        out_path.parent,
+        reference_plan=reference_plan,
+        reference_status=reference_status,
+        stage05_execution_readiness=stage05_execution_readiness,
+    )
 
 
 def main(argv: list[str]) -> int:

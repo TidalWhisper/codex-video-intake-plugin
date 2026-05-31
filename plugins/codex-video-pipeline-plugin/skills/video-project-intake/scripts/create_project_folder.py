@@ -32,26 +32,29 @@ REQUIRED_DIRS = [
 def slugify(text: str, max_len: int = 24) -> str:
     """Create a safe short slug.
 
-    The first implementation preserved any ASCII number found inside Chinese
-    text, so a title like "一位20岁出头的女孩..." produced a weak slug such as
-    "20". This version only uses an ASCII slug when it contains at least one
-    alphabetic token; otherwise it falls back to the stable, readable
-    "project" suffix. Codex can still pass an explicit --project-id when it
-    wants a semantic English slug such as sunset_beach_girl.
+    Prefer a short ASCII slug when the title already contains useful Latin
+    tokens. For Chinese-only titles, keep a compact Han-character suffix so
+    the project folder remains recognizable to ordinary creators instead of
+    collapsing into a generic "..._project".
     """
     raw = text.strip().lower()
     slug = re.sub(r"[^a-z0-9]+", "_", raw)
     slug = re.sub(r"_+", "_", slug).strip("_")
 
+    if slug and re.search(r"[a-z]", slug):
+        slug = slug[:max_len].strip("_")
+        if slug and re.search(r"[a-z]", slug):
+            return slug
+
+    han_chunks = re.findall(r"[\u4e00-\u9fff]+", text.strip())
+    if han_chunks:
+        readable = "".join(han_chunks)[: min(max_len, 12)].strip()
+        if readable:
+            return readable
+
     # Avoid unhelpful numeric-only slugs created from ages/durations in Chinese
     # prompts, e.g. "20" from "一位20岁出头的女孩...".
-    if not slug or not re.search(r"[a-z]", slug):
-        return "project"
-
-    slug = slug[:max_len].strip("_")
-    if not slug or not re.search(r"[a-z]", slug):
-        return "project"
-    return slug
+    return "project"
 
 
 def main() -> int:
@@ -80,6 +83,7 @@ def main() -> int:
     manifest = {
         "schema_version": "0.3.0",
         "project_id": project_id,
+        "project_title": args.title.strip() or project_id,
         "project_dir": str(project_dir).replace("\\", "/"),
         "created_at": datetime.now(timezone.utc).isoformat(),
         "current_stage": "STAGE_00_INTAKE",

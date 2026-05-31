@@ -243,6 +243,11 @@ def main(argv: list[str]) -> int:
         return 1
     if not (clip_manifest.get("self_check") or {}).get("ready_for_audio_stage"):
         print("ERROR: video_clip_manifest.self_check.ready_for_audio_stage must be true before Stage 07", file=sys.stderr)
+        print(
+            "CREATOR_HINT: 当前视频片段还只是草稿、占位结果，或者上游 Stage 05 还没正式过审。"
+            " 请先把 Stage 06 补成真实可用 clip，再继续音频阶段。",
+            file=sys.stderr,
+        )
         return 1
 
     requirements = parse_requirements(brief)

@@ -72,8 +72,10 @@ def test_sync_project_truth_demotes_optimistic_manifest_to_stage05_review_requir
     assert synced["creator_status_overview"]["current_blocker"].startswith("Stage 05")
     assert "IMG_S001_START" in synced["creator_status_overview"]["current_blocker"]
     assert (project_dir / "creator_status_overview.md").exists()
+    assert (project_dir / "creator_home.html").exists()
     overview_json = json.loads((project_dir / "creator_status_overview.json").read_text(encoding="utf-8"))
     assert overview_json["trusted_stage"] == "STAGE_05_KEYFRAME_IMAGES"
+    assert overview_json["recommended_entry"]["label"] == "打开 Stage 05 审图工作台"
 
 
 def test_sync_project_truth_marks_placeholder_stage06_as_non_confirmed(tmp_path: Path) -> None:
@@ -199,3 +201,56 @@ def test_sync_project_truth_keeps_stage08_with_fallback_segments_out_of_confirme
     stage08_truth = synced["state_truth"]["stage_states"]["stage08"]
     assert stage08_truth["normalized_status"] == "review_required"
     assert "fallback" in synced["creator_status_overview"]["current_result"]
+
+
+def test_sync_project_truth_frontloads_reference_image_recovery_before_stage05(tmp_path: Path) -> None:
+    project_dir = tmp_path / "video_projects" / "reference_gap_project"
+    (project_dir / "03_characters").mkdir(parents=True, exist_ok=True)
+    (project_dir / "04_keyframes").mkdir(parents=True, exist_ok=True)
+    manifest_path = project_dir / "project_manifest.json"
+    manifest_path.write_text(json.dumps({
+        "project_id": project_dir.name,
+        "project_title": "雨夜便利店让伞",
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "current_stage": "STAGE_04_KEYFRAME_PROMPTS_GENERATION",
+        "status": "active",
+        "brief_locked": True,
+        "script_confirmed": True,
+        "storyboard_confirmed": True,
+        "character_bible_confirmed": True,
+        "keyframe_prompts_confirmed": True,
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    (project_dir / "03_characters" / "character_bible.json").write_text(json.dumps({
+        "stage": "STAGE_03_CHARACTER_BIBLE",
+        "project_id": project_dir.name,
+        "reference_image_status": {
+            "all_present": False,
+            "missing_paths": ["03_characters/reference_images/CHAR_001_primary.png"],
+        },
+        "stage05_execution_readiness": {
+            "safe_to_auto_generate": False,
+            "missing_reference_images": ["03_characters/reference_images/CHAR_001_primary.png"],
+        },
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    (project_dir / "04_keyframes" / "keyframe_prompts.json").write_text(json.dumps({
+        "stage": "STAGE_04_KEYFRAME_PROMPTS",
+        "project_id": project_dir.name,
+        "reference_image_status": {
+            "all_present": False,
+            "missing_paths": ["03_characters/reference_images/CHAR_001_primary.png"],
+        },
+        "stage05_execution_readiness": {
+            "safe_to_auto_generate": False,
+            "missing_reference_images": ["03_characters/reference_images/CHAR_001_primary.png"],
+        },
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    assert project_state.sync_project_manifest_truth(manifest_path) == manifest_path
+
+    synced = json.loads(manifest_path.read_text(encoding="utf-8"))
+    overview = synced["creator_status_overview"]
+    assert overview["project_display_name"] == "雨夜便利店让伞"
+    assert "角色参考图" in overview["current_result"]
+    assert "参考图" in overview["current_blocker"]
+    assert overview["recommended_entry"]["label"] == "打开角色参考图说明"
+    assert overview["recommended_entry"]["path"].endswith("03_characters/reference_image_start_here.md")

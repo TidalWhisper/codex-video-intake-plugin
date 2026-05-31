@@ -209,9 +209,19 @@ def main(argv: list[str]) -> int:
         return 1
     if clip_manifest.get("stage") != "STAGE_06_VIDEO_CLIPS" or not (clip_manifest.get("self_check") or {}).get("ready_for_audio_stage"):
         print("ERROR: video_clip_manifest must be final-ready before Stage 08", file=sys.stderr)
+        print(
+            "CREATOR_HINT: 现在还不能合成粗剪，因为视频片段阶段还没有真正准备好。"
+            " 请先把 Stage 06 补成正式 clip，并确认它可以继续推进。",
+            file=sys.stderr,
+        )
         return 1
     if audio_manifest.get("stage") != "STAGE_07_AUDIO" or not (audio_manifest.get("self_check") or {}).get("ready_for_assembly_stage"):
         print("ERROR: audio_manifest must be final-ready before Stage 08", file=sys.stderr)
+        print(
+            "CREATOR_HINT: 现在还不能合成粗剪，因为音频阶段还没有真正准备好。"
+            " 请先补齐旁白、对白或音乐，再继续装配。",
+            file=sys.stderr,
+        )
         return 1
 
     project_id = brief.get("project_id") or clip_manifest.get("project_id") or audio_manifest.get("project_id") or out_path.parents[1].name

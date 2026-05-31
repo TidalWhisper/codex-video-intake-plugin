@@ -259,6 +259,11 @@ def main(argv: list[str]) -> int:
         allowed_stage05_statuses.add("in_progress")
     if image_manifest_status not in allowed_stage05_statuses:
         print("ERROR: keyframe_image_manifest.status must be generated or confirmed before Stage 06", file=sys.stderr)
+        print(
+            "CREATOR_HINT: 你还没有真正拿到并确认关键帧图片，所以现在不能生成视频片段。"
+            " 下一步请先补角色参考图、完成关键帧出图，并在 Stage 05 工作台里完成复核。",
+            file=sys.stderr,
+        )
         return 1
 
     project_id = brief.get("project_id") or prompts.get("project_id") or image_manifest.get("project_id") or out_path.parents[1].name

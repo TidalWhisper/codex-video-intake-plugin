@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -8,6 +9,8 @@ from typing import Any
 from .media_evidence import MIN_PRODUCTION_VIDEO_BYTES, assembly_output_ready, provider_is_nonproduction
 
 
+STAGE03_MANIFEST = Path("03_characters/character_bible.json")
+STAGE04_MANIFEST = Path("04_keyframes/keyframe_prompts.json")
 STAGE05_MANIFEST = Path("05_images/keyframe_image_manifest.json")
 STAGE06_MANIFEST = Path("06_video_clips/video_clip_manifest.json")
 STAGE07_MANIFEST = Path("07_audio/audio_manifest.json")
@@ -151,6 +154,39 @@ def _evidence_summary_text(counts: dict[str, int]) -> str:
 def _read_stage_manifest(project_dir: Path, relative_path: Path) -> tuple[Path, dict[str, Any] | None]:
     manifest_path = project_dir / relative_path
     return manifest_path, load_json_file_if_exists(manifest_path)
+
+
+def _path_uri(path: Path | str | None) -> str:
+    if not path:
+        return ""
+    try:
+        return Path(path).resolve().as_uri()
+    except Exception:
+        return ""
+
+
+def _reference_image_actions(project_dir: Path, missing_paths: list[str], bootstrap_command: str) -> list[dict[str, Any]]:
+    actions = [{
+        "label": "打开角色参考图说明",
+        "path": as_posix(project_dir / "03_characters" / "reference_image_start_here.md"),
+        "kind": "file",
+        "description": "先看系统为普通创作者整理好的补图入口。",
+    }]
+    if missing_paths:
+        actions.append({
+            "label": "打开参考图目录",
+            "path": as_posix(project_dir / "03_characters" / "reference_images"),
+            "kind": "folder",
+            "description": "把主角参考图直接放进这个目录。",
+        })
+    if bootstrap_command:
+        actions.append({
+            "label": "用现有关键帧回填参考图",
+            "command": bootstrap_command,
+            "kind": "command",
+            "description": "如果 Stage 05 已有一张可用关键帧，可以直接回填成角色锚图。",
+        })
+    return actions
 
 
 def _file_size_from_evidence(evidence: dict[str, Any]) -> int:
@@ -497,7 +533,56 @@ def _derive_stage08_state(project_dir: Path) -> dict[str, Any] | None:
     }
 
 
-def _creator_steps(data: dict[str, Any], stage_truth: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+def _derive_reference_readiness_state(project_dir: Path) -> dict[str, Any] | None:
+    _, character_bible = _read_stage_manifest(project_dir, STAGE03_MANIFEST)
+    _, keyframe_prompts = _read_stage_manifest(project_dir, STAGE04_MANIFEST)
+    if character_bible is None and keyframe_prompts is None:
+        return None
+    source = character_bible if character_bible is not None else keyframe_prompts or {}
+    reference_status = _as_dict(source.get("reference_image_status"))
+    readiness = _as_dict(source.get("stage05_execution_readiness"))
+    missing_paths = _list_of_str(reference_status.get("missing_paths") or readiness.get("missing_reference_images"))
+    if not missing_paths:
+        return {
+            "reference_ready": True,
+            "safe_to_auto_generate": _bool(readiness.get("safe_to_auto_generate")) or _bool(reference_status.get("all_present")),
+            "missing_reference_images": [],
+            "current_result": "角色参考图已就绪，关键帧阶段可以按正常路径推进。",
+            "current_blocker": "",
+            "next_action": "确认当前关键帧提示词后，进入 Stage 05 自动生图。",
+            "risk_hint": "",
+            "actions": [{
+                "label": "打开 Stage 04 交接说明",
+                "path": as_posix(project_dir / "04_keyframes" / "stage05_start_here.md"),
+                "kind": "file",
+                "description": "查看进入 Stage 05 前的默认说明。",
+            }],
+        }
+
+    _, stage05_manifest = _read_stage_manifest(project_dir, STAGE05_MANIFEST)
+    manual_recovery = _as_dict(_as_dict(stage05_manifest).get("manual_recovery"))
+    bootstrap_command = _text(manual_recovery.get("suggested_bootstrap_command"))
+    return {
+        "reference_ready": False,
+        "safe_to_auto_generate": False,
+        "missing_reference_images": missing_paths,
+        "current_result": f"角色参考图还缺 {len(missing_paths)} 张，系统不会冒险自动进入 Stage 05。",
+        "current_blocker": "主角参考图还没补齐，所以系统先把关键帧自动生成挡住了。",
+        "next_action": (
+            "先补一张清晰的主角参考图到 `03_characters/reference_images/`，再继续进入 Stage 05。"
+            if not bootstrap_command
+            else "先补主角参考图；如果 Stage 05 已经有一张可用关键帧，也可以直接用现有关键帧回填角色参考图。"
+        ),
+        "risk_hint": "这一步是在避免 start / mid / end 关键帧里的角色换脸或换人。",
+        "actions": _reference_image_actions(project_dir, missing_paths, bootstrap_command),
+    }
+
+
+def _creator_steps(
+    data: dict[str, Any],
+    stage_truth: dict[str, dict[str, Any]],
+    reference_state: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
     early = [
         {
             "step": "立项",
@@ -526,14 +611,24 @@ def _creator_steps(data: dict[str, Any], stage_truth: dict[str, dict[str, Any]])
         "risk_hint": "",
     })
     stage05 = stage_truth.get("stage05")
-    early.append({
+    keyframe_step = {
         "step": "关键帧",
         "status": stage05.get("normalized_status") if stage05 else ("confirmed" if _bool(data.get("keyframe_images_confirmed")) else "pending"),
         "current_result": stage05.get("current_result") if stage05 else "尚未进入 Stage 05。",
         "current_blocker": stage05.get("current_blocker") if stage05 else "",
         "next_action": stage05.get("next_action") if stage05 else "开始关键帧生成。",
         "risk_hint": stage05.get("risk_hint") if stage05 else "",
-    })
+    }
+    if stage05 is None and reference_state and not reference_state.get("safe_to_auto_generate"):
+        keyframe_step = {
+            "step": "关键帧",
+            "status": "current" if storyboard_ready else "pending",
+            "current_result": reference_state.get("current_result") or "角色参考图仍未补齐。",
+            "current_blocker": reference_state.get("current_blocker") or "",
+            "next_action": reference_state.get("next_action") or "先补角色参考图。",
+            "risk_hint": reference_state.get("risk_hint") or "",
+        }
+    early.append(keyframe_step)
     stage08 = stage_truth.get("stage08")
     final_stage = stage08 or stage_truth.get("stage07") or stage_truth.get("stage06") or {}
     early.append({
@@ -622,16 +717,56 @@ def _project_provider_summary(stage_truth: dict[str, dict[str, Any]]) -> list[st
         music_primary = _text(provider.get("music_primary"))
         if music_primary:
             lines.append(f"Stage 07 音乐 provider：{music_primary}")
+    stage08 = stage_truth.get("stage08")
+    if stage08:
+        assembly_provider = _text(_as_dict(stage08.get("provider_summary")).get("assembly_provider"))
+        if assembly_provider:
+            lines.append(f"Stage 08 装配执行器：{assembly_provider}")
     return lines
+
+
+def _recommended_entry(
+    project_dir: Path,
+    *,
+    stage_truth: dict[str, dict[str, Any]],
+    reference_state: dict[str, Any] | None,
+    current_step: dict[str, Any],
+) -> dict[str, Any]:
+    stage05 = stage_truth.get("stage05")
+    workbench_path = project_dir / "05_images" / "stage05_review_workbench.html"
+    if stage05 is not None:
+        return {
+            "label": "打开 Stage 05 审图工作台",
+            "path": as_posix(workbench_path),
+            "kind": "file",
+            "description": "默认从这里看图、审图、通过或重跑，不必先读 manifest 和脚本名。",
+        }
+    if reference_state and not reference_state.get("safe_to_auto_generate"):
+        actions = reference_state.get("actions") if isinstance(reference_state.get("actions"), list) else []
+        if actions:
+            return actions[0]
+    return {
+        "label": "打开创作者主页",
+        "path": as_posix(project_dir / "creator_home.html"),
+        "kind": "file",
+        "description": _text(current_step.get("next_action")) or "从这里继续当前项目。",
+    }
 
 
 def build_creator_status_overview(project_dir: Path, data: dict[str, Any], stage_truth: dict[str, dict[str, Any]]) -> dict[str, Any]:
     trusted_stage, allowed_next = _derive_project_stage(data, stage_truth)
     blockers = _project_blockers(stage_truth)
-    steps = _creator_steps(data, stage_truth)
+    reference_state = _derive_reference_readiness_state(project_dir)
+    steps = _creator_steps(data, stage_truth, reference_state)
     provider_lines = _project_provider_summary(stage_truth)
     current_step = next((step for step in steps if step.get("status") in {"current", "generated", "review_required", "blocked", "in_progress"}), steps[-1] if steps else {})
+    human_gate_message = (
+        f"{_text(current_step.get('current_blocker'))} 下一步：{_text(current_step.get('next_action'))}"
+        if _text(current_step.get("current_blocker"))
+        else _text(current_step.get("next_action"))
+    )
     return {
+        "project_display_name": _text(data.get("project_title")) or project_dir.name,
         "trusted_stage": trusted_stage,
         "allowed_next_stage": allowed_next,
         "blocking_reasons": blockers,
@@ -640,23 +775,45 @@ def build_creator_status_overview(project_dir: Path, data: dict[str, Any], stage
         "current_blocker": _text(current_step.get("current_blocker")) or (blockers[0] if blockers else ""),
         "next_action": _text(current_step.get("next_action")),
         "risk_hint": _text(current_step.get("risk_hint")),
+        "human_gate_message": human_gate_message,
+        "recommended_entry": _recommended_entry(
+            project_dir,
+            stage_truth=stage_truth,
+            reference_state=reference_state,
+            current_step=current_step,
+        ),
+        "reference_guidance": reference_state or {},
         "steps": steps,
     }
 
 
 def _creator_overview_markdown(project_dir: Path, overview: dict[str, Any]) -> str:
     lines = [
-        "# 创作者状态总览",
+        "# 创作者主页",
         "",
+        f"- 项目：`{_text(overview.get('project_display_name')) or project_dir.name}`",
         f"- 当前可信阶段：`{_text(overview.get('trusted_stage'))}`",
         f"- 当前结果：{_text(overview.get('current_result')) or '暂无结果'}",
         f"- 当前卡点：{_text(overview.get('current_blocker')) or '暂无阻断'}",
         f"- 下一步动作：{_text(overview.get('next_action')) or '继续当前阶段'}",
         f"- 安全下一步：`{_text(overview.get('allowed_next_stage')) or 'none'}`",
         "",
-        "## Provider / Fallback",
+        "## 推荐入口",
         "",
     ]
+    recommended = _as_dict(overview.get("recommended_entry"))
+    if recommended:
+        if _text(recommended.get("path")):
+            lines.append(f"- {recommended.get('label')}：`{_text(recommended.get('path'))}`")
+        if _text(recommended.get("command")):
+            lines.append(f"- {recommended.get('label')}命令：`{_text(recommended.get('command'))}`")
+        if _text(recommended.get("description")):
+            lines.append(f"- 说明：{_text(recommended.get('description'))}")
+    lines.extend([
+        "",
+        "## Provider / Fallback",
+        "",
+    ])
     provider_lines = _list_of_str(overview.get("provider_summary"))
     if provider_lines:
         lines.extend([f"- {item}" for item in provider_lines])
@@ -674,6 +831,221 @@ def _creator_overview_markdown(project_dir: Path, overview: dict[str, Any]) -> s
         if risk_hint:
             lines.append(f"  风险提示：{risk_hint}")
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _creator_overview_html(project_dir: Path, overview: dict[str, Any]) -> str:
+    recommended = _as_dict(overview.get("recommended_entry"))
+    provider_lines = _list_of_str(overview.get("provider_summary"))
+    steps = [step for step in _as_list(overview.get("steps")) if isinstance(step, dict)]
+
+    def render_entry(entry: dict[str, Any]) -> str:
+        if not entry:
+            return ""
+        path_text = _text(entry.get("path"))
+        command_text = _text(entry.get("command"))
+        link = _path_uri(path_text) if path_text else ""
+        path_block = (
+            f'<a class="cta" href="{html.escape(link)}">{html.escape(_text(entry.get("label")) or "打开入口")}</a>'
+            if link else ""
+        )
+        command_block = f"<pre>{html.escape(command_text)}</pre>" if command_text else ""
+        description = html.escape(_text(entry.get("description")) or "")
+        path_hint = f"<div class=\"hint\">{html.escape(path_text)}</div>" if path_text else ""
+        return f"""
+        <section class="hero-card">
+          <div class="eyebrow">推荐入口</div>
+          <h2>{html.escape(_text(entry.get("label")) or "继续当前项目")}</h2>
+          <p>{description}</p>
+          {path_block}
+          {path_hint}
+          {command_block}
+        </section>
+        """
+
+    step_cards: list[str] = []
+    for step in steps:
+        status = html.escape(_text(step.get("status")) or "pending")
+        step_cards.append(f"""
+        <article class="step-card">
+          <div class="step-top">
+            <strong>{html.escape(_text(step.get("step")) or "步骤")}</strong>
+            <span class="status">{status}</span>
+          </div>
+          <p><strong>当前结果：</strong>{html.escape(_text(step.get("current_result")) or "暂无")}</p>
+          <p><strong>当前卡点：</strong>{html.escape(_text(step.get("current_blocker")) or "无")}</p>
+          <p><strong>下一步：</strong>{html.escape(_text(step.get("next_action")) or "继续当前步骤")}</p>
+          <p class="muted">{html.escape(_text(step.get("risk_hint")) or "")}</p>
+        </article>
+        """)
+
+    provider_html = "".join(f"<li>{html.escape(item)}</li>" for item in provider_lines) or "<li>当前没有可总结的 provider 轨迹。</li>"
+    return f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{html.escape(_text(overview.get("project_display_name")) or project_dir.name)} · 创作者主页</title>
+  <style>
+    :root {{
+      --paper: #f6efe1;
+      --ink: #1e1c17;
+      --accent: #9d5033;
+      --accent-soft: #f0d5c7;
+      --panel: rgba(255,255,255,0.78);
+      --line: rgba(37,28,20,0.12);
+      --muted: #675c4f;
+    }}
+    body {{
+      margin: 0;
+      font-family: "Microsoft YaHei UI", "Noto Serif SC", serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(157,80,51,0.22), transparent 30%),
+        linear-gradient(160deg, #f7f1e7 0%, var(--paper) 55%, #efe2d0 100%);
+    }}
+    .shell {{
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 32px 20px 48px;
+    }}
+    .headline {{
+      display: grid;
+      gap: 16px;
+      margin-bottom: 24px;
+    }}
+    .headline h1 {{
+      margin: 0;
+      font-size: 36px;
+      line-height: 1.1;
+    }}
+    .headline p {{
+      margin: 0;
+      color: var(--muted);
+      font-size: 16px;
+    }}
+    .hero-card, .panel {{
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      padding: 20px;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 18px 45px rgba(63, 39, 18, 0.08);
+    }}
+    .hero-grid {{
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 16px;
+      margin-bottom: 18px;
+    }}
+    .eyebrow {{
+      color: var(--accent);
+      font-size: 13px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }}
+    .cta {{
+      display: inline-block;
+      margin-top: 10px;
+      padding: 11px 16px;
+      border-radius: 999px;
+      background: var(--accent);
+      color: #fff7f1;
+      text-decoration: none;
+      font-weight: 700;
+    }}
+    .hint {{
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 13px;
+      word-break: break-all;
+    }}
+    pre {{
+      margin: 12px 0 0;
+      padding: 12px;
+      border-radius: 14px;
+      background: #fff7f1;
+      border: 1px dashed rgba(157,80,51,0.28);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }}
+    .meta-list, .provider-list {{
+      margin: 0;
+      padding-left: 18px;
+    }}
+    .meta-list li, .provider-list li {{
+      margin: 8px 0;
+    }}
+    .steps {{
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+      margin-top: 18px;
+    }}
+    .step-card {{
+      background: rgba(255,255,255,0.68);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 18px;
+    }}
+    .step-top {{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+    }}
+    .status {{
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 700;
+    }}
+    .muted {{
+      color: var(--muted);
+    }}
+    @media (max-width: 900px) {{
+      .hero-grid, .steps {{
+        grid-template-columns: 1fr;
+      }}
+      .headline h1 {{
+        font-size: 30px;
+      }}
+    }}
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <section class="headline">
+      <div class="eyebrow">Creator Home</div>
+      <h1>{html.escape(_text(overview.get("project_display_name")) or project_dir.name)}</h1>
+      <p>{html.escape(_text(overview.get("human_gate_message")) or "系统已整理当前项目状态。")}</p>
+    </section>
+    <section class="hero-grid">
+      <div class="panel">
+        <div class="eyebrow">当前项目</div>
+        <ul class="meta-list">
+          <li><strong>当前可信阶段：</strong>{html.escape(_text(overview.get("trusted_stage")) or "未知")}</li>
+          <li><strong>当前结果：</strong>{html.escape(_text(overview.get("current_result")) or "暂无结果")}</li>
+          <li><strong>当前卡点：</strong>{html.escape(_text(overview.get("current_blocker")) or "暂无阻断")}</li>
+          <li><strong>下一步动作：</strong>{html.escape(_text(overview.get("next_action")) or "继续当前阶段")}</li>
+        </ul>
+      </div>
+      {render_entry(recommended)}
+    </section>
+    <section class="panel">
+      <div class="eyebrow">Provider / Fallback</div>
+      <ul class="provider-list">{provider_html}</ul>
+    </section>
+    <section class="steps">
+      {''.join(step_cards)}
+    </section>
+  </div>
+</body>
+</html>
+"""
 
 
 def sync_project_manifest_truth(manifest_path: Path) -> Path | None:
@@ -738,10 +1110,13 @@ def sync_project_manifest_truth(manifest_path: Path) -> Path | None:
     write_json_file(manifest_path, data)
     overview_json = project_dir / "creator_status_overview.json"
     write_json_file(overview_json, overview)
-    (project_dir / "creator_status_overview.md").write_text(
-        _creator_overview_markdown(project_dir, overview),
-        encoding="utf-8",
-    )
+    overview_markdown = _creator_overview_markdown(project_dir, overview)
+    overview_html = _creator_overview_html(project_dir, overview)
+    (project_dir / "creator_status_overview.md").write_text(overview_markdown, encoding="utf-8")
+    (project_dir / "creator_status_overview.html").write_text(overview_html, encoding="utf-8")
+    write_json_file(project_dir / "creator_home.json", overview)
+    (project_dir / "creator_home.md").write_text(overview_markdown, encoding="utf-8")
+    (project_dir / "creator_home.html").write_text(overview_html, encoding="utf-8")
     return manifest_path
 
 
