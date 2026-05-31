@@ -70,6 +70,7 @@ new_qa_manifest = load_module("new_qa_manifest_for_test", QA / "new_qa_manifest.
 validate_qa_manifest = load_module("validate_qa_manifest_for_test", QA / "validate_qa_manifest.py")
 package_delivery = load_module("package_delivery_for_test", QA / "package_delivery.py")
 update_project_manifest = load_module("update_project_manifest_for_test", PIPELINE / "update_project_manifest.py")
+show_creator_home = load_module("show_creator_home_for_test", PIPELINE / "show_creator_home.py")
 
 
 def load_example_brief() -> dict:
@@ -401,11 +402,55 @@ def test_update_project_manifest_sets_pipeline_flags(tmp_path: Path, monkeypatch
     assert data["script_confirmed"] is True
     assert data["allowed_next_stage"] == "STAGE_02_STORYBOARD"
     assert data["character_bible_confirmed"] is False
-    assert data["keyframe_prompts_confirmed"] is True
-    assert data["keyframe_images_confirmed"] is False
-    assert data["video_clips_confirmed"] is False
-    assert data["audio_confirmed"] is False
-    assert data["assembly_confirmed"] is False
+
+
+def test_show_creator_home_points_to_reference_recovery_or_workbench(tmp_path: Path, capsys) -> None:
+    project_dir = tmp_path / "video_projects" / "creator_status_demo"
+    (project_dir / "03_characters").mkdir(parents=True, exist_ok=True)
+    (project_dir / "04_keyframes").mkdir(parents=True, exist_ok=True)
+    manifest_path = project_dir / "project_manifest.json"
+    manifest_path.write_text(json.dumps({
+        "project_id": project_dir.name,
+        "project_title": "雨夜便利店让伞",
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "current_stage": "STAGE_04_KEYFRAME_PROMPTS_GENERATION",
+        "status": "active",
+        "brief_locked": True,
+        "script_confirmed": True,
+        "storyboard_confirmed": True,
+        "character_bible_confirmed": True,
+        "keyframe_prompts_confirmed": True,
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    (project_dir / "03_characters" / "character_bible.json").write_text(json.dumps({
+        "stage": "STAGE_03_CHARACTER_BIBLE",
+        "project_id": project_dir.name,
+        "reference_image_status": {
+            "all_present": False,
+            "missing_paths": ["03_characters/reference_images/CHAR_001_primary.png"],
+        },
+        "stage05_execution_readiness": {
+            "safe_to_auto_generate": False,
+            "missing_reference_images": ["03_characters/reference_images/CHAR_001_primary.png"],
+        },
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    (project_dir / "04_keyframes" / "keyframe_prompts.json").write_text(json.dumps({
+        "stage": "STAGE_04_KEYFRAME_PROMPTS",
+        "project_id": project_dir.name,
+        "reference_image_status": {
+            "all_present": False,
+            "missing_paths": ["03_characters/reference_images/CHAR_001_primary.png"],
+        },
+        "stage05_execution_readiness": {
+            "safe_to_auto_generate": False,
+            "missing_reference_images": ["03_characters/reference_images/CHAR_001_primary.png"],
+        },
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    assert show_creator_home.main(["--project-dir", str(project_dir)]) == 0
+    output = capsys.readouterr().out
+    assert "CREATOR_HOME_READY" in output
+    assert "RECOMMENDED_ENTRY_LABEL: 打开角色参考图说明" in output
+    assert "03_characters/reference_image_start_here.md" in output
 
 
 

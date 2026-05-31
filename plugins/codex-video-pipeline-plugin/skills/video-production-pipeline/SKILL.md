@@ -111,6 +111,12 @@ Stage 00-B：汇总 Brief，用户确认后锁定 project_brief.locked.json
 19. Every project must live under `video_projects/<project_id>/`.
 20. Every stage must write files into the current project folder, not scattered global files.
 21. Never claim a stage is complete unless its expected files exist and validator scripts pass.
+22. When showing current status, prefer the creator-facing entry files over raw manifests:
+   - `creator_home.html`
+   - `03_characters/reference_image_start_here.md`
+   - `05_images/stage05_review_workbench.html`
+23. If Stage 03/04 already know reference images are missing, do not only repeat technical fields. Surface the explicit recovery entry and tell the user to start there.
+24. If Stage 05 requires human review, default to the workbench view first. Do not make the normal user start from `approve_stage05_review_queue.py` or `serve_stage05_review_workbench.py` unless they ask for low-level recovery commands.
 
 ## Stage state machine
 
@@ -152,6 +158,14 @@ PROJECT_DELIVERED
 ```
 
 If a user says “继续”, inspect the latest project under `video_projects/`, read its `project_manifest.json`, and resume from the first incomplete stage.
+
+Before summarizing a resumed project, prefer:
+
+```bash
+python skills/video-production-pipeline/scripts/show_creator_home.py
+```
+
+Use that result as the default creator-facing status view, then continue the pipeline from the first incomplete gate.
 
 If there are multiple possible latest projects and the target is ambiguous, ask the user to choose a project directory.
 
@@ -382,6 +396,15 @@ E. 修改人物声音设定
 F. 重新生成人物画像
 ```
 
+If `reference_image_status.all_present = false`, also surface:
+
+```text
+先看：
+<project_dir>/03_characters/reference_image_start_here.md
+```
+
+This is the default creator-facing recovery entry. Do not only quote JSON fields like `reference_images_ready=false`.
+
 If the user chooses A:
 
 1. Update `character_bible.json` status to `confirmed` if needed.
@@ -447,6 +470,14 @@ D. 修改角色一致性提示词
 E. 修改负面提示词
 F. 重新生成 Stage 04 提示词包
 ```
+
+If `stage05_execution_readiness.safe_to_auto_generate = false`, explicitly tell the user to open:
+
+```text
+<project_dir>/04_keyframes/stage05_start_here.md
+```
+
+That file should be treated as the normal next step before Stage 05, not as a debug artifact.
 
 If the user chooses A:
 
@@ -538,6 +569,14 @@ D. 调整图片风格一致性
 E. 改用 ComfyUI / OpenAI / 手动图片重新生成
 F. 重新生成 Stage 05 图片包
 ```
+
+When Stage 05 still requires human review, the default user-facing entry is:
+
+```text
+<project_dir>/05_images/stage05_review_workbench.html
+```
+
+Surface that first. Only mention `serve_stage05_review_workbench.py` or `approve_stage05_review_queue.py` as advanced recovery commands.
 
 If the user chooses A:
 

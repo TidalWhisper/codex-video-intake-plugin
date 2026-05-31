@@ -38,3 +38,11 @@ $video-production-pipeline
 ```
 
 不要在正常流程里手动调用 `$video-script-generation` 或 `$video-storyboard-generation`；总控 pipeline 会在用户确认后自动继续。
+
+如果你只是想看“当前项目卡在哪、下一步该打开什么”，运行：
+
+```cmd
+python skills\video-production-pipeline\scripts\show_creator_home.py
+```
+
+这个入口会自动把你带到最新项目的创作者主页，而不是先让你读 manifest。

@@ -25,6 +25,18 @@ plugins/codex-video-pipeline-plugin/
 $video-production-pipeline
 ```
 
+如果你想直接查看“当前项目卡在哪、下一步该点哪里”，可以运行：
+
+```bash
+python skills/video-production-pipeline/scripts/show_creator_home.py
+```
+
+它会自动同步最新项目状态，并给出：
+
+- `creator_home.html`：普通创作者主页
+- `reference_image_start_here.md`：角色参考图补齐入口
+- `stage05_review_workbench.html`：Stage 05 默认审图工作台
+
 ## 当前状态
 
 已包含：
