@@ -95,6 +95,117 @@ SCENE_PACKS: dict[str, ScenePack] = {
             ),
         ),
     ),
+    "realistic_establishing_expanded_pack": ScenePack(
+        pack_key="realistic_establishing_expanded_pack",
+        display_name="Realistic Establishing Expanded Pack",
+        normalized_style="写实电影感",
+        shots=(
+            SceneShot(
+                shot_id="S001",
+                start_keyframe_prompt="young woman in a long dress walking alone along the shoreline at dusk, wide coastal establishing shot",
+                end_keyframe_prompt="the same woman keeps walking alone by the sea while the sunset sky opens wider behind her",
+                style_prompt="realistic cinematic still",
+                consistency_prompt="same woman, same long dress, same quiet beach, same sunset atmosphere",
+                camera_prompt="wide establishing shot",
+                negative_prompt=COMMON_NEGATIVE,
+                expected_risk_tags=("single_subject_wide_establishing",),
+            ),
+            SceneShot(
+                shot_id="S002",
+                start_keyframe_prompt="middle-aged fisherman standing alone on a foggy harbor pier before sunrise, realistic wide environmental shot",
+                end_keyframe_prompt="the same fisherman remains alone on the pier while the harbor lights fade into dawn mist",
+                style_prompt="grounded realistic still",
+                consistency_prompt="same fisherman, same pier, same foggy harbor, same work clothes",
+                camera_prompt="wide establishing shot",
+                negative_prompt=COMMON_NEGATIVE,
+                expected_risk_tags=("single_subject_wide_establishing",),
+            ),
+            SceneShot(
+                shot_id="S003",
+                start_keyframe_prompt="young man in a dark coat crossing a rainy neon street alone at night, realistic city establishing shot",
+                end_keyframe_prompt="the same man continues alone through the wet street as traffic reflections spread across the road",
+                style_prompt="realistic cinematic still",
+                consistency_prompt="same man, same dark coat, same rainy night street, same neon reflections",
+                camera_prompt="wide establishing shot",
+                negative_prompt=COMMON_NEGATIVE,
+                expected_risk_tags=("single_subject_wide_establishing",),
+            ),
+        ),
+    ),
+    "realistic_healing_expanded_pack": ScenePack(
+        pack_key="realistic_healing_expanded_pack",
+        display_name="Realistic Healing Expanded Pack",
+        normalized_style="温暖治愈",
+        shots=(
+            SceneShot(
+                shot_id="S001",
+                start_keyframe_prompt="young mother with short hair sitting alone beside a large cafe window in morning light, realistic wide interior shot",
+                end_keyframe_prompt="the same woman lifts her eyes toward the sunlit street outside while remaining alone at the same cafe table",
+                style_prompt="warm healing realistic still",
+                consistency_prompt="same woman, same cafe, same soft morning light, same knit cardigan",
+                camera_prompt="wide interior establishing shot",
+                negative_prompt=COMMON_NEGATIVE,
+                expected_risk_tags=("single_subject_wide_establishing",),
+            ),
+            SceneShot(
+                shot_id="S002",
+                start_keyframe_prompt="solo female hiker pausing on a mountain road during blue hour, realistic scenic wide shot",
+                end_keyframe_prompt="the same hiker stays alone on the road while distant mountain lights appear in the evening haze",
+                style_prompt="healing cinematic realism",
+                consistency_prompt="same hiker, same backpack, same mountain road, same blue-hour atmosphere",
+                camera_prompt="wide scenic shot",
+                negative_prompt=COMMON_NEGATIVE,
+                expected_risk_tags=("single_subject_wide_establishing",),
+            ),
+            SceneShot(
+                shot_id="S003",
+                start_keyframe_prompt="elderly woman watering plants alone in a small rooftop garden at sunset, realistic wide lifestyle shot",
+                end_keyframe_prompt="the same elderly woman keeps tending the rooftop plants while warm sunset light fills the city skyline behind her",
+                style_prompt="warm realistic still",
+                consistency_prompt="same elderly woman, same rooftop garden, same watering can, same sunset skyline",
+                camera_prompt="wide lifestyle establishing shot",
+                negative_prompt=COMMON_NEGATIVE,
+                expected_risk_tags=("single_subject_wide_establishing",),
+            ),
+        ),
+    ),
+    "realistic_editorial_expanded_pack": ScenePack(
+        pack_key="realistic_editorial_expanded_pack",
+        display_name="Realistic Editorial Expanded Pack",
+        normalized_style="广告高级感",
+        shots=(
+            SceneShot(
+                shot_id="S001",
+                start_keyframe_prompt="young Black woman standing alone in a minimalist hotel lobby with tall stone walls, realistic premium editorial wide shot",
+                end_keyframe_prompt="the same woman turns slightly in the same lobby while the polished floor and architectural depth remain prominent",
+                style_prompt="premium realistic editorial still",
+                consistency_prompt="same woman, same hotel lobby, same tailored outfit, same luxury interior atmosphere",
+                camera_prompt="wide editorial establishing shot",
+                negative_prompt=COMMON_NEGATIVE,
+                expected_risk_tags=("single_subject_wide_establishing",),
+            ),
+            SceneShot(
+                shot_id="S002",
+                start_keyframe_prompt="stylish young man standing alone beside a silver sedan on a desert highway at golden hour, realistic luxury ad wide shot",
+                end_keyframe_prompt="the same man remains alone near the car while the desert horizon opens behind him in warm light",
+                style_prompt="high-end realistic advertising still",
+                consistency_prompt="same man, same silver sedan, same desert highway, same golden-hour atmosphere",
+                camera_prompt="wide advertising establishing shot",
+                negative_prompt=COMMON_NEGATIVE,
+                expected_risk_tags=("single_subject_wide_establishing",),
+            ),
+            SceneShot(
+                shot_id="S003",
+                start_keyframe_prompt="young East Asian woman standing alone on a modern office rooftop at dusk, realistic premium city wide shot",
+                end_keyframe_prompt="the same woman stays alone on the rooftop while the skyline lights become clearer behind her",
+                style_prompt="luxury cinematic realism",
+                consistency_prompt="same woman, same rooftop, same suit silhouette, same dusk skyline",
+                camera_prompt="wide editorial establishing shot",
+                negative_prompt=COMMON_NEGATIVE,
+                expected_risk_tags=("single_subject_wide_establishing",),
+            ),
+        ),
+    ),
     "guofeng_review_pack": ScenePack(
         pack_key="guofeng_review_pack",
         display_name="Guofeng Review Pack",
@@ -195,8 +306,28 @@ def summarize_manifest(pack: ScenePack, project_dir: Path, manifest_path: Path) 
         "quality_review": manifest.get("quality_review"),
         "self_check": manifest.get("self_check"),
         "allowed_next_stage": manifest.get("allowed_next_stage"),
+        "semantic_review_template": semantic_review_template(pack),
         "jobs": manifest.get("jobs") or [],
     }
+
+
+def semantic_review_template(pack: ScenePack) -> list[dict[str, Any]]:
+    template: list[dict[str, Any]] = []
+    for shot in pack.shots:
+        template.append({
+            "shot_id": shot.shot_id,
+            "start_image_id": f"IMG_{shot.shot_id}_START",
+            "end_image_id": f"IMG_{shot.shot_id}_END",
+            "expected_subject_count": 1 if "same couple" not in shot.consistency_prompt.lower() and "same couple" not in shot.start_keyframe_prompt.lower() else 2,
+            "must_match": [
+                f"主体与提示词一致: {shot.start_keyframe_prompt}",
+                f"镜头与构图大方向一致: {shot.camera_prompt}",
+                f"风格方向一致: {shot.style_prompt}",
+                f"连续性一致: {shot.consistency_prompt}",
+                "不能多人/少人，不能多手多脚，不能出现与描述冲突的主体或道具。",
+            ],
+        })
+    return template
 
 
 def locked_brief_for_pack(project_dir: Path, pack: ScenePack) -> dict[str, Any]:

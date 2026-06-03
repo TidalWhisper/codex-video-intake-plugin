@@ -31,7 +31,7 @@
   },
   "10": {
     "inputs": {
-      "text": "game cg clean artwork plate, no title text",
+      "text": "game cg clean artwork plate, no title text, no top header, no letters anywhere in frame",
       "clip": [
         "2",
         0
@@ -44,7 +44,7 @@
   },
   "11": {
     "inputs": {
-      "text": "You are a game visual development artist creating a premium character-action illustration plate with clear heroic silhouette, armor readability, layered atmosphere, dynamic motion, and polished rendering. Deliver clean artwork only with no integrated title treatment, no logo badge, no wordmark, and no caption area.",
+      "text": "You are a game visual development artist creating a premium character-action illustration plate with clear heroic silhouette, armor readability, layered atmosphere, dynamic motion, and polished rendering. Deliver clean artwork only with no integrated title treatment, no logo badge, no wordmark, no caption area, no top-header typography, and no decorative letters anywhere in the sky or background.",
       "clip": [
         "2",
         0
@@ -86,7 +86,7 @@
   },
   "14": {
     "inputs": {
-      "text": "flat documentary realism, washed-out colors, muddy shadows, weak silhouette, low design contrast, plastic cgi skin, over-detailed photographic texture, broken anatomy, duplicated people, text banner, poster headline, giant letters, footer plaque, fake franchise logo, engraved scene text, watermark",
+      "text": "flat documentary realism, washed-out colors, muddy shadows, weak silhouette, low design contrast, plastic cgi skin, over-detailed photographic texture, broken anatomy, duplicated people, text banner, poster headline, giant letters, top title header, sky title text, pseudo chinese characters, footer plaque, fake franchise logo, engraved scene text, watermark",
       "clip": [
         "2",
         0

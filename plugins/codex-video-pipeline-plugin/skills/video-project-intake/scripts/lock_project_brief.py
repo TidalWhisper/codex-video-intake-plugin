@@ -18,7 +18,7 @@ PLUGIN_ROOT = next(anchor for anchor in [SCRIPT_DIR, *SCRIPT_DIR.parents] if anc
 sys.path.insert(0, str(PLUGIN_ROOT / "scripts"))
 from validate_project_brief import validate  # noqa: E402
 from pipeline_core.pipeline_blueprints import routing_from_brief  # noqa: E402
-from pipeline_core.project_state import load_json_file, update_project_manifest_for_stage, utc_now  # noqa: E402
+from pipeline_core.project_state import load_json_file, sync_project_manifest_truth, update_project_manifest_for_stage, utc_now  # noqa: E402
 from pipeline_core.quality_contracts import build_quality_contract  # noqa: E402
 from pipeline_core.requirement_compiler import compile_requirements  # noqa: E402
 
@@ -85,6 +85,7 @@ def main(argv: list[str]) -> int:
             manifest["quality_contract"] = data["quality_contract"]
             manifest["updated_at"] = utc_now()
             manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+            sync_project_manifest_truth(manifest_path)
     else:
         update_project_manifest_for_stage(
             draft_path,

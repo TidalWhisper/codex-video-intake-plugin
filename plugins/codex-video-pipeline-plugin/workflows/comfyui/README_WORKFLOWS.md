@@ -50,7 +50,8 @@ AceStep_Music_Workflow.json
 - `scripts/providers/build_stage05_zimage_photo_bridge.py` 用来把 `AmazingZImageWorkflow/amazing-z-photo_SAFETENSORS.json` 裁成 Stage 05 可 patch 的 API bridge
 - `scripts/providers/build_stage05_zimage_image_b_bridge.py` 用来把 `AmazingZImageWorkflow/amazing-z-image-b_SAFETENSORS.json` 裁成 Stage 05 可 patch 的 API bridge
 - 这些 repo 内 route-specific workflow 仍然只是过渡桥接，并不自动等于“社区最佳版”
-- `realistic_cinematic` 当前已经切到仓库内 bridge：`txt2img_keyframe_realistic_zimage_photo_bridge.workflow_api.json`
+- `realistic_cinematic` 当前默认 prompt-only 已切到 `Qwen 2512` 原生路线：`txt2img_keyframe_realistic.workflow_api.json`
+- `realistic_cinematic` 的 `Z-Image photo bridge` 仍保留为社区桥接比较候选：`txt2img_keyframe_realistic_zimage_photo_bridge.workflow_api.json`
 - `stylized_concept` 当前已经切到仓库内 bridge：`txt2img_keyframe_stylized_zimage_image_b_bridge.workflow_api.json`
 - `stylized_concept` 已有本地 smoke evidence：`video_projects/real_smoke_20260530_stage05_stylized_bridge/05_images/keyframe_image_manifest.json`
 - `stylized_concept` 现在还支持 route-internal preset anchor：
@@ -61,12 +62,17 @@ AceStep_Music_Workflow.json
 - `game_cg` 仍复用同一套 `Z-Image image-b` 模型底座，但 prompt anchor 与默认保存前缀已经和 `stylized_concept` 分开，优先压低标题字 / logo / poster layout 倾向
 - `game_cg` 已有本地 smoke evidence：`video_projects/real_smoke_20260530_stage05_gamecg_bridge/05_images/keyframe_image_manifest.json`
 - `guofeng_ink` 已有本地 smoke evidence：`video_projects/real_smoke_20260530_stage05_guofeng_ink/05_images/keyframe_image_manifest.json`
+- Stage 05 路线升级必须先看真实语义结果，不允许只凭“能出图”升级为默认：
+  - `realistic` 先看建立镜头是否真的变成环境镜头，而不是片场/棚拍
+  - `guofeng` 先看中景叙事和道具关系，而不是唯美半身像
+  - `game_cg` 先看标题字、logo 和顶部文本是否被压掉，而不是只看角色是否站着
+- 社区成熟 workflow 优先级高于仓库自写桥接；如果社区方案在本机缺模型/缺节点，必须先把 blocker 写清，再谈默认路由切换
 - `anime_cn_newguofeng` 在本机当前仍未通过 smoke：
   - 失败原因不是 prompt，而是本机缺少这条 Lumina 栈所需的 `neta-lumina-v1.0.safetensors`、`gemma_2_2b_fp16.safetensors` 和匹配的 VAE 路径
   - 失败证据：`video_projects/real_smoke_20260530_stage05_anime_cn_newguofeng/05_images/comfyui_image_requests.json`
 - `guofeng_ink` 当前有一个额外例外：外部 `Workflow-Qwen-Image-LORA.json` 源在 2026-05-30 核验时出现了与 `liuyifei` LoRA 混线的问题，所以 repo 内独立文件暂时仍是更可信的执行版本
 - 后续优先迁移顺序：
-  - `realistic_cinematic` 已通过 repo bridge 吸收 `AmazingZImageWorkflow/amazing-z-photo_SAFETENSORS.json` 的核心模型栈；后续重点转为做更多视觉对照而不是回退默认路由
+- `realistic_cinematic` 已吸收 `AmazingZImageWorkflow/amazing-z-photo_SAFETENSORS.json` 的桥接经验，但在 2026-06-01 语义验收后，默认 prompt-only 路由改为 `Qwen 2512`，后续重点是继续压实建立镜头语义而不是继续把 Z-Image bridge 当默认
   - `stylized_concept` 已通过 repo bridge 吸收 `AmazingZImageWorkflow/amazing-z-image-b_SAFETENSORS.json` 的核心模型栈；后续重点是补 smoke evidence 与细分 preset
   - `anime_jp` → `Anima` / `Z-Anime` 原生 workflow
   - `guofeng_ink` → `Qwen-Image-Gufeng-LoRA` 专用 workflow

@@ -41,11 +41,24 @@ validate_project_brief = load_module("validate_project_brief", INTAKE / "validat
 validate_project_structure = load_module("validate_project_structure_for_test", INTAKE / "validate_project_structure.py")
 new_script_template = load_module("new_script_template_for_test", SCRIPT / "new_script_template.py")
 validate_script = load_module("validate_script_for_test", SCRIPT / "validate_script.py")
+build_stage01_prompt_packet = load_module("build_stage01_prompt_packet_for_test", SCRIPT / "build_stage01_prompt_packet.py")
+write_stage01_outputs = load_module("write_stage01_outputs_for_test", SCRIPT / "write_stage01_outputs.py")
+build_stage01_repair_packet = load_module("build_stage01_repair_packet_for_test", SCRIPT / "build_stage01_repair_packet.py")
+run_stage01_codex_flow = load_module("run_stage01_codex_flow_for_test", SCRIPT / "run_stage01_codex_flow.py")
+build_stage02_prompt_packet = load_module("build_stage02_prompt_packet_for_test", STORYBOARD / "build_stage02_prompt_packet.py")
+write_stage02_outputs = load_module("write_stage02_outputs_for_test", STORYBOARD / "write_stage02_outputs.py")
 new_storyboard_template = load_module("new_storyboard_template_for_test", STORYBOARD / "new_storyboard_template.py")
+run_stage02_codex_flow = load_module("run_stage02_codex_flow_for_test", STORYBOARD / "run_stage02_codex_flow.py")
 validate_storyboard = load_module("validate_storyboard_for_test", STORYBOARD / "validate_storyboard.py")
+build_stage03_prompt_packet = load_module("build_stage03_prompt_packet_for_test", CHARACTER / "build_stage03_prompt_packet.py")
+write_stage03_outputs = load_module("write_stage03_outputs_for_test", CHARACTER / "write_stage03_outputs.py")
 new_character_bible_template = load_module("new_character_bible_template_for_test", CHARACTER / "new_character_bible_template.py")
+run_stage03_codex_flow = load_module("run_stage03_codex_flow_for_test", CHARACTER / "run_stage03_codex_flow.py")
 validate_character_bible = load_module("validate_character_bible_for_test", CHARACTER / "validate_character_bible.py")
+build_stage04_prompt_packet = load_module("build_stage04_prompt_packet_for_test", KEYFRAME / "build_stage04_prompt_packet.py")
+write_stage04_outputs = load_module("write_stage04_outputs_for_test", KEYFRAME / "write_stage04_outputs.py")
 new_keyframe_prompts_template = load_module("new_keyframe_prompts_template_for_test", KEYFRAME / "new_keyframe_prompts_template.py")
+run_stage04_codex_flow = load_module("run_stage04_codex_flow_for_test", KEYFRAME / "run_stage04_codex_flow.py")
 validate_keyframe_prompts = load_module("validate_keyframe_prompts_for_test", KEYFRAME / "validate_keyframe_prompts.py")
 new_keyframe_image_jobs = load_module("new_keyframe_image_jobs_for_test", IMAGES / "new_keyframe_image_jobs.py")
 validate_keyframe_image_manifest = load_module("validate_keyframe_image_manifest_for_test", IMAGES / "validate_keyframe_image_manifest.py")
@@ -71,6 +84,12 @@ validate_qa_manifest = load_module("validate_qa_manifest_for_test", QA / "valida
 package_delivery = load_module("package_delivery_for_test", QA / "package_delivery.py")
 update_project_manifest = load_module("update_project_manifest_for_test", PIPELINE / "update_project_manifest.py")
 show_creator_home = load_module("show_creator_home_for_test", PIPELINE / "show_creator_home.py")
+continue_pipeline = load_module("continue_pipeline_for_test", PIPELINE / "continue_pipeline.py")
+run_stage01_from_locked_brief = load_module("run_stage01_from_locked_brief_for_test", PIPELINE / "run_stage01_from_locked_brief.py")
+run_stage02_from_confirmed_script = load_module("run_stage02_from_confirmed_script_for_test", PIPELINE / "run_stage02_from_confirmed_script.py")
+run_stage03_from_confirmed_storyboard = load_module("run_stage03_from_confirmed_storyboard_for_test", PIPELINE / "run_stage03_from_confirmed_storyboard.py")
+run_stage04_from_confirmed_character_bible = load_module("run_stage04_from_confirmed_character_bible_for_test", PIPELINE / "run_stage04_from_confirmed_character_bible.py")
+pipeline_blueprints = load_module("pipeline_blueprints_for_test", ROOT / "scripts" / "pipeline_blueprints.py")
 
 
 def load_example_brief() -> dict:
@@ -119,6 +138,771 @@ def load_rainy_store_brief(project_dir: Path) -> dict:
         "final_output": "合成粗剪成片",
     })
     return brief
+
+
+def load_music_video_plateau_brief(project_dir: Path) -> dict:
+    brief = load_example_brief()
+    brief.update({
+        "schema_version": "0.5.0",
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "status": "locked",
+        "confirmed_by_user": True,
+        "allowed_next_stage": "STAGE_01_SCRIPT_GENERATION",
+        "locked_at": "2026-06-02T20:36:00+08:00",
+    })
+    idea = (
+        "一位遭遇30岁职业危机与精神内耗的城市景观规划师，逃离钢筋水泥，驱车前往川西的高原旷野。"
+        "在修缮一间濒临倒闭的藏式民宿过程中，她与当地的野生动物巡护员相识。"
+        "在雪山、草地与星空之间，她不仅重新找到了生活的步调，也见证了人与自然最真实的羁绊。"
+    )
+    brief["user_answers"] = {
+        "idea": idea,
+        "target_duration": "B",
+        "genre": "P",
+        "style": "A",
+        "visual_spec": "16:9 + 1080P",
+        "characters": "C",
+        "voice": "A",
+        "music": "B1",
+        "final_output": "F",
+    }
+    brief["normalized"].update({
+        "idea": idea,
+        "target_duration_sec": 30,
+        "target_duration_label": "30秒",
+        "genre": "音乐MV",
+        "style": "写实电影感",
+        "aspect_ratio": "16:9",
+        "aspect_ratio_label": "16:9 横屏",
+        "resolution": "1080P",
+        "resolution_label": "1080P",
+        "characters_mode": "由模型根据故事自动判断",
+        "characters_required": "auto",
+        "voice_mode": "不需要配音",
+        "voice_required": False,
+        "music_mode": "需要，歌曲（song）",
+        "music_profile": "song",
+        "music_required": True,
+        "final_output": "合成粗剪成片",
+    })
+    return brief
+
+
+def write_stage01_llm_output(script_dir: Path, llm_output: dict) -> Path:
+    path = script_dir / "stage01_llm_output.json"
+    path.write_text(json.dumps(llm_output, ensure_ascii=False, indent=2), encoding="utf-8")
+    return path
+
+
+def seed_confirmed_stage_chain(project_dir: Path) -> dict[str, Path]:
+    intake_dir = project_dir / "00_intake"
+    script_dir = project_dir / "01_script"
+    storyboard_dir = project_dir / "02_storyboard"
+    character_dir = project_dir / "03_characters"
+    keyframe_dir = project_dir / "04_keyframes"
+    for path in [intake_dir, script_dir, storyboard_dir, character_dir, keyframe_dir]:
+        path.mkdir(parents=True, exist_ok=True)
+
+    locked_brief = intake_dir / "project_brief.locked.json"
+    brief = load_example_brief()
+    brief.update({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "status": "locked",
+        "confirmed_by_user": True,
+        "allowed_next_stage": "STAGE_01_SCRIPT_GENERATION",
+        "locked_at": "2026-06-02T23:30:00+08:00",
+    })
+    locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    script_json = script_dir / "script.json"
+    script = json.loads((TEMPLATES / "script.example.json").read_text(encoding="utf-8"))
+    script.update({
+        "project_id": project_dir.name,
+        "source_brief": str(locked_brief).replace("\\", "/"),
+        "status": "confirmed",
+        "allowed_next_stage": "STAGE_02_STORYBOARD",
+    })
+    script_json.write_text(json.dumps(script, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    storyboard_json = storyboard_dir / "storyboard.json"
+    storyboard = json.loads((TEMPLATES / "storyboard.example.json").read_text(encoding="utf-8"))
+    storyboard.update({
+        "project_id": project_dir.name,
+        "source_brief": str(locked_brief).replace("\\", "/"),
+        "source_script": str(script_json).replace("\\", "/"),
+        "status": "confirmed",
+        "allowed_next_stage": "STAGE_03_CHARACTER_BIBLE",
+    })
+    storyboard_json.write_text(json.dumps(storyboard, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    character_json = character_dir / "character_bible.json"
+    character_bible = json.loads((TEMPLATES / "character_bible.example.json").read_text(encoding="utf-8"))
+    character_bible.update({
+        "project_id": project_dir.name,
+        "source_brief": str(locked_brief).replace("\\", "/"),
+        "source_script": str(script_json).replace("\\", "/"),
+        "source_storyboard": str(storyboard_json).replace("\\", "/"),
+        "status": "confirmed",
+        "allowed_next_stage": "STAGE_04_KEYFRAME_PROMPTS",
+    })
+    character_json.write_text(json.dumps(character_bible, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    keyframe_json = keyframe_dir / "keyframe_prompts.json"
+    keyframe = json.loads((TEMPLATES / "keyframe_prompts.example.json").read_text(encoding="utf-8"))
+    keyframe.update({
+        "project_id": project_dir.name,
+        "source_brief": str(locked_brief).replace("\\", "/"),
+        "source_script": str(script_json).replace("\\", "/"),
+        "source_storyboard": str(storyboard_json).replace("\\", "/"),
+        "source_character_bible": str(character_json).replace("\\", "/"),
+        "status": "confirmed",
+        "allowed_next_stage": "STAGE_05_KEYFRAME_IMAGES",
+    })
+    keyframe_json.write_text(json.dumps(keyframe, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    return {
+        "locked_brief": locked_brief,
+        "script_json": script_json,
+        "storyboard_json": storyboard_json,
+        "character_json": character_json,
+        "keyframe_json": keyframe_json,
+    }
+
+
+def make_stage02_llm_output_from_example() -> dict:
+    data = json.loads((TEMPLATES / "storyboard.example.json").read_text(encoding="utf-8"))
+    for key in ["schema_version", "stage", "project_id", "source_brief", "source_script", "shot_count", "allowed_next_stage"]:
+        data.pop(key, None)
+    return data
+
+
+def make_stage03_llm_output_from_example() -> dict:
+    data = json.loads((TEMPLATES / "character_bible.example.json").read_text(encoding="utf-8"))
+    for key in [
+        "schema_version",
+        "stage",
+        "project_id",
+        "source_brief",
+        "source_script",
+        "source_storyboard",
+        "reference_image_plan",
+        "reference_image_status",
+        "stage05_execution_readiness",
+        "allowed_next_stage",
+    ]:
+        data.pop(key, None)
+    return data
+
+
+def make_stage04_llm_output_from_example() -> dict:
+    data = json.loads((TEMPLATES / "keyframe_prompts.example.json").read_text(encoding="utf-8"))
+    for key in [
+        "schema_version",
+        "stage",
+        "project_id",
+        "source_brief",
+        "source_script",
+        "source_storyboard",
+        "source_character_bible",
+        "reference_image_status",
+        "stage05_execution_readiness",
+        "allowed_next_stage",
+    ]:
+        data.pop(key, None)
+    return data
+
+
+def make_stage02_llm_output_for_rainy_store() -> dict:
+    return {
+        "status": "draft",
+        "target_duration_sec": 12,
+        "shots": [
+            {
+                "shot_id": "S001",
+                "start": "00:00",
+                "end": "00:03",
+                "duration_sec": 3,
+                "scene": "雨夜便利店门口",
+                "location": "便利店门口",
+                "weather": "雨夜",
+                "key_prop": "最后一把伞",
+                "camera": "wide shot",
+                "composition": "雨夜便利店门口和门廊灯牌先建立出来，20岁出头的女孩与最后一把伞同框。",
+                "action": "20岁出头的女孩撑着最后一把伞站在便利店门廊边。",
+                "emotion": "安静",
+                "dialogue": "",
+                "voiceover": "雨声先把门口的寒意铺满。",
+                "sound_music": "underscore: 低温感钢琴和雨声一起进入",
+                "transition_to_next": "cut",
+                "production_note": "便利店门口、最后一把伞和主角服装要稳定。",
+            },
+            {
+                "shot_id": "S002",
+                "start": "00:03",
+                "end": "00:06",
+                "duration_sec": 3,
+                "scene": "雨夜便利店门口",
+                "location": "便利店门口",
+                "weather": "雨夜",
+                "key_prop": "最后一把伞",
+                "camera": "medium shot",
+                "composition": "主角抬手把最后一把伞递出去，收伞人保持次要、模糊和不抢戏。",
+                "action": "她把最后一把伞递给更需要的人。",
+                "emotion": "克制善意",
+                "dialogue": "",
+                "voiceover": "她把最后一把伞先让给别人。",
+                "sound_music": "underscore: 雨滴打伞面的声音更明显",
+                "transition_to_next": "cut",
+                "production_note": "主角仍必须是20岁出头的女孩，收伞人只能作为次要陪体。",
+            },
+            {
+                "shot_id": "S003",
+                "start": "00:06",
+                "end": "00:09",
+                "duration_sec": 3,
+                "scene": "雨夜街边",
+                "location": "便利店门口",
+                "weather": "雨夜",
+                "key_prop": "无",
+                "camera": "back shot",
+                "composition": "她淋着雨离开门口，背影被雨幕压得更冷，便利店霓虹还留在后方。",
+                "action": "她淋着雨走远，没有回头。",
+                "emotion": "落寞余温",
+                "dialogue": "",
+                "voiceover": "她把冷意留给自己，继续往雨里走。",
+                "sound_music": "underscore: 配乐压低，只留雨声和脚步",
+                "transition_to_next": "cut",
+                "production_note": "保持主角长相、发型和服装轮廓稳定，不要漂移成其他人。",
+            },
+            {
+                "shot_id": "S004",
+                "start": "00:09",
+                "end": "00:12",
+                "duration_sec": 3,
+                "scene": "雨夜便利店门口",
+                "location": "便利店门口",
+                "weather": "雨夜",
+                "key_prop": "热可可",
+                "camera": "close-up",
+                "composition": "她回头时，便利店门口台阶上的热可可在冷雨里冒着热气。",
+                "action": "她回头看见门口多了一杯热可可。",
+                "emotion": "意外回暖",
+                "dialogue": "",
+                "voiceover": "被送出去的温暖，又悄悄回来了。",
+                "sound_music": "underscore: 配乐轻轻回暖",
+                "transition_to_next": "fade out",
+                "production_note": "热可可必须清楚可见，作为结尾情绪落点。",
+            },
+        ],
+        "self_check": {
+            "matches_locked_brief": True,
+            "matches_script": True,
+            "duration_fits": True,
+            "ready_for_character_stage": True,
+            "notes": [],
+        },
+    }
+
+
+def make_stage03_llm_output_for_rainy_store() -> dict:
+    return {
+        "status": "draft",
+        "characters": [
+            {
+                "character_id": "CHAR_001",
+                "name": "20岁出头的女孩",
+                "role": "main",
+                "age": "20岁出头",
+                "gender_presentation": "female",
+                "appearance": {
+                    "face": "清秀自然，雨夜里神情克制但柔软",
+                    "hair": "被雨水和夜风打湿的黑色长发",
+                    "body": "身形纤细，动作偏轻",
+                    "clothing": "简单外套与长裙，雨夜下轮廓稳定",
+                    "accessories": "最后一把伞、热可可纸杯"
+                },
+                "personality": "安静、善良、习惯把情绪留给自己",
+                "emotional_arc": ["安静", "克制善意", "落寞余温", "意外回暖"],
+                "voice_profile": {
+                    "needed": True,
+                    "suggested_voice": "年轻女性，温柔克制，略带雨夜冷感"
+                },
+                "visual_consistency_prompt": "same early-20s girl, same wet black hair, same simple outerwear and dress silhouette, same lonely but gentle expression, rainy convenience-store doorway",
+                "negative_consistency_prompt": "different face, different hair, extra protagonist, outfit drift, deformed hands, extra limbs",
+                "performance_profile": {
+                    "baseline_expression": "安静",
+                    "movement_style": "slow and restrained",
+                    "gesture_rules": [
+                        "动作幅度偏小",
+                        "递伞和回头都要自然克制",
+                        "不要出现夸张表演"
+                    ],
+                    "dialogue_delivery": "自然、轻声、可停顿",
+                    "continuity_anchor": "20岁出头的女孩 / 雨夜便利店门口 / 最后一把伞 / 热可可"
+                }
+            }
+        ],
+        "reference_image_required": True,
+        "self_check": {
+            "matches_locked_brief": True,
+            "matches_script": True,
+            "matches_storyboard": True,
+            "ready_for_keyframe_stage": True,
+            "notes": [],
+        },
+    }
+
+
+def make_stage04_llm_output_for_rainy_store() -> dict:
+    return {
+        "status": "draft",
+        "prompt_language": "English generation prompts with Chinese review notes",
+        "visual_strategy": {
+            "keyframe_mode": "start_and_end_keyframes_per_shot",
+            "video_mode": "image_to_video_per_shot",
+            "continuity_strategy": "reuse character consistency prompts and adjacent-shot transition requirements"
+        },
+        "shot_prompts": [
+            {
+                "shot_id": "S001",
+                "duration_sec": 3,
+                "characters": ["CHAR_001"],
+                "scene_summary": "地点：便利店门口 / 天气：雨夜 / 动作：20岁出头的女孩撑着最后一把伞站在便利店门廊边。 / 道具：最后一把伞 / 情绪：安静 / 构图重点：便利店门口和雨夜门廊先建立出来。",
+                "intent_summary": "这个镜头要在便利店门口里抓住“撑着最后一把伞站在门廊边”这一瞬间，传达安静，让最后一把伞成为情绪支点。",
+                "story_anchor_bundle": {
+                    "location": "便利店门口",
+                    "weather": "雨夜",
+                    "key_prop": "最后一把伞",
+                    "emotion": "安静",
+                    "composition_focus": "便利店门口和雨夜门廊先建立出来。"
+                },
+                "start_keyframe_prompt": "Character identity anchor: same early-20s girl, wet black hair, simple outerwear and dress silhouette. Primary protagonist must remain 20岁出头的女孩 in every frame. rainy convenience-store doorway, last umbrella, quiet emotion, vertical 9:16 composition",
+                "end_keyframe_prompt": "cinematic continuation of the rainy convenience-store doorway moment, do not swap protagonist identity, preserve the same girl, same umbrella, same doorway light, same wet hair silhouette",
+                "motion_prompt": "The girl holds the last umbrella quietly under the convenience-store awning; gentle natural motion, rain streaks, stable identity and outfit continuity.",
+                "camera_prompt": "wide shot",
+                "lighting_prompt": "cold rainy night practical light, convenience-store doorway glow, wet ground reflections",
+                "style_prompt": "realistic cinematic healing short film, restrained rain-night mood",
+                "consistency_prompt": "Character identity anchor: same early-20s girl, same wet black hair, same simple outerwear and dress silhouette, same lonely but gentle expression; Primary protagonist must remain 20岁出头的女孩 in every frame.",
+                "identity_anchor_prompt": "Character identity anchor: same early-20s girl, same wet black hair, same simple outerwear and dress silhouette.",
+                "negative_prompt": "watermark, logo, subtitles, duplicate person, extra limbs, deformed hands, face drift, outfit drift",
+                "image_generation_notes": "Keep the rainy convenience-store doorway and last umbrella readable.",
+                "video_generation_notes": "Preserve stable identity and low-amplitude movement.",
+                "performance_prompt": "Quiet and restrained performance, very small movements.",
+                "dialogue_delivery_prompt": "",
+                "dependencies": {
+                    "reference_images": ["03_characters/reference_images/CHAR_001_primary.png"],
+                        "previous_shot_id": None,
+                    "next_shot_id": "S002"
+                }
+            },
+            {
+                "shot_id": "S002",
+                "duration_sec": 3,
+                "characters": ["CHAR_001"],
+                "scene_summary": "地点：便利店门口 / 天气：雨夜 / 动作：她把最后一把伞递给更需要的人。 / 道具：最后一把伞 / 情绪：克制善意 / 构图重点：递伞动作清晰，收伞人必须次要。",
+                "intent_summary": "这个镜头要在便利店门口里抓住“递出最后一把伞”这一瞬间，传达克制善意，让最后一把伞成为情绪支点。",
+                "story_anchor_bundle": {
+                    "location": "便利店门口",
+                    "weather": "雨夜",
+                    "key_prop": "最后一把伞",
+                    "emotion": "克制善意",
+                    "composition_focus": "递伞动作清晰，收伞人必须次要。"
+                },
+                "start_keyframe_prompt": "Primary protagonist must remain 20岁出头的女孩. She hands the last umbrella forward in the rainy convenience-store doorway; a secondary receiver may exist but stays less dominant.",
+                "end_keyframe_prompt": "Continue the umbrella handoff, do not swap protagonist identity, do not let the receiver become the lead.",
+                "motion_prompt": "Small controlled handoff motion, rain and doorway light remain stable.",
+                "camera_prompt": "medium shot",
+                "lighting_prompt": "rainy night doorway practicals",
+                "style_prompt": "realistic cinematic healing short film, restrained emotion",
+                "consistency_prompt": "Character identity anchor: same early-20s girl, same wet black hair, same outfit; receiver stays secondary.",
+                "identity_anchor_prompt": "Character identity anchor: same early-20s girl, same wet black hair, same outfit.",
+                "negative_prompt": "duplicate protagonist, face drift, extra limbs, deformed hands",
+                "image_generation_notes": "The umbrella exchange must read clearly.",
+                "video_generation_notes": "Keep exactly one readable lead protagonist.",
+                "performance_prompt": "Quiet handoff, emotionally restrained.",
+                "dialogue_delivery_prompt": "",
+                "dependencies": {
+                    "reference_images": ["03_characters/reference_images/CHAR_001_primary.png"],
+                    "previous_shot_id": "S001",
+                    "next_shot_id": "S003"
+                }
+            },
+            {
+                "shot_id": "S003",
+                "duration_sec": 3,
+                "characters": ["CHAR_001"],
+                "scene_summary": "地点：便利店门口 / 天气：雨夜 / 动作：她淋着雨走远，没有回头。 / 道具：无 / 情绪：落寞余温 / 构图重点：背影和雨幕压低情绪。",
+                "intent_summary": "这个镜头要在便利店门口外的雨夜里抓住“淋着雨走远”这一瞬间，传达落寞余温。",
+                "story_anchor_bundle": {
+                    "location": "便利店门口",
+                    "weather": "雨夜",
+                    "key_prop": "",
+                    "emotion": "落寞余温",
+                    "composition_focus": "背影和雨幕压低情绪。"
+                },
+                "start_keyframe_prompt": "The same girl walks away alone into the rain outside the convenience-store doorway, no face or outfit drift.",
+                "end_keyframe_prompt": "Continue the lonely rainy walk, keep the same protagonist identity and silhouette.",
+                "motion_prompt": "Slow back-view departure with steady rain and small body movement.",
+                "camera_prompt": "back shot",
+                "lighting_prompt": "wet street reflections, cold rain-night ambience",
+                "style_prompt": "realistic cinematic healing short film, rain-night melancholy",
+                "consistency_prompt": "Character identity anchor: same early-20s girl, same wet black hair, same outfit silhouette.",
+                "identity_anchor_prompt": "Character identity anchor: same early-20s girl, same wet black hair, same outfit silhouette.",
+                "negative_prompt": "extra person, silhouette drift, deformed legs, face drift",
+                "image_generation_notes": "Rain and doorway neon must stay readable in the background.",
+                "video_generation_notes": "Keep movement subtle and identity stable.",
+                "performance_prompt": "Quiet departure, do not exaggerate sadness.",
+                "dialogue_delivery_prompt": "",
+                "dependencies": {
+                    "reference_images": ["03_characters/reference_images/CHAR_001_primary.png"],
+                    "previous_shot_id": "S002",
+                    "next_shot_id": "S004"
+                }
+            },
+            {
+                "shot_id": "S004",
+                "duration_sec": 3,
+                "characters": ["CHAR_001"],
+                "scene_summary": "地点：便利店门口 / 天气：雨夜 / 动作：她回头看见门口多了一杯热可可。 / 道具：热可可 / 情绪：意外回暖 / 构图重点：热可可和门口台阶成为结尾落点。",
+                "intent_summary": "这个镜头要在便利店门口里抓住“看见热可可”这一瞬间，传达意外回暖，让热可可成为情绪支点。",
+                "story_anchor_bundle": {
+                    "location": "便利店门口",
+                    "weather": "雨夜",
+                    "key_prop": "热可可",
+                    "emotion": "意外回暖",
+                    "composition_focus": "热可可和门口台阶成为结尾落点。"
+                },
+                "start_keyframe_prompt": "The same girl turns back toward the convenience-store doorway and notices a cup of hot cocoa on the step, rainy night, gentle emotional release.",
+                "end_keyframe_prompt": "Hold on the hot cocoa and the girl's softened reaction, keep the same face and outfit.",
+                "motion_prompt": "Small head turn and pause, warm steam from the hot cocoa becomes visible in the cold rain.",
+                "camera_prompt": "close-up",
+                "lighting_prompt": "doorway practical light with visible warm steam",
+                "style_prompt": "realistic cinematic healing short film, quiet warm ending",
+                "consistency_prompt": "Character identity anchor: same early-20s girl, same wet black hair, same outfit, same rainy doorway context.",
+                "identity_anchor_prompt": "Character identity anchor: same early-20s girl, same wet black hair, same outfit.",
+                "negative_prompt": "extra protagonist, wrong prop, face drift, outfit drift",
+                "image_generation_notes": "Hot cocoa must be clearly visible as the emotional payoff prop.",
+                "video_generation_notes": "End on a restrained emotional release with stable identity.",
+                "performance_prompt": "Subtle surprise and warmth, no exaggerated smile.",
+                "dialogue_delivery_prompt": "",
+                "dependencies": {
+                    "reference_images": ["03_characters/reference_images/CHAR_001_primary.png"],
+                    "previous_shot_id": "S003",
+                        "next_shot_id": None
+                }
+            }
+        ],
+        "transition_prompts": [
+            {
+                "transition_id": "T001",
+                "from_shot_id": "S001",
+                "to_shot_id": "S002",
+                "transition_type": "cut",
+                "transition_motion_prompt": "Continue from waiting under the awning into the umbrella handoff without changing the girl's identity.",
+                "continuity_requirements": ["same character face and hair", "same outfit", "same rainy convenience-store doorway"]
+            },
+            {
+                "transition_id": "T002",
+                "from_shot_id": "S002",
+                "to_shot_id": "S003",
+                "transition_type": "cut",
+                "transition_motion_prompt": "Move from the handoff to the lonely departure while keeping the same girl and rainy doorway context.",
+                "continuity_requirements": ["same character face and hair", "same outfit", "same rain-night lighting"]
+            },
+            {
+                "transition_id": "T003",
+                "from_shot_id": "S003",
+                "to_shot_id": "S004",
+                "transition_type": "fade out",
+                "transition_motion_prompt": "Turn from the rainy back-view walk to the hot-cocoa reveal while preserving the same girl and emotional arc.",
+                "continuity_requirements": ["same character face and hair", "same outfit", "same emotional progression"]
+            }
+        ],
+        "global_negative_prompt": "watermark, logo, subtitles, duplicate person, extra limbs, deformed hands, face drift, outfit drift",
+        "self_check": {
+            "matches_locked_brief": True,
+            "matches_script": True,
+            "matches_storyboard": True,
+            "uses_character_consistency": True,
+            "covers_all_storyboard_shots": True,
+            "ready_for_image_generation": True,
+            "notes": [],
+        },
+    }
+
+
+class _FakeCompletedProcess:
+    def __init__(self, returncode: int = 0, stdout: str = "", stderr: str = "") -> None:
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+
+
+class _FakeCodexExec:
+    def __init__(self, payloads: list[dict]) -> None:
+        self.payloads = list(payloads)
+        self.calls: list[dict[str, object]] = []
+
+    def __call__(self, cmd, input=None, text=None, capture_output=None, cwd=None, encoding=None):  # noqa: ANN001
+        assert self.payloads, "Fake codex exec received more calls than prepared payloads"
+        output_flag_index = cmd.index("--output-last-message")
+        output_path = Path(cmd[output_flag_index + 1])
+        payload = self.payloads.pop(0)
+        output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        self.calls.append({
+            "cmd": list(cmd),
+            "cwd": cwd,
+            "input": input,
+        })
+        return _FakeCompletedProcess(returncode=0)
+
+
+def make_stage01_llm_output_for_example_brief() -> dict:
+    return {
+        "title_candidates": ["落日之后", "海风把话带走"],
+        "selected_title": "落日之后",
+        "logline": "一个20岁出头的女孩在落日海滩独自散步，在海浪与晚霞之间慢慢完成一次安静的告别。",
+        "theme": "释怀旧情绪，在温暖黄昏里重新向前走",
+        "protagonist_state": "她表面平静，内心仍带着没有说出口的情绪余波",
+        "narrative_movement": "从独自沉浸到在海风与脚步里慢慢把情绪放下",
+        "ending_direction": "她继续沿着潮线往前走，情绪不再回头",
+        "avoid": ["不要出现第二主角", "不要写成对白驱动短剧"],
+        "characters": [
+            {
+                "name": "20岁出头的女孩",
+                "age": "20岁出头",
+                "role": "main",
+                "identity_anchor": "独自在黄昏海边散步、正在消化情绪的年轻女生",
+            }
+        ],
+        "settings": ["落日余辉海滩", "潮线边的湿沙地"],
+        "beats": [
+            {
+                "beat_id": "B01",
+                "start": "00:00",
+                "end": "00:07",
+                "summary": "黄昏海面被拉开，她沿着潮线慢慢往前走。",
+                "emotion": "克制",
+                "visual": "竖屏建立镜头里，晚霞铺在海面上，她穿着长裙独自走在潮线边，脚步很轻。",
+                "voiceover": "黄昏把白天的喧闹一点点收走。",
+                "dialogue": "",
+                "music_cue": "underscore: 温暖轻柔的氛围音乐与海浪声一起铺开",
+            },
+            {
+                "beat_id": "B02",
+                "start": "00:07",
+                "end": "00:15",
+                "summary": "她停下来望向海平线，让情绪在风里松动。",
+                "emotion": "迟疑",
+                "visual": "镜头从侧后方贴近她的肩颈与发梢，海风吹动长裙，她望着被夕光压低的海平线。",
+                "voiceover": "有些话没有说出口，也会被风慢慢带远。",
+                "dialogue": "",
+                "music_cue": "underscore: 配乐轻轻抬起，保留明显海风与海浪环境音",
+            },
+            {
+                "beat_id": "B03",
+                "start": "00:15",
+                "end": "00:23",
+                "summary": "她低头看见脚边的贝壳，像看见一段已经可以放下的回忆。",
+                "emotion": "松动",
+                "visual": "特写她弯腰捡起一枚被海水打湿的贝壳，指尖停顿一下，再轻轻握住。",
+                "voiceover": "原来真正的告别，不一定需要回头。",
+                "dialogue": "",
+                "music_cue": "underscore: 配乐在中段保持克制，给海水细节留出空间",
+            },
+            {
+                "beat_id": "B04",
+                "start": "00:23",
+                "end": "00:30",
+                "summary": "她把贝壳放回海边，继续朝前走，状态终于变轻。",
+                "emotion": "释怀",
+                "visual": "远景里她把贝壳放回湿沙地，随后转身继续向前，背影被落日拉成长长一条线。",
+                "voiceover": "当脚步继续向前，心也终于开始重新呼吸。",
+                "dialogue": "",
+                "music_cue": "underscore: 配乐温柔收束，留下海浪声托住尾镜头",
+            },
+        ],
+        "self_check": {
+            "matches_locked_brief": True,
+            "duration_fits": True,
+            "genre_style_fits": True,
+            "aspect_ratio_fits": True,
+            "character_requirement_fits": True,
+            "voice_fits": True,
+            "music_fits": True,
+            "final_output_scope_fits": True,
+            "ready_for_storyboard": True,
+            "notes": [],
+        },
+    }
+
+
+def make_stage01_llm_output_for_rainy_store() -> dict:
+    return {
+        "title_candidates": ["雨夜留下的伞", "便利店门口的热可可"],
+        "selected_title": "雨夜留下的伞",
+        "logline": "一个20岁出头的女孩在雨夜把最后一把伞留给陌生人，自己走进雨里，却在回头时收到一杯热可可。",
+        "theme": "微小善意会在寒冷时刻悄悄回到人身边",
+        "protagonist_state": "她习惯自己扛住情绪，也习惯在冷雨里先顾别人",
+        "narrative_movement": "从把温暖让出去到在雨夜重新接住一份被返还的善意",
+        "ending_direction": "她捧着热可可站在雨夜便利店门口，情绪被轻轻安住",
+        "avoid": ["不要写成多人对话短剧", "不要脱离雨夜便利店门口这个核心场景"],
+        "characters": [
+            {
+                "name": "20岁出头的女孩",
+                "age": "20岁出头",
+                "role": "main",
+                "identity_anchor": "在雨夜便利店门口把最后一把伞递出去的年轻女孩",
+            }
+        ],
+        "settings": ["雨夜便利店门口", "便利店门廊下"],
+        "beats": [
+            {
+                "beat_id": "B01",
+                "start": "00:00",
+                "end": "00:03",
+                "summary": "雨夜便利店门口，她撑着最后一把伞站在门廊边。",
+                "emotion": "安静",
+                "visual": "竖屏建立镜头先交代雨夜便利店门口，霓虹落在湿地上，她撑着最后一把伞站在门廊边。",
+                "voiceover": "雨下得很急，她还是把脚步停在了门口。",
+                "dialogue": "",
+                "music_cue": "underscore: 低温感钢琴与雨声一起铺开",
+            },
+            {
+                "beat_id": "B02",
+                "start": "00:03",
+                "end": "00:06",
+                "summary": "她把最后一把伞递给门口更需要的人。",
+                "emotion": "决心",
+                "visual": "近景里，她把最后一把伞递向画外，只留下手与伞的交换动作，不让第二主角喧宾夺主。",
+                "voiceover": "有些决定，只在一瞬间就做好了。",
+                "dialogue": "",
+                "music_cue": "underscore: 配乐轻轻向上抬一格，保留雨滴打伞面的声音",
+            },
+            {
+                "beat_id": "B03",
+                "start": "00:06",
+                "end": "00:09",
+                "summary": "她淋着雨往前走，背影有点冷也有点倔强。",
+                "emotion": "落寞",
+                "visual": "背影镜头里，她离开便利店门口走进雨幕，肩线和裙摆很快被雨水打湿。",
+                "voiceover": "她没回头，只让雨水把肩膀一点点打凉。",
+                "dialogue": "",
+                "music_cue": "underscore: 配乐压低，让脚步声和雨声更清楚",
+            },
+            {
+                "beat_id": "B04",
+                "start": "00:09",
+                "end": "00:12",
+                "summary": "她回头时，门口多了一杯热可可，善意被悄悄送回来了。",
+                "emotion": "被安慰",
+                "visual": "她回头望向便利店门口，门廊台阶上放着一杯热可可，热气在冷雨里很明显。",
+                "voiceover": "原来留给别人的温暖，也会换一种方式回来。",
+                "dialogue": "",
+                "music_cue": "underscore: 配乐温柔收束，把情绪落在热可可的热气上",
+            },
+        ],
+        "self_check": {
+            "matches_locked_brief": True,
+            "duration_fits": True,
+            "genre_style_fits": True,
+            "aspect_ratio_fits": True,
+            "character_requirement_fits": True,
+            "voice_fits": True,
+            "music_fits": True,
+            "final_output_scope_fits": True,
+            "ready_for_storyboard": True,
+            "notes": [],
+        },
+    }
+
+
+def make_stage01_llm_output_for_music_video() -> dict:
+    return {
+        "title_candidates": ["风穿过川西", "在高原重新呼吸"],
+        "selected_title": "风穿过川西",
+        "logline": "她离开城市，在川西高原的风、雪山与草地之间重新找回呼吸与生活步调。",
+        "theme": "逃离长期内耗，在人与自然之间重新找回身体和情绪的真实节奏",
+        "protagonist_state": "30岁的城市景观规划师正处在职业危机与精神消耗交叠的失衡边缘",
+        "narrative_movement": "从逃离钢筋水泥到在高原重新与世界建立真实联系",
+        "ending_direction": "在星空下彻底放慢呼吸，重新接住自己的生活",
+        "avoid": ["不要写成对白驱动短剧", "不要额外生成旁白或对白"],
+        "characters": [
+            {
+                "name": "城市景观规划师",
+                "age": "30岁",
+                "role": "main",
+                "identity_anchor": "长期被城市工作与精神内耗拖拽的女性景观规划师",
+            },
+            {
+                "name": "野生动物巡护员",
+                "age": "",
+                "role": "supporting",
+                "identity_anchor": "熟悉高原节奏、与自然保持稳定连接的当地巡护员",
+            },
+        ],
+        "settings": ["川西高原旷野", "藏式民宿", "雪山草地", "高原星空"],
+        "beats": [
+            {
+                "beat_id": "B01",
+                "start": "00:00",
+                "end": "00:07",
+                "summary": "她离开钢筋水泥，独自驱车驶向川西高原旷野。",
+                "emotion": "压抑",
+                "visual": "横屏建立镜头从密集城市切到通往川西高原旷野的公路，车窗外的天空越来越开阔，她独自握着方向盘前行。",
+                "voiceover": "",
+                "dialogue": "",
+                "music_cue": "song: 前奏铺开，环境音里保留车轮、风声和远处低频路噪",
+            },
+            {
+                "beat_id": "B02",
+                "start": "00:07",
+                "end": "00:15",
+                "summary": "在濒临倒闭的藏式民宿里，她开始修缮屋子，也开始让自己慢下来。",
+                "emotion": "迟疑",
+                "visual": "她在藏式民宿里修补木窗、擦拭旧桌面、搬动杂物，动作还带着城市惯性的紧绷。",
+                "voiceover": "",
+                "dialogue": "",
+                "music_cue": "song: 主歌进入，配合修缮动作维持克制推进",
+            },
+            {
+                "beat_id": "B03",
+                "start": "00:15",
+                "end": "00:23",
+                "summary": "她与当地的野生动物巡护员并肩走进草地和雪山之间，第一次真正把视线从自己身上移开。",
+                "emotion": "松动",
+                "visual": "草地与雪山同框，她和野生动物巡护员一前一后穿过高原风口，远处偶尔闪过野生动物活动的痕迹。",
+                "voiceover": "",
+                "dialogue": "",
+                "music_cue": "song: 副歌前段打开空间感，放大风声与脚步落地感",
+            },
+            {
+                "beat_id": "B04",
+                "start": "00:23",
+                "end": "00:30",
+                "summary": "雪山、草地与星空依次铺开，她终于重新找回自己的生活步调。",
+                "emotion": "释怀",
+                "visual": "雪山、草地与高原星空依次展开，她站在风里抬头呼吸，整个人的节奏终于慢下来。",
+                "voiceover": "",
+                "dialogue": "",
+                "music_cue": "song: 副歌或尾奏收束，情绪落在开阔与释怀上",
+            },
+        ],
+        "self_check": {
+            "matches_locked_brief": True,
+            "duration_fits": True,
+            "genre_style_fits": True,
+            "aspect_ratio_fits": True,
+            "character_requirement_fits": True,
+            "voice_fits": True,
+            "music_fits": True,
+            "final_output_scope_fits": True,
+            "ready_for_storyboard": True,
+            "notes": [],
+        },
+    }
 
 
 def test_validate_project_brief_example() -> None:
@@ -244,6 +1028,7 @@ def test_new_script_template_generates_final_ready_draft(tmp_path: Path) -> None
     })
     locked_brief = intake_dir / "project_brief.locked.json"
     locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+    write_stage01_llm_output(script_dir, make_stage01_llm_output_for_example_brief())
 
     script_json = script_dir / "script.json"
     assert new_script_template.main(["new_script_template.py", str(locked_brief), str(script_json)]) == 0
@@ -263,6 +1048,663 @@ def test_new_script_template_generates_final_ready_draft(tmp_path: Path) -> None
     assert (script_dir / "plot_structure.json").exists()
     assert (script_dir / "script.md").exists()
     assert (script_dir / "script_review.md").exists()
+    assert (script_dir / "stage01_prompt_packet.json").exists()
+    assert (script_dir / "stage01_llm_output.json").exists()
+    review_text = (script_dir / "script_review.md").read_text(encoding="utf-8")
+    assert "1. 是否严格遵守 locked brief" in review_text
+    assert "9. 是否可以进入 Stage 02 分镜拆解" in review_text
+
+
+def test_new_script_template_requires_explicit_stage01_llm_output(tmp_path: Path) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260528_103000_sunset_beach_girl"
+    intake_dir = project_dir / "00_intake"
+    script_dir = project_dir / "01_script"
+    intake_dir.mkdir(parents=True)
+    script_dir.mkdir(parents=True)
+
+    brief = load_example_brief()
+    brief.update({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "status": "locked",
+        "confirmed_by_user": True,
+        "allowed_next_stage": "STAGE_01_SCRIPT_GENERATION",
+        "locked_at": "2026-05-28T10:35:00+08:00",
+    })
+    locked_brief = intake_dir / "project_brief.locked.json"
+    locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    script_json = script_dir / "script.json"
+    assert new_script_template.main(["new_script_template.py", str(locked_brief), str(script_json)]) == 1
+    assert (script_dir / "stage01_prompt_packet.json").exists()
+    assert not script_json.exists()
+
+
+def test_stage01_preserves_explicit_age_location_and_song_profile_for_music_video(tmp_path: Path) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260602_203600_30_mv"
+    intake_dir = project_dir / "00_intake"
+    script_dir = project_dir / "01_script"
+    intake_dir.mkdir(parents=True)
+    script_dir.mkdir(parents=True)
+
+    brief = load_music_video_plateau_brief(project_dir)
+    locked_brief = intake_dir / "project_brief.locked.json"
+    locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+    write_stage01_llm_output(script_dir, make_stage01_llm_output_for_music_video())
+
+    script_json = script_dir / "script.json"
+    assert new_script_template.main(["new_script_template.py", str(locked_brief), str(script_json)]) == 0
+
+    script_data = json.loads(script_json.read_text(encoding="utf-8"))
+    assert script_data["characters"][0]["name"] == "城市景观规划师"
+    assert script_data["characters"][0]["age"] == "30岁"
+    assert "川西高原旷野" in script_data["settings"]
+    assert "藏式民宿" in script_data["settings"]
+    assert all(str(section.get("music_cue") or "").startswith("song:") for section in script_data["script"]["sections"])
+    ok, errors, warnings = validate_script.validate(script_data, mode="final")
+    assert ok, errors
+
+
+def test_stage01_normalizes_natural_language_music_cues_to_locked_profile(tmp_path: Path) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260602_220801_beach_walk"
+    intake_dir = project_dir / "00_intake"
+    script_dir = project_dir / "01_script"
+    intake_dir.mkdir(parents=True)
+    script_dir.mkdir(parents=True)
+
+    brief = load_example_brief()
+    brief.update({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "status": "locked",
+        "confirmed_by_user": True,
+        "allowed_next_stage": "STAGE_01_SCRIPT_GENERATION",
+        "locked_at": "2026-06-02T22:08:01+08:00",
+    })
+    brief["normalized"].update({
+        "voice_mode": "不需要配音",
+        "music_mode": "需要",
+        "music_profile": "underscore",
+    })
+    locked_brief = intake_dir / "project_brief.locked.json"
+    locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    llm_output = make_stage01_llm_output_for_example_brief()
+    llm_output["beats"][0]["music_cue"] = "极简低频铺底缓慢进入，稀薄环境氛围带一点冷感混响"
+    llm_output["beats"][1]["music_cue"] = "underscore：配乐轻轻抬起，保留明显海风与海浪环境音"
+    write_stage01_llm_output(script_dir, llm_output)
+
+    script_json = script_dir / "script.json"
+    assert new_script_template.main(["new_script_template.py", str(locked_brief), str(script_json)]) == 0
+
+    script_data = json.loads(script_json.read_text(encoding="utf-8"))
+    cues = [str(section.get("music_cue") or "") for section in script_data["script"]["sections"]]
+    assert cues[0].startswith("underscore:")
+    assert cues[1].startswith("underscore:")
+    ok, errors, warnings = validate_script.validate(script_data, mode="final")
+    assert ok, errors
+
+
+def test_validate_script_rejects_song_profile_with_underscore_sections() -> None:
+    data = json.loads((TEMPLATES / "script.example.json").read_text(encoding="utf-8"))
+    data["script"]["music_profile"] = "song"
+    data["script"]["sections"][0]["music_cue"] = "underscore: 背景配乐托住环境"
+    ok, errors, warnings = validate_script.validate(data, mode="final")
+    assert not ok
+    assert any("music_cue must match" in error for error in errors)
+
+
+def test_new_script_template_uses_existing_llm_output_when_present(tmp_path: Path) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260602_203600_30_mv"
+    intake_dir = project_dir / "00_intake"
+    script_dir = project_dir / "01_script"
+    intake_dir.mkdir(parents=True)
+    script_dir.mkdir(parents=True)
+
+    brief = load_music_video_plateau_brief(project_dir)
+    locked_brief = intake_dir / "project_brief.locked.json"
+    locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+    write_stage01_llm_output(script_dir, make_stage01_llm_output_for_music_video())
+
+    script_json = script_dir / "script.json"
+    assert new_script_template.main(["new_script_template.py", str(locked_brief), str(script_json)]) == 0
+    script_data = json.loads(script_json.read_text(encoding="utf-8"))
+    assert script_data["title"] == "风穿过川西"
+    assert script_data["logline"].startswith("她离开城市")
+    assert script_data["generation_meta"]["mode"] == "codex_llm_output"
+    assert (script_dir / "stage01_prompt_packet.json").exists()
+    ok, errors, warnings = validate_script.validate(script_data, mode="final")
+    assert ok, errors
+
+
+def test_new_script_template_writes_repair_packet_when_llm_output_fails_validation(tmp_path: Path) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260602_203600_30_mv"
+    intake_dir = project_dir / "00_intake"
+    script_dir = project_dir / "01_script"
+    intake_dir.mkdir(parents=True)
+    script_dir.mkdir(parents=True)
+
+    brief = load_music_video_plateau_brief(project_dir)
+    locked_brief = intake_dir / "project_brief.locked.json"
+    locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    llm_output = {
+        "title_candidates": ["风穿过川西"],
+        "selected_title": "风穿过川西",
+        "logline": "她离开城市，在高原重新呼吸。",
+        "theme": "逃离内耗，重新找回呼吸",
+        "protagonist_state": "她处在失衡边缘",
+        "narrative_movement": "从逃离到释怀",
+        "ending_direction": "在高原放下情绪",
+        "avoid": ["不要额外生成旁白或对白"],
+        "characters": [
+            {
+                "name": "城市景观规划师",
+                "age": "30岁",
+                "role": "main",
+                "identity_anchor": "长期被工作消耗的女性景观规划师",
+            }
+        ],
+        "settings": ["川西高原旷野", "藏式民宿"],
+        "beats": [
+            {
+                "beat_id": "B01",
+                "start": "00:00",
+                "end": "00:30",
+                "summary": "她离开城市。",
+                "emotion": "压抑",
+                "visual": "她在城市边缘上车。",
+                "voiceover": "",
+                "dialogue": "",
+                "music_cue": "underscore: 背景配乐托住环境氛围",
+            }
+        ],
+        "self_check": {
+            "matches_locked_brief": True,
+            "duration_fits": True,
+            "genre_style_fits": True,
+            "aspect_ratio_fits": True,
+            "character_requirement_fits": True,
+            "voice_fits": True,
+            "music_fits": True,
+            "final_output_scope_fits": True,
+            "ready_for_storyboard": True,
+            "notes": [],
+        },
+    }
+    (script_dir / "stage01_llm_output.json").write_text(json.dumps(llm_output, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    script_json = script_dir / "script.json"
+    assert new_script_template.main(["new_script_template.py", str(locked_brief), str(script_json)]) == 1
+    assert (script_dir / "stage01_validation_errors.json").exists()
+    assert (script_dir / "stage01_repair_packet.json").exists()
+
+
+def test_run_stage01_codex_flow_generates_stage01_package_without_manual_llm_fill(tmp_path: Path, monkeypatch) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260528_103000_sunset_beach_girl"
+    intake_dir = project_dir / "00_intake"
+    script_dir = project_dir / "01_script"
+    intake_dir.mkdir(parents=True)
+    script_dir.mkdir(parents=True)
+
+    brief = load_example_brief()
+    brief.update({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "status": "locked",
+        "confirmed_by_user": True,
+        "allowed_next_stage": "STAGE_01_SCRIPT_GENERATION",
+        "locked_at": "2026-05-28T10:35:00+08:00",
+    })
+    locked_brief = intake_dir / "project_brief.locked.json"
+    locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    fake_codex = _FakeCodexExec([make_stage01_llm_output_for_example_brief()])
+    monkeypatch.setattr(run_stage01_codex_flow.subprocess, "run", fake_codex)
+
+    script_json = script_dir / "script.json"
+    assert run_stage01_codex_flow.main([str(locked_brief), str(script_json)]) == 0
+
+    assert len(fake_codex.calls) == 1
+    assert Path(str(fake_codex.calls[0]["cmd"][0])).suffix.lower() != ".ps1"
+    assert fake_codex.calls[0]["cmd"][1:4] == ["--ask-for-approval", "never", "exec"]
+    assert "--output-schema" in fake_codex.calls[0]["cmd"]
+    assert (script_dir / "stage01_prompt_packet.json").exists()
+    assert (script_dir / "stage01_llm_output.json").exists()
+    assert (script_dir / "stage01_codex_generation_request.txt").exists()
+    assert json.loads(script_json.read_text(encoding="utf-8"))["title"] == "落日之后"
+
+
+def test_run_stage01_codex_flow_auto_repairs_failed_first_attempt(tmp_path: Path, monkeypatch) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260602_203600_30_mv"
+    intake_dir = project_dir / "00_intake"
+    script_dir = project_dir / "01_script"
+    intake_dir.mkdir(parents=True)
+    script_dir.mkdir(parents=True)
+
+    brief = load_music_video_plateau_brief(project_dir)
+    locked_brief = intake_dir / "project_brief.locked.json"
+    locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    bad_first_output = {
+        "title_candidates": ["风穿过川西"],
+        "selected_title": "风穿过川西",
+        "logline": "她离开城市，在高原重新呼吸。",
+        "theme": "逃离内耗，重新找回呼吸",
+        "protagonist_state": "她处在失衡边缘",
+        "narrative_movement": "从逃离到释怀",
+        "ending_direction": "在高原放下情绪",
+        "avoid": ["不要额外生成旁白或对白"],
+        "characters": [
+            {
+                "name": "城市景观规划师",
+                "age": "30岁",
+                "role": "main",
+                "identity_anchor": "长期被工作消耗的女性景观规划师",
+            }
+        ],
+        "settings": ["川西高原旷野", "藏式民宿"],
+        "beats": [
+            {
+                "beat_id": "B01",
+                "start": "00:00",
+                "end": "00:30",
+                "summary": "她离开城市。",
+                "emotion": "压抑",
+                "visual": "她在城市边缘上车。",
+                "voiceover": "",
+                "dialogue": "",
+                "music_cue": "underscore: 背景配乐托住环境氛围",
+            }
+        ],
+        "self_check": {
+            "matches_locked_brief": True,
+            "duration_fits": True,
+            "genre_style_fits": True,
+            "aspect_ratio_fits": True,
+            "character_requirement_fits": True,
+            "voice_fits": True,
+            "music_fits": True,
+            "final_output_scope_fits": True,
+            "ready_for_storyboard": True,
+            "notes": [],
+        },
+    }
+
+    fake_codex = _FakeCodexExec([bad_first_output, make_stage01_llm_output_for_music_video()])
+    monkeypatch.setattr(run_stage01_codex_flow.subprocess, "run", fake_codex)
+
+    script_json = script_dir / "script.json"
+    assert run_stage01_codex_flow.main([str(locked_brief), str(script_json), "--max-repair-attempts", "1"]) == 0
+
+    assert len(fake_codex.calls) == 2
+    assert (script_dir / "stage01_codex_repair_request_attempt_1.txt").exists()
+    assert not (script_dir / "stage01_validation_errors.json").exists()
+    assert not (script_dir / "stage01_repair_packet.json").exists()
+    script_data = json.loads(script_json.read_text(encoding="utf-8"))
+    assert script_data["generation_meta"]["mode"] == "codex_llm_output"
+    assert all(str(section.get("music_cue") or "").startswith("song:") for section in script_data["script"]["sections"])
+
+
+def test_run_stage02_codex_flow_generates_storyboard_package_without_manual_llm_fill(tmp_path: Path, monkeypatch) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260528_103000_sunset_beach_girl"
+    intake_dir = project_dir / "00_intake"
+    script_dir = project_dir / "01_script"
+    storyboard_dir = project_dir / "02_storyboard"
+    intake_dir.mkdir(parents=True)
+    script_dir.mkdir(parents=True)
+    storyboard_dir.mkdir(parents=True)
+
+    brief = load_example_brief()
+    brief.update({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "status": "locked",
+        "confirmed_by_user": True,
+        "allowed_next_stage": "STAGE_01_SCRIPT_GENERATION",
+    })
+    locked_brief = intake_dir / "project_brief.locked.json"
+    locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    script = json.loads((TEMPLATES / "script.example.json").read_text(encoding="utf-8"))
+    script["project_id"] = project_dir.name
+    script["source_brief"] = str(locked_brief).replace("\\", "/")
+    script_json = script_dir / "script.json"
+    script_json.write_text(json.dumps(script, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    payloads = [make_stage02_llm_output_from_example()]
+
+    def fake_run_codex_exec(request_text, schema_path, output_message_path, *, codex_bin, cwd):  # noqa: ANN001
+        output_message_path.write_text(json.dumps(payloads.pop(0), ensure_ascii=False, indent=2), encoding="utf-8")
+
+    monkeypatch.setattr(run_stage02_codex_flow, "run_codex_exec", fake_run_codex_exec)
+
+    storyboard_json = storyboard_dir / "storyboard.json"
+    assert run_stage02_codex_flow.main([str(locked_brief), str(script_json), str(storyboard_json)]) == 0
+    assert (storyboard_dir / "stage02_prompt_packet.json").exists()
+    assert (storyboard_dir / "stage02_llm_output.json").exists()
+    assert json.loads(storyboard_json.read_text(encoding="utf-8"))["shot_count"] > 0
+
+
+def test_run_stage03_codex_flow_generates_character_bible_without_manual_llm_fill(tmp_path: Path, monkeypatch) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260528_103000_sunset_beach_girl"
+    intake_dir = project_dir / "00_intake"
+    script_dir = project_dir / "01_script"
+    storyboard_dir = project_dir / "02_storyboard"
+    character_dir = project_dir / "03_characters"
+    for path in [intake_dir, script_dir, storyboard_dir, character_dir]:
+        path.mkdir(parents=True)
+
+    brief = load_example_brief()
+    brief.update({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "status": "locked",
+        "confirmed_by_user": True,
+        "allowed_next_stage": "STAGE_01_SCRIPT_GENERATION",
+    })
+    locked_brief = intake_dir / "project_brief.locked.json"
+    locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    script = json.loads((TEMPLATES / "script.example.json").read_text(encoding="utf-8"))
+    script["project_id"] = project_dir.name
+    script["source_brief"] = str(locked_brief).replace("\\", "/")
+    script_json = script_dir / "script.json"
+    script_json.write_text(json.dumps(script, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    storyboard = json.loads((TEMPLATES / "storyboard.example.json").read_text(encoding="utf-8"))
+    storyboard["project_id"] = project_dir.name
+    storyboard["source_brief"] = str(locked_brief).replace("\\", "/")
+    storyboard["source_script"] = str(script_json).replace("\\", "/")
+    storyboard_json = storyboard_dir / "storyboard.json"
+    storyboard_json.write_text(json.dumps(storyboard, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    payloads = [make_stage03_llm_output_from_example()]
+
+    def fake_run_codex_exec(request_text, schema_path, output_message_path, *, codex_bin, cwd):  # noqa: ANN001
+        output_message_path.write_text(json.dumps(payloads.pop(0), ensure_ascii=False, indent=2), encoding="utf-8")
+
+    monkeypatch.setattr(run_stage03_codex_flow, "run_codex_exec", fake_run_codex_exec)
+
+    character_json = character_dir / "character_bible.json"
+    assert run_stage03_codex_flow.main([str(locked_brief), str(script_json), str(storyboard_json), str(character_json)]) == 0
+    assert (character_dir / "stage03_prompt_packet.json").exists()
+    assert (character_dir / "stage03_llm_output.json").exists()
+    assert json.loads(character_json.read_text(encoding="utf-8"))["characters"]
+
+
+def test_run_stage04_codex_flow_generates_keyframe_prompts_without_manual_llm_fill(tmp_path: Path, monkeypatch) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260528_103000_sunset_beach_girl"
+    intake_dir = project_dir / "00_intake"
+    script_dir = project_dir / "01_script"
+    storyboard_dir = project_dir / "02_storyboard"
+    character_dir = project_dir / "03_characters"
+    keyframe_dir = project_dir / "04_keyframes"
+    for path in [intake_dir, script_dir, storyboard_dir, character_dir, keyframe_dir]:
+        path.mkdir(parents=True)
+
+    brief = load_example_brief()
+    brief.update({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "status": "locked",
+        "confirmed_by_user": True,
+        "allowed_next_stage": "STAGE_01_SCRIPT_GENERATION",
+    })
+    locked_brief = intake_dir / "project_brief.locked.json"
+    locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    script = json.loads((TEMPLATES / "script.example.json").read_text(encoding="utf-8"))
+    script["project_id"] = project_dir.name
+    script["source_brief"] = str(locked_brief).replace("\\", "/")
+    script_json = script_dir / "script.json"
+    script_json.write_text(json.dumps(script, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    storyboard = json.loads((TEMPLATES / "storyboard.example.json").read_text(encoding="utf-8"))
+    storyboard["project_id"] = project_dir.name
+    storyboard["source_brief"] = str(locked_brief).replace("\\", "/")
+    storyboard["source_script"] = str(script_json).replace("\\", "/")
+    storyboard_json = storyboard_dir / "storyboard.json"
+    storyboard_json.write_text(json.dumps(storyboard, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    character = json.loads((TEMPLATES / "character_bible.example.json").read_text(encoding="utf-8"))
+    character["project_id"] = project_dir.name
+    character["source_brief"] = str(locked_brief).replace("\\", "/")
+    character["source_script"] = str(script_json).replace("\\", "/")
+    character["source_storyboard"] = str(storyboard_json).replace("\\", "/")
+    character_json = character_dir / "character_bible.json"
+    character_json.write_text(json.dumps(character, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    payloads = [make_stage04_llm_output_from_example()]
+
+    def fake_run_codex_exec(request_text, schema_path, output_message_path, *, codex_bin, cwd):  # noqa: ANN001
+        output_message_path.write_text(json.dumps(payloads.pop(0), ensure_ascii=False, indent=2), encoding="utf-8")
+
+    monkeypatch.setattr(run_stage04_codex_flow, "run_codex_exec", fake_run_codex_exec)
+
+    keyframe_json = keyframe_dir / "keyframe_prompts.json"
+    assert run_stage04_codex_flow.main([str(locked_brief), str(script_json), str(storyboard_json), str(character_json), str(keyframe_json)]) == 0
+    assert (keyframe_dir / "stage04_prompt_packet.json").exists()
+    assert (keyframe_dir / "stage04_llm_output.json").exists()
+    assert json.loads(keyframe_json.read_text(encoding="utf-8"))["shot_prompts"]
+
+
+def test_resolve_codex_bin_prefers_windows_cmd_over_powershell_shim(monkeypatch) -> None:
+    monkeypatch.setattr(run_stage01_codex_flow.sys, "platform", "win32")
+
+    def fake_which(name: str) -> str | None:
+        mapping = {
+            "codex": r"C:\Tools\NodeJs\node-v24.15.0\codex.ps1",
+            "codex.cmd": r"C:\Tools\NodeJs\node-v24.15.0\codex.cmd",
+            "codex.exe": r"C:\Users\hongguangsheng\AppData\Local\Programs\Codex\codex.exe",
+        }
+        return mapping.get(name)
+
+    monkeypatch.setattr(run_stage01_codex_flow.shutil, "which", fake_which)
+
+    resolved = run_stage01_codex_flow.resolve_codex_bin("codex")
+    assert resolved.endswith("codex.cmd")
+
+
+def test_resolve_codex_bin_rejects_explicit_windows_powershell_shim(monkeypatch) -> None:
+    monkeypatch.setattr(run_stage01_codex_flow.sys, "platform", "win32")
+
+    try:
+        run_stage01_codex_flow.resolve_codex_bin(r"C:\Tools\NodeJs\node-v24.15.0\codex.ps1")
+    except SystemExit as exc:
+        assert "PowerShell shim" in str(exc)
+    else:
+        raise AssertionError("Expected explicit .ps1 codex bin to be rejected on Windows")
+
+
+def test_stage01_llm_output_schema_is_strict_for_codex_response_format() -> None:
+    schema_path = SCRIPT.parent / "references" / "stage01_llm_output.schema.json"
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+
+    assert schema["additionalProperties"] is False
+    assert schema["properties"]["characters"]["items"]["additionalProperties"] is False
+    assert schema["properties"]["beats"]["items"]["additionalProperties"] is False
+    assert schema["properties"]["self_check"]["additionalProperties"] is False
+
+
+def test_stage01_opening_composition_tracks_locked_aspect_ratio() -> None:
+    expected_phrases = {
+        "9:16": "先用竖屏建立镜头交代",
+        "16:9": "先用横屏建立镜头交代",
+        "1:1": "先用方画幅建立镜头交代",
+        "21:9": "先用宽银幕建立镜头交代",
+    }
+
+    for aspect_ratio, expected in expected_phrases.items():
+        brief = load_example_brief()
+        brief["normalized"]["aspect_ratio"] = aspect_ratio
+        brief["normalized"]["aspect_ratio_label"] = aspect_ratio
+        script_data = pipeline_blueprints.build_stage01_script(brief)
+        opening = script_data["story_anchors"]["composition_beats"][0]
+        assert expected in opening
+
+
+def test_stage03_and_stage04_preserve_gender_and_aspect_ratio_for_beach_girl(tmp_path: Path) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260601_150210_beach_girl"
+    intake_dir = project_dir / "00_intake"
+    script_dir = project_dir / "01_script"
+    storyboard_dir = project_dir / "02_storyboard"
+    character_dir = project_dir / "03_characters"
+    keyframe_dir = project_dir / "04_keyframes"
+    for path in [intake_dir, script_dir, storyboard_dir, character_dir, keyframe_dir]:
+        path.mkdir(parents=True, exist_ok=True)
+
+    brief = load_example_brief()
+    brief.update({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "status": "locked",
+        "confirmed_by_user": True,
+        "allowed_next_stage": "STAGE_01_SCRIPT_GENERATION",
+    })
+    brief["normalized"].update({
+        "idea": "一个穿裙子的女生在黄昏的沙滩上独自散步，画面安静、克制，突出晚霞、海风与孤独但温柔的情绪。",
+        "genre": "电影感镜头片段",
+        "style": "写实电影感",
+        "aspect_ratio": "16:9",
+        "aspect_ratio_label": "16:9 横屏",
+        "voice_mode": "不需要配音",
+        "voice_required": False,
+        "final_output": "合成粗剪成片",
+    })
+    locked_brief = intake_dir / "project_brief.locked.json"
+    locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    script_json = script_dir / "script.json"
+    script_data = json.loads((TEMPLATES / "script.example.json").read_text(encoding="utf-8"))
+    script_data["project_id"] = project_dir.name
+    script_data["source_brief"] = str(locked_brief).replace("\\", "/")
+    script_json.write_text(json.dumps(script_data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    stage02_llm_output = make_stage02_llm_output_from_example()
+    first_shot = stage02_llm_output["shots"][0]
+    first_shot["composition"] = "黄昏海滩横向铺开，女生穿裙子独自沿潮线散步，晚霞和海风一起进入画面。"
+    (storyboard_dir / "stage02_llm_output.json").write_text(json.dumps(stage02_llm_output, ensure_ascii=False, indent=2), encoding="utf-8")
+    storyboard_json = storyboard_dir / "storyboard.json"
+    assert new_storyboard_template.main(["new_storyboard_template.py", str(locked_brief), str(script_json), str(storyboard_json)]) == 0
+
+    stage03_llm_output = make_stage03_llm_output_from_example()
+    stage03_llm_output["characters"][0]["gender_presentation"] = "female"
+    stage03_llm_output["characters"][0]["visual_consistency_prompt"] = (
+        "same young woman in her early 20s, female, long black hair, light dress, sunset beach, restrained emotion"
+    )
+    (character_dir / "stage03_llm_output.json").write_text(json.dumps(stage03_llm_output, ensure_ascii=False, indent=2), encoding="utf-8")
+    character_json = character_dir / "character_bible.json"
+    assert new_character_bible_template.main([
+        "new_character_bible_template.py",
+        str(locked_brief),
+        str(script_json),
+        str(storyboard_json),
+        str(character_json),
+    ]) == 0
+    character_bible = json.loads(character_json.read_text(encoding="utf-8"))
+    assert character_bible["characters"][0]["gender_presentation"] == "female"
+
+    stage04_llm_output = make_stage04_llm_output_from_example()
+    stage04_llm_output["shot_prompts"][0]["start_keyframe_prompt"] += ", horizontal 16:9 composition"
+    stage04_llm_output["shot_prompts"][0]["end_keyframe_prompt"] += ", horizontal 16:9 composition"
+    stage04_llm_output["shot_prompts"][0]["consistency_prompt"] += "; female protagonist"
+    (keyframe_dir / "stage04_llm_output.json").write_text(json.dumps(stage04_llm_output, ensure_ascii=False, indent=2), encoding="utf-8")
+    keyframe_json = keyframe_dir / "keyframe_prompts.json"
+    assert new_keyframe_prompts_template.main([
+        "new_keyframe_prompts_template.py",
+        str(locked_brief),
+        str(script_json),
+        str(storyboard_json),
+        str(character_json),
+        str(keyframe_json),
+    ]) == 0
+    keyframe_data = json.loads(keyframe_json.read_text(encoding="utf-8"))
+    first_shot = keyframe_data["shot_prompts"][0]
+    assert "horizontal 16:9 composition" in first_shot["start_keyframe_prompt"]
+    assert "horizontal 16:9 composition" in first_shot["end_keyframe_prompt"]
+    assert "female" in first_shot["consistency_prompt"]
+
+
+def test_stage05_and_stage06_jobs_prefer_locked_normalized_visual_spec(tmp_path: Path) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260601_150210_黄昏时分海滩长裙女生散步"
+    intake_dir = project_dir / "00_intake"
+    storyboard_dir = project_dir / "02_storyboard"
+    keyframe_dir = project_dir / "04_keyframes"
+    images_dir = project_dir / "05_images"
+    video_dir = project_dir / "06_video_clips"
+    intake_dir.mkdir(parents=True)
+    storyboard_dir.mkdir(parents=True)
+    keyframe_dir.mkdir(parents=True)
+    images_dir.mkdir(parents=True)
+    video_dir.mkdir(parents=True)
+
+    brief = load_example_brief()
+    brief.update({
+        "schema_version": "0.7.0",
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "status": "locked",
+        "confirmed_by_user": True,
+        "aspect_ratio": "9:16",
+        "resolution": "1080P",
+        "allowed_next_stage": "STAGE_01_SCRIPT_GENERATION",
+        "locked_at": "2026-06-01T15:02:10+08:00",
+    })
+    brief["normalized"].update({
+        "aspect_ratio": "16:9",
+        "aspect_ratio_label": "16:9 横屏",
+        "resolution": "720P",
+        "resolution_label": "720P",
+        "final_output": "合成粗剪成片",
+    })
+    locked_brief = intake_dir / "project_brief.locked.json"
+    locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    storyboard = json.loads((TEMPLATES / "storyboard.example.json").read_text(encoding="utf-8"))
+    storyboard["project_id"] = project_dir.name
+    storyboard_json = storyboard_dir / "storyboard.json"
+    storyboard_json.write_text(json.dumps(storyboard, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    keyframe = json.loads((TEMPLATES / "keyframe_prompts.example.json").read_text(encoding="utf-8"))
+    keyframe["project_id"] = project_dir.name
+    keyframe["source_brief"] = str(locked_brief).replace("\\", "/")
+    keyframe["status"] = "confirmed"
+    keyframe["shot_prompts"] = keyframe["shot_prompts"][:1]
+    keyframe_json = keyframe_dir / "keyframe_prompts.json"
+    keyframe_json.write_text(json.dumps(keyframe, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    image_manifest_json = images_dir / "keyframe_image_manifest.json"
+    assert new_keyframe_image_jobs.main(["new_keyframe_image_jobs.py", str(locked_brief), str(keyframe_json), str(image_manifest_json)]) == 0
+    image_manifest = json.loads(image_manifest_json.read_text(encoding="utf-8"))
+    assert {job["aspect_ratio"] for job in image_manifest["jobs"]} == {"16:9"}
+    assert {job["resolution"] for job in image_manifest["jobs"]} == {"720P"}
+    for job in image_manifest["jobs"]:
+        output_path = Path(job["output_path"])
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"png")
+        job["status"] = "succeeded"
+        job["provider"] = "manual"
+        job["evidence"]["file_exists"] = True
+        job["evidence"]["file_size_bytes"] = output_path.stat().st_size
+    image_manifest["status"] = "confirmed"
+    image_manifest["self_check"]["all_required_images_exist"] = True
+    image_manifest["self_check"]["ready_for_video_clip_generation"] = True
+    image_manifest_json.write_text(json.dumps(image_manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    clip_manifest_json = video_dir / "video_clip_manifest.json"
+    assert new_video_clip_jobs.main([
+        "new_video_clip_jobs.py",
+        str(locked_brief),
+        str(storyboard_json),
+        str(keyframe_json),
+        str(image_manifest_json),
+        str(clip_manifest_json),
+    ]) == 0
+    clip_manifest = json.loads(clip_manifest_json.read_text(encoding="utf-8"))
+    assert {job["aspect_ratio"] for job in clip_manifest["jobs"]} == {"16:9"}
+    assert {job["resolution"] for job in clip_manifest["jobs"]} == {"720P"}
+
 
 def test_validate_storyboard_example_final() -> None:
     data = json.loads((TEMPLATES / "storyboard.example.json").read_text(encoding="utf-8"))
@@ -298,6 +1740,10 @@ def test_new_storyboard_template_generates_final_ready_draft(tmp_path: Path) -> 
     script_json = script_dir / "script.json"
     script_json.write_text(json.dumps(script, ensure_ascii=False, indent=2), encoding="utf-8")
 
+    (storyboard_dir / "stage02_llm_output.json").write_text(
+        json.dumps(make_stage02_llm_output_from_example(), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
     storyboard_json = storyboard_dir / "storyboard.json"
     assert new_storyboard_template.main(["new_storyboard_template.py", str(locked_brief), str(script_json), str(storyboard_json)]) == 0
 
@@ -356,6 +1802,10 @@ def test_new_character_bible_template_generates_final_ready_draft(tmp_path: Path
     storyboard_json = storyboard_dir / "storyboard.json"
     storyboard_json.write_text(json.dumps(storyboard, ensure_ascii=False, indent=2), encoding="utf-8")
 
+    (character_dir / "stage03_llm_output.json").write_text(
+        json.dumps(make_stage03_llm_output_from_example(), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
     character_json = character_dir / "character_bible.json"
     assert new_character_bible_template.main(["new_character_bible_template.py", str(locked_brief), str(script_json), str(storyboard_json), str(character_json)]) == 0
 
@@ -507,6 +1957,10 @@ def test_new_keyframe_prompts_template_generates_final_ready_draft(tmp_path: Pat
     character_json = character_dir / "character_bible.json"
     character_json.write_text(json.dumps(character, ensure_ascii=False, indent=2), encoding="utf-8")
 
+    (keyframe_dir / "stage04_llm_output.json").write_text(
+        json.dumps(make_stage04_llm_output_from_example(), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
     keyframe_json = keyframe_dir / "keyframe_prompts.json"
     assert new_keyframe_prompts_template.main([
         "new_keyframe_prompts_template.py", str(locked_brief), str(script_json), str(storyboard_json), str(character_json), str(keyframe_json)
@@ -547,11 +2001,20 @@ def test_rainy_store_story_anchors_survive_stage01_to_stage04(tmp_path: Path) ->
     brief = load_rainy_store_brief(project_dir)
     locked_brief = intake_dir / "project_brief.locked.json"
     locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+    write_stage01_llm_output(script_dir, make_stage01_llm_output_for_rainy_store())
 
     script_json = script_dir / "script.json"
     assert new_script_template.main(["new_script_template.py", str(locked_brief), str(script_json)]) == 0
+    (storyboard_dir / "stage02_llm_output.json").write_text(
+        json.dumps(make_stage02_llm_output_for_rainy_store(), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
     storyboard_json = storyboard_dir / "storyboard.json"
     assert new_storyboard_template.main(["new_storyboard_template.py", str(locked_brief), str(script_json), str(storyboard_json)]) == 0
+    (character_dir / "stage03_llm_output.json").write_text(
+        json.dumps(make_stage03_llm_output_for_rainy_store(), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
     character_json = character_dir / "character_bible.json"
     assert new_character_bible_template.main([
         "new_character_bible_template.py",
@@ -560,6 +2023,10 @@ def test_rainy_store_story_anchors_survive_stage01_to_stage04(tmp_path: Path) ->
         str(storyboard_json),
         str(character_json),
     ]) == 0
+    (keyframe_dir / "stage04_llm_output.json").write_text(
+        json.dumps(make_stage04_llm_output_for_rainy_store(), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
     keyframe_json = keyframe_dir / "keyframe_prompts.json"
     assert new_keyframe_prompts_template.main([
         "new_keyframe_prompts_template.py",
@@ -612,6 +2079,124 @@ def test_rainy_store_story_anchors_survive_stage01_to_stage04(tmp_path: Path) ->
     assert "do not swap protagonist identity" in keyframe_data["shot_prompts"][0]["end_keyframe_prompt"]
 
 
+def test_stage02_to_stage04_reuse_upstream_story_anchors_instead_of_rereading_brief(tmp_path: Path) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260603_000100_anchor_truth"
+    intake_dir = project_dir / "00_intake"
+    script_dir = project_dir / "01_script"
+    storyboard_dir = project_dir / "02_storyboard"
+    character_dir = project_dir / "03_characters"
+    keyframe_dir = project_dir / "04_keyframes"
+    for path in [intake_dir, script_dir, storyboard_dir, character_dir, keyframe_dir]:
+        path.mkdir(parents=True, exist_ok=True)
+
+    brief = load_example_brief()
+    brief.update({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "status": "locked",
+        "confirmed_by_user": True,
+        "allowed_next_stage": "STAGE_01_SCRIPT_GENERATION",
+    })
+    brief["normalized"]["idea"] = "一个穿裙子的女生在黄昏的海滩上独自散步。"
+    locked_brief = intake_dir / "project_brief.locked.json"
+    locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    script = json.loads((TEMPLATES / "script.example.json").read_text(encoding="utf-8"))
+    script["project_id"] = project_dir.name
+    script["source_brief"] = str(locked_brief).replace("\\", "/")
+    script["story_anchors"] = {
+        "subject": "20岁出头的女孩",
+        "subject_age": "20岁出头",
+        "location": "便利店门口",
+        "weather": "雨夜",
+        "time_of_day": "夜晚",
+        "scene_label": "雨夜便利店门口",
+        "key_props": ["最后一把伞", "热可可"],
+        "action_beats": ["撑着最后一把伞站在门廊边", "把最后一把伞留给陌生人", "淋着雨走远", "回头看见热可可"],
+        "emotion_beats": ["安静", "克制善意", "落寞余温", "意外回暖"],
+        "composition_beats": ["先用竖屏建立镜头交代雨夜便利店门口与雨夜，人物与最后一把伞同框。"],
+    }
+    script_json = script_dir / "script.json"
+    script_json.write_text(json.dumps(script, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    stage02_packet = build_stage02_prompt_packet.build_packet(brief, script, locked_brief, script_json)
+    assert stage02_packet["story_anchors"]["scene_label"] == "雨夜便利店门口"
+    assert stage02_packet["story_anchors"]["key_props"][:2] == ["最后一把伞", "热可可"]
+
+    storyboard_llm_output = make_stage02_llm_output_for_rainy_store()
+    storyboard_json = storyboard_dir / "storyboard.json"
+    storyboard_payload = write_stage02_outputs.write_stage02_outputs(
+        brief,
+        script,
+        storyboard_llm_output,
+        locked_brief,
+        script_json,
+        storyboard_dir / "stage02_llm_output.json",
+        storyboard_json,
+    )
+    assert storyboard_payload["story_anchors"]["scene_label"] == "雨夜便利店门口"
+    assert storyboard_payload["story_anchors"]["location"] == "便利店门口"
+
+    stage03_packet = build_stage03_prompt_packet.build_packet(
+        brief,
+        script,
+        storyboard_payload,
+        locked_brief,
+        script_json,
+        storyboard_json,
+    )
+    assert stage03_packet["story_anchors"]["scene_label"] == "雨夜便利店门口"
+    assert stage03_packet["story_anchors"]["weather"] == "雨夜"
+
+    character_llm_output = make_stage03_llm_output_for_rainy_store()
+    character_json = character_dir / "character_bible.json"
+    character_payload = write_stage03_outputs.write_stage03_outputs(
+        brief,
+        script,
+        storyboard_payload,
+        character_llm_output,
+        locked_brief,
+        script_json,
+        storyboard_json,
+        character_dir / "stage03_llm_output.json",
+        character_json,
+    )
+    assert character_payload["story_anchors"]["scene_label"] == "雨夜便利店门口"
+    assert character_payload["story_anchors"]["key_props"][:2] == ["最后一把伞", "热可可"]
+
+    stage04_packet = build_stage04_prompt_packet.build_packet(
+        brief,
+        script,
+        storyboard_payload,
+        character_payload,
+        locked_brief,
+        script_json,
+        storyboard_json,
+        character_json,
+    )
+    assert stage04_packet["story_anchors"]["scene_label"] == "雨夜便利店门口"
+    assert stage04_packet["story_anchors"]["key_props"][:2] == ["最后一把伞", "热可可"]
+
+    keyframe_llm_output = make_stage04_llm_output_for_rainy_store()
+    keyframe_json = keyframe_dir / "keyframe_prompts.json"
+    keyframe_payload = write_stage04_outputs.write_stage04_outputs(
+        brief,
+        script,
+        storyboard_payload,
+        character_payload,
+        keyframe_llm_output,
+        locked_brief,
+        script_json,
+        storyboard_json,
+        character_json,
+        keyframe_dir / "stage04_llm_output.json",
+        keyframe_json,
+    )
+    assert keyframe_payload["story_anchors"]["scene_label"] == "雨夜便利店门口"
+    assert keyframe_payload["story_anchors"]["location"] == "便利店门口"
+    assert keyframe_payload["story_anchors"]["key_props"][:2] == ["最后一把伞", "热可可"]
+
+
 def test_rainy_store_story_anchors_survive_stage06_to_stage08_and_tiny_rough_cut_cannot_pass(tmp_path: Path) -> None:
     project_dir = tmp_path / "video_projects" / "creator_trial_20260530_rainy_store"
     intake_dir = project_dir / "00_intake"
@@ -643,11 +2228,20 @@ def test_rainy_store_story_anchors_survive_stage06_to_stage08_and_tiny_rough_cut
     brief = load_rainy_store_brief(project_dir)
     locked_brief = intake_dir / "project_brief.locked.json"
     locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+    write_stage01_llm_output(script_dir, make_stage01_llm_output_for_rainy_store())
 
     script_json = script_dir / "script.json"
     assert new_script_template.main(["new_script_template.py", str(locked_brief), str(script_json)]) == 0
+    (storyboard_dir / "stage02_llm_output.json").write_text(
+        json.dumps(make_stage02_llm_output_for_rainy_store(), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
     storyboard_json = storyboard_dir / "storyboard.json"
     assert new_storyboard_template.main(["new_storyboard_template.py", str(locked_brief), str(script_json), str(storyboard_json)]) == 0
+    (character_dir / "stage03_llm_output.json").write_text(
+        json.dumps(make_stage03_llm_output_for_rainy_store(), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
     character_json = character_dir / "character_bible.json"
     assert new_character_bible_template.main([
         "new_character_bible_template.py",
@@ -656,6 +2250,10 @@ def test_rainy_store_story_anchors_survive_stage06_to_stage08_and_tiny_rough_cut
         str(storyboard_json),
         str(character_json),
     ]) == 0
+    (keyframe_dir / "stage04_llm_output.json").write_text(
+        json.dumps(make_stage04_llm_output_for_rainy_store(), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
     keyframe_json = keyframe_dir / "keyframe_prompts.json"
     assert new_keyframe_prompts_template.main([
         "new_keyframe_prompts_template.py",
@@ -980,6 +2578,233 @@ def test_lock_project_brief_derives_routing_and_updates_manifest(tmp_path: Path)
     assert manifest["requested_terminal_stage"] == "STAGE_01_SCRIPT_CONFIRMED"
     assert manifest["compiled_requirements"]["requested_output_scope"] == "script_only"
     assert manifest["quality_contract"]["axes"]
+    creator_home = json.loads((project_dir / "creator_home.json").read_text(encoding="utf-8"))
+    recommended_entry = creator_home["recommended_entry"]
+    assert recommended_entry["label"] == "运行 Stage 01 自动剧本生成"
+    assert "run_stage01_from_locked_brief.py" in recommended_entry["command"]
+    assert "00_intake/project_brief.locked.json" in recommended_entry["command"]
+    assert "01_script/script.json" in recommended_entry["command"]
+
+
+def test_stage00_question_blocks_stay_aligned_with_canonical_option_mapping() -> None:
+    canonical = (INTAKE.parent / "references" / "first_layer_options.md").read_text(encoding="utf-8")
+    question_blocks = (INTAKE.parent / "references" / "stage00_question_blocks.md").read_text(encoding="utf-8")
+
+    expected_pairs = [
+        ("| B | 30秒 | 30 |", "B. 30秒"),
+        ("| H | 自定义 | custom |", "H. 自定义"),
+        ("| C | 恐怖惊悚 |", "C. 恐怖惊悚"),
+        ("| P | 音乐MV |", "P. 音乐MV"),
+        ("| C | 日系动画风（日本动漫感） |", "C. 日系动画风（日本动漫感）"),
+        ("| I | 温暖治愈 |", "I. 温暖治愈"),
+        ("| B | 16:9 横屏 | 16:9 |", "B. 16:9 横屏"),
+        ("| 2 | 1080P | Recommended default |", "2. 1080P"),
+        ("| C | 由模型根据故事自动判断 |", "C. 由模型根据故事自动判断"),
+        ("| A | 不需要配音 |", "A. 不需要配音"),
+        ("| B3 | 需要，背景配乐（underscore） |", "B3. 需要，背景配乐（underscore）"),
+        ("| F | 合成粗剪成片 |", "F. 合成粗剪成片"),
+    ]
+    for canonical_snippet, prompt_snippet in expected_pairs:
+        assert canonical_snippet in canonical
+        assert prompt_snippet in question_blocks
+
+    assert "情绪氛围片" not in question_blocks
+    assert "清冷孤独" not in question_blocks
+
+
+def test_stage00_skills_reference_canonical_question_block_source() -> None:
+    intake_skill = (ROOT / "skills" / "video-project-intake" / "SKILL.md").read_text(encoding="utf-8")
+    pipeline_skill = (ROOT / "skills" / "video-production-pipeline" / "SKILL.md").read_text(encoding="utf-8")
+    startup_doc = (ROOT / "CODEX_START_HERE.md").read_text(encoding="utf-8")
+
+    assert "references/stage00_question_blocks.md" in intake_skill
+    assert "references/first_layer_options.md" in intake_skill
+    assert "stage00_question_blocks.md" in pipeline_skill
+    assert "first_layer_options.md" in pipeline_skill
+    assert "stage00_question_blocks.md" in startup_doc
+
+
+def test_show_creator_home_recommends_stage01_command_after_brief_lock(tmp_path: Path, capsys) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260528_103000_sunset_beach_girl"
+    intake_dir = project_dir / "00_intake"
+    intake_dir.mkdir(parents=True, exist_ok=True)
+    manifest_path = project_dir / "project_manifest.json"
+    manifest_path.write_text(json.dumps({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "current_stage": "STAGE_00_BRIEF_LOCKED",
+        "status": "active",
+        "brief_locked": True,
+        "allowed_next_stage": "STAGE_01_SCRIPT_GENERATION",
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    brief = load_example_brief()
+    brief.update({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "status": "locked",
+        "confirmed_by_user": True,
+        "allowed_next_stage": "STAGE_01_SCRIPT_GENERATION",
+        "locked_at": "2026-05-28T10:35:00+08:00",
+    })
+    locked_brief = intake_dir / "project_brief.locked.json"
+    locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    assert show_creator_home.main(["--project-dir", str(project_dir)]) == 0
+    output = capsys.readouterr().out
+    assert "TRUSTED_STAGE: STAGE_00_BRIEF_LOCKED" in output
+    assert "RECOMMENDED_ENTRY_LABEL: 运行 Stage 01 自动剧本生成" in output
+    assert "RECOMMENDED_ENTRY_COMMAND: python skills/video-production-pipeline/scripts/run_stage01_from_locked_brief.py" in output
+
+
+def test_continue_pipeline_dispatches_brief_locked_project_to_stage01_runner(tmp_path: Path, monkeypatch, capsys) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260528_103000_sunset_beach_girl"
+    intake_dir = project_dir / "00_intake"
+    intake_dir.mkdir(parents=True, exist_ok=True)
+    manifest_path = project_dir / "project_manifest.json"
+    manifest_path.write_text(json.dumps({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "current_stage": "STAGE_00_BRIEF_LOCKED",
+        "status": "active",
+        "brief_locked": True,
+        "allowed_next_stage": "STAGE_01_SCRIPT_GENERATION",
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    brief = load_example_brief()
+    brief.update({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "status": "locked",
+        "confirmed_by_user": True,
+        "allowed_next_stage": "STAGE_01_SCRIPT_GENERATION",
+        "locked_at": "2026-05-28T10:35:00+08:00",
+    })
+    locked_brief = intake_dir / "project_brief.locked.json"
+    locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    called: dict[str, object] = {}
+
+    def fake_stage01(argv):  # noqa: ANN001
+        called["argv"] = list(argv)
+        return 0
+
+    monkeypatch.setattr(continue_pipeline.run_stage01_from_locked_brief, "main", fake_stage01)
+
+    assert continue_pipeline.main(["--project-dir", str(project_dir)]) == 0
+    output = capsys.readouterr().out
+    assert "PIPELINE_DISPATCH_STAGE: STAGE_01_SCRIPT_GENERATION" in output
+    assert "run_stage01_from_locked_brief.py" in output
+    assert called["argv"] == [
+        str((project_dir / "00_intake" / "project_brief.locked.json")),
+        str((project_dir / "01_script" / "script.json")),
+    ]
+
+
+def test_continue_pipeline_dispatches_script_confirmed_project_to_stage02_runner(tmp_path: Path, monkeypatch, capsys) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260602_233000_stage02_dispatch"
+    paths = seed_confirmed_stage_chain(project_dir)
+    manifest_path = project_dir / "project_manifest.json"
+    manifest_path.write_text(json.dumps({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "current_stage": "STAGE_01_SCRIPT_CONFIRMED",
+        "status": "active",
+        "brief_locked": True,
+        "script_confirmed": True,
+        "storyboard_confirmed": False,
+        "allowed_next_stage": "STAGE_02_STORYBOARD",
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    called: dict[str, object] = {}
+
+    def fake_stage02(argv):  # noqa: ANN001
+        called["argv"] = list(argv)
+        return 0
+
+    monkeypatch.setattr(continue_pipeline.run_stage02_from_confirmed_script, "main", fake_stage02)
+
+    assert continue_pipeline.main(["--project-dir", str(project_dir)]) == 0
+    output = capsys.readouterr().out
+    assert "PIPELINE_DISPATCH_STAGE: STAGE_02_STORYBOARD_GENERATION" in output
+    assert "run_stage02_from_confirmed_script.py" in output
+    assert called["argv"] == [
+        str(paths["locked_brief"]),
+        str(paths["script_json"]),
+        str(paths["storyboard_json"]),
+    ]
+
+
+def test_continue_pipeline_dispatches_storyboard_confirmed_project_to_stage03_runner(tmp_path: Path, monkeypatch, capsys) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260602_233100_stage03_dispatch"
+    paths = seed_confirmed_stage_chain(project_dir)
+    manifest_path = project_dir / "project_manifest.json"
+    manifest_path.write_text(json.dumps({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "current_stage": "STAGE_02_STORYBOARD_CONFIRMED",
+        "status": "active",
+        "brief_locked": True,
+        "script_confirmed": True,
+        "storyboard_confirmed": True,
+        "character_bible_confirmed": False,
+        "allowed_next_stage": "STAGE_03_CHARACTER_BIBLE",
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    called: dict[str, object] = {}
+
+    def fake_stage03(argv):  # noqa: ANN001
+        called["argv"] = list(argv)
+        return 0
+
+    monkeypatch.setattr(continue_pipeline.run_stage03_from_confirmed_storyboard, "main", fake_stage03)
+
+    assert continue_pipeline.main(["--project-dir", str(project_dir)]) == 0
+    output = capsys.readouterr().out
+    assert "PIPELINE_DISPATCH_STAGE: STAGE_03_CHARACTER_BIBLE_GENERATION" in output
+    assert "run_stage03_from_confirmed_storyboard.py" in output
+    assert called["argv"] == [
+        str(paths["locked_brief"]),
+        str(paths["script_json"]),
+        str(paths["storyboard_json"]),
+        str(paths["character_json"]),
+    ]
+
+
+def test_continue_pipeline_dispatches_character_confirmed_project_to_stage04_runner(tmp_path: Path, monkeypatch, capsys) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260602_233200_stage04_dispatch"
+    paths = seed_confirmed_stage_chain(project_dir)
+    manifest_path = project_dir / "project_manifest.json"
+    manifest_path.write_text(json.dumps({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "current_stage": "STAGE_03_CHARACTER_BIBLE_CONFIRMED",
+        "status": "active",
+        "brief_locked": True,
+        "script_confirmed": True,
+        "storyboard_confirmed": True,
+        "character_bible_confirmed": True,
+        "keyframe_prompts_confirmed": False,
+        "allowed_next_stage": "STAGE_04_KEYFRAME_PROMPTS",
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    called: dict[str, object] = {}
+
+    def fake_stage04(argv):  # noqa: ANN001
+        called["argv"] = list(argv)
+        return 0
+
+    monkeypatch.setattr(continue_pipeline.run_stage04_from_confirmed_character_bible, "main", fake_stage04)
+
+    assert continue_pipeline.main(["--project-dir", str(project_dir)]) == 0
+    output = capsys.readouterr().out
+    assert "PIPELINE_DISPATCH_STAGE: STAGE_04_KEYFRAME_PROMPTS_GENERATION" in output
+    assert "run_stage04_from_confirmed_character_bible.py" in output
+    assert called["argv"] == [
+        str(paths["locked_brief"]),
+        str(paths["script_json"]),
+        str(paths["storyboard_json"]),
+        str(paths["character_json"]),
+        str(paths["keyframe_json"]),
+    ]
 
 
 def test_stage05_compiler_keeps_openai_first_for_anime_projects(tmp_path: Path) -> None:
@@ -1021,23 +2846,23 @@ def test_stage05_compiler_keeps_openai_first_for_anime_projects(tmp_path: Path) 
     assert data["jobs"][0]["provider_priority"][0] == "openai_gpt_image2"
     assert data["stage05_route_key"] == "anime_jp"
     assert data["comfyui_workflow_mapping_key"] == "stage05_anime_jp"
-    assert data["comfyui_model_id"] == "circlestone-labs/Anima"
-    assert data["preferred_comfyui_workflow_candidate"] == "anima_comparison_workflow"
-    assert data["preferred_comfyui_model_candidate"] == "circlestone-labs/Anima"
-    assert data["route_migration_state"] == "needs_api_conversion"
-    assert data["jobs"][0]["comfyui_workflow_name"] == "txt2img_keyframe_anime"
+    assert data["comfyui_model_id"] == "Tongyi-MAI/Z-Image"
+    assert data["preferred_comfyui_workflow_candidate"] == "amazing_z_image_a_safetensors"
+    assert data["preferred_comfyui_model_candidate"] == "Tongyi-MAI/Z-Image"
+    assert data["route_migration_state"] == "repo_transitional"
+    assert data["jobs"][0]["comfyui_workflow_name"] == "amazing_z_image_a_safetensors"
     assert data["jobs"][0]["comfyui_workflow_mapping_key"] == "stage05_anime_jp"
-    assert data["jobs"][0]["comfyui_model_id"] == "circlestone-labs/Anima"
-    assert data["jobs"][0]["preferred_comfyui_workflow_candidate"] == "anima_comparison_workflow"
-    assert data["jobs"][0]["preferred_comfyui_model_candidate"] == "circlestone-labs/Anima"
-    assert data["jobs"][0]["route_migration_state"] == "needs_api_conversion"
+    assert data["jobs"][0]["comfyui_model_id"] == "Tongyi-MAI/Z-Image"
+    assert data["jobs"][0]["preferred_comfyui_workflow_candidate"] == "amazing_z_image_a_safetensors"
+    assert data["jobs"][0]["preferred_comfyui_model_candidate"] == "Tongyi-MAI/Z-Image"
+    assert data["jobs"][0]["route_migration_state"] == "repo_transitional"
     assert data["jobs"][0]["stage05_route_key"] == "anime_jp"
     assert data["route_resolution"]["used_registry"] is True
     assert data["route_resolution"]["resolution_mode"] == "stage00_style_registry"
     assert data["route_resolution"]["workflow_mapping_resolution"] == "route_registry_current_mapping"
-    assert data["route_resolution"]["preferred_comfyui_workflow_candidate"] == "anima_comparison_workflow"
-    assert data["route_resolution"]["preferred_comfyui_model_candidate"] == "circlestone-labs/Anima"
-    assert data["route_resolution"]["route_migration_state"] == "needs_api_conversion"
+    assert data["route_resolution"]["preferred_comfyui_workflow_candidate"] == "amazing_z_image_a_safetensors"
+    assert data["route_resolution"]["preferred_comfyui_model_candidate"] == "Tongyi-MAI/Z-Image"
+    assert data["route_resolution"]["route_migration_state"] == "repo_transitional"
 
 
 def test_stage05_route_registry_maps_cn_animation_style_to_new_route_key(tmp_path: Path) -> None:
@@ -1089,22 +2914,22 @@ def test_stage05_route_registry_maps_cn_animation_style_to_new_route_key(tmp_pat
 def test_validate_keyframe_image_manifest_example_final() -> None:
     data = json.loads((TEMPLATES / "keyframe_image_manifest.example.json").read_text(encoding="utf-8"))
     assert data["stage05_route_key"] == "realistic_cinematic"
-    assert data["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic"
-    assert data["comfyui_model_id"] == "Tongyi-MAI/Z-Image"
-    assert data["preferred_comfyui_workflow_candidate"] == "txt2img_keyframe_realistic_zimage_photo_bridge"
-    assert data["preferred_comfyui_model_candidate"] == "Tongyi-MAI/Z-Image"
-    assert data["route_migration_state"] == "repo_transitional"
-    assert data["preferred_comfyui_workflow_source_ref"] == "workflows/comfyui/txt2img_keyframe_realistic_zimage_photo_bridge.workflow_api.json"
+    assert data["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_qwen2512_prompt_only"
+    assert data["comfyui_model_id"] == "Qwen/Qwen-Image-2512"
+    assert data["preferred_comfyui_workflow_candidate"] == "txt2img_keyframe_realistic"
+    assert data["preferred_comfyui_model_candidate"] == "Qwen/Qwen-Image-2512"
+    assert data["route_migration_state"] == "official_fallback_for_semantic_alignment"
+    assert data["preferred_comfyui_workflow_source_ref"] == "workflows/comfyui/txt2img_keyframe_realistic.workflow_api.json"
     assert data["preferred_comfyui_workflow_format"] == "api_workflow"
     assert data["preferred_comfyui_workflow_custom_node_dependencies"] == []
     assert data["preferred_comfyui_workflow_import_blockers"] == []
     assert data["route_resolution"]["resolution_mode"] == "stage00_style_registry"
     assert all(job["stage05_route_key"] == "realistic_cinematic" for job in data["jobs"])
-    assert all(job["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic" for job in data["jobs"])
-    assert all(job["comfyui_workflow_name"] == "txt2img_keyframe_realistic_zimage_photo_bridge" for job in data["jobs"])
-    assert all(job["preferred_comfyui_workflow_candidate"] == "txt2img_keyframe_realistic_zimage_photo_bridge" for job in data["jobs"])
-    assert all(job["preferred_comfyui_model_candidate"] == "Tongyi-MAI/Z-Image" for job in data["jobs"])
-    assert all(job["route_migration_state"] == "repo_transitional" for job in data["jobs"])
+    assert all(job["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_qwen2512_prompt_only" for job in data["jobs"])
+    assert all(job["comfyui_workflow_name"] == "txt2img_keyframe_realistic" for job in data["jobs"])
+    assert all(job["preferred_comfyui_workflow_candidate"] == "txt2img_keyframe_realistic" for job in data["jobs"])
+    assert all(job["preferred_comfyui_model_candidate"] == "Qwen/Qwen-Image-2512" for job in data["jobs"])
+    assert all(job["route_migration_state"] == "official_fallback_for_semantic_alignment" for job in data["jobs"])
     assert all(job["preferred_comfyui_workflow_format"] == "api_workflow" for job in data["jobs"])
     ok, errors, warnings = validate_keyframe_image_manifest.validate(data, TEMPLATES / "keyframe_image_manifest.example.json", mode="final")
     assert ok, errors
@@ -1162,20 +2987,20 @@ def test_new_keyframe_image_jobs_passes_draft_then_placeholder_passes_final(tmp_
     assert data["comfyui_workflow_capabilities"]["supports_reference_images"] is False
     assert len(data["jobs"]) == 2 * len(keyframe["shot_prompts"])
     assert data["style_family"] == "realistic"
-    assert data["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic"
-    assert data["comfyui_model_id"] == "Tongyi-MAI/Z-Image"
-    assert data["preferred_comfyui_workflow_candidate"] == "txt2img_keyframe_realistic_zimage_photo_bridge"
-    assert data["preferred_comfyui_model_candidate"] == "Tongyi-MAI/Z-Image"
-    assert data["route_migration_state"] == "repo_transitional"
-    assert data["preferred_comfyui_workflow_source_ref"] == "workflows/comfyui/txt2img_keyframe_realistic_zimage_photo_bridge.workflow_api.json"
+    assert data["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_qwen2512_prompt_only"
+    assert data["comfyui_model_id"] == "Qwen/Qwen-Image-2512"
+    assert data["preferred_comfyui_workflow_candidate"] == "txt2img_keyframe_realistic"
+    assert data["preferred_comfyui_model_candidate"] == "Qwen/Qwen-Image-2512"
+    assert data["route_migration_state"] == "official_fallback_for_semantic_alignment"
+    assert data["preferred_comfyui_workflow_source_ref"] == "workflows/comfyui/txt2img_keyframe_realistic.workflow_api.json"
     assert data["preferred_comfyui_workflow_format"] == "api_workflow"
     assert data["comfyui_workflow_router"]["realistic"] == "txt2img_keyframe_realistic"
     assert all(job["style_family"] == "realistic" for job in data["jobs"])
-    assert all(job["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic" for job in data["jobs"])
-    assert all(job["comfyui_workflow_name"] == "txt2img_keyframe_realistic_zimage_photo_bridge" for job in data["jobs"])
-    assert all(job["preferred_comfyui_workflow_candidate"] == "txt2img_keyframe_realistic_zimage_photo_bridge" for job in data["jobs"])
-    assert all(job["preferred_comfyui_model_candidate"] == "Tongyi-MAI/Z-Image" for job in data["jobs"])
-    assert all(job["route_migration_state"] == "repo_transitional" for job in data["jobs"])
+    assert all(job["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_qwen2512_prompt_only" for job in data["jobs"])
+    assert all(job["comfyui_workflow_name"] == "txt2img_keyframe_realistic" for job in data["jobs"])
+    assert all(job["preferred_comfyui_workflow_candidate"] == "txt2img_keyframe_realistic" for job in data["jobs"])
+    assert all(job["preferred_comfyui_model_candidate"] == "Qwen/Qwen-Image-2512" for job in data["jobs"])
+    assert all(job["route_migration_state"] == "official_fallback_for_semantic_alignment" for job in data["jobs"])
     assert all(job["preferred_comfyui_workflow_format"] == "api_workflow" for job in data["jobs"])
     assert all(job["reference_guidance_requested"] is True for job in data["jobs"])
     assert all(job["reference_guidance_active"] is False for job in data["jobs"])
@@ -1262,17 +3087,17 @@ def test_sync_keyframe_image_manifest_backfills_route_key_from_top_level(tmp_pat
     synced = json.loads(manifest_json.read_text(encoding="utf-8"))
     assert synced["stage05_route_key"] == "anime_jp"
     assert synced["comfyui_workflow_mapping_key"] == "stage05_anime_jp"
-    assert synced["comfyui_model_id"] == "circlestone-labs/Anima"
-    assert synced["preferred_comfyui_workflow_candidate"] == "anima_comparison_workflow"
-    assert synced["preferred_comfyui_model_candidate"] == "circlestone-labs/Anima"
-    assert synced["route_migration_state"] == "needs_api_conversion"
-    assert synced["preferred_comfyui_workflow_source_ref"] == "https://huggingface.co/circlestone-labs/Anima/blob/main/anima_comparison.json"
+    assert synced["comfyui_model_id"] == "Tongyi-MAI/Z-Image"
+    assert synced["preferred_comfyui_workflow_candidate"] == "amazing_z_image_a_safetensors"
+    assert synced["preferred_comfyui_model_candidate"] == "Tongyi-MAI/Z-Image"
+    assert synced["route_migration_state"] == "repo_transitional"
+    assert synced["preferred_comfyui_workflow_source_ref"] == "F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-image-a_SAFETENSORS.json"
     assert all(job["stage05_route_key"] == "anime_jp" for job in synced["jobs"])
     assert all(job["comfyui_workflow_mapping_key"] == "stage05_anime_jp" for job in synced["jobs"])
-    assert all(job["comfyui_model_id"] == "circlestone-labs/Anima" for job in synced["jobs"])
-    assert all(job["preferred_comfyui_workflow_candidate"] == "anima_comparison_workflow" for job in synced["jobs"])
-    assert all(job["preferred_comfyui_model_candidate"] == "circlestone-labs/Anima" for job in synced["jobs"])
-    assert all(job["route_migration_state"] == "needs_api_conversion" for job in synced["jobs"])
+    assert all(job["comfyui_model_id"] == "Tongyi-MAI/Z-Image" for job in synced["jobs"])
+    assert all(job["preferred_comfyui_workflow_candidate"] == "amazing_z_image_a_safetensors" for job in synced["jobs"])
+    assert all(job["preferred_comfyui_model_candidate"] == "Tongyi-MAI/Z-Image" for job in synced["jobs"])
+    assert all(job["route_migration_state"] == "repo_transitional" for job in synced["jobs"])
     assert synced["status"] == "draft"
     assert synced["summary"]["generated_image_count"] == 0
 
@@ -1323,6 +3148,10 @@ def test_new_keyframe_image_jobs_activates_reference_guided_mode_when_mapping_su
     }
     keyframe["self_check"]["character_reference_images_ready"] = True
     keyframe["self_check"]["safe_for_auto_image_generation"] = True
+    for shot in keyframe["shot_prompts"]:
+        shot["camera_prompt"] = "medium shot"
+        shot["start_keyframe_prompt"] = "same heroine waiting under rainy convenience-store light"
+        shot["end_keyframe_prompt"] = "the same heroine keeps standing under rainy convenience-store light"
     keyframe_json = keyframe_dir / "keyframe_prompts.json"
     keyframe_json.write_text(json.dumps(keyframe, ensure_ascii=False, indent=2), encoding="utf-8")
     (reference_dir / "CHAR_001_primary.png").write_bytes(b"PNGDATA")
@@ -1521,6 +3350,121 @@ def test_resolve_stage05_route_switches_realistic_cinematic_to_reference_guided_
     assert resolved["preferred_comfyui_workflow_candidate"] == "txt2img_keyframe_shortdrama_qwen_edit_reference"
     assert resolved["preferred_comfyui_model_candidate"] == "Qwen/Qwen-Image-Edit-2511"
     assert resolved["comfyui_control_mode"] == "reference_guided"
+    assert resolved["prompt_only_workflow_mapping_key"] == "stage05_realistic_cinematic_qwen2512_prompt_only"
+    assert resolved["prompt_only_workflow_name"] == "txt2img_keyframe_realistic"
+
+
+def test_new_keyframe_jobs_keep_wide_establishing_realistic_shot_on_prompt_only_route_even_with_refs_ready(tmp_path: Path) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260601_223000_establishing_guardrail"
+    intake_dir = project_dir / "00_intake"
+    keyframe_dir = project_dir / "04_keyframes"
+    images_dir = project_dir / "05_images"
+    intake_dir.mkdir(parents=True, exist_ok=True)
+    keyframe_dir.mkdir(parents=True, exist_ok=True)
+    images_dir.mkdir(parents=True, exist_ok=True)
+
+    brief = load_example_brief()
+    brief.update({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "status": "locked",
+        "confirmed_by_user": True,
+        "allowed_next_stage": "STAGE_01_SCRIPT_GENERATION",
+        "locked_at": "2026-06-01T22:30:00+08:00",
+    })
+    brief["normalized"]["style"] = "写实电影感"
+    brief["normalized"]["final_output"] = "生成关键帧图片素材包"
+    locked_brief = intake_dir / "project_brief.locked.json"
+    locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    keyframe = json.loads((TEMPLATES / "keyframe_prompts.example.json").read_text(encoding="utf-8"))
+    keyframe["project_id"] = project_dir.name
+    keyframe["source_brief"] = str(locked_brief).replace("\\", "/")
+    keyframe["reference_image_status"] = {"all_present": True}
+    keyframe["stage05_execution_readiness"] = {"reference_image_required": True}
+    keyframe["shot_prompts"] = keyframe["shot_prompts"][:1]
+    keyframe["shot_prompts"][0]["camera_prompt"] = "wide shot"
+    keyframe["shot_prompts"][0]["start_keyframe_prompt"] = "single woman walking along the shoreline at sunset"
+    keyframe["shot_prompts"][0]["end_keyframe_prompt"] = "the same woman keeps walking along the shoreline in a wide sunset view"
+    keyframe["shot_prompts"][0]["dependencies"] = {
+        "reference_images": ["03_characters/reference_images/CHAR_001_primary.png"],
+    }
+    keyframe_json = keyframe_dir / "keyframe_prompts.json"
+    keyframe_json.write_text(json.dumps(keyframe, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    manifest_json = images_dir / "keyframe_image_manifest.json"
+    assert new_keyframe_image_jobs.main([
+        "new_keyframe_image_jobs.py",
+        str(locked_brief),
+        str(keyframe_json),
+        str(manifest_json),
+        "--allow-beyond-requested-scope",
+    ]) == 0
+
+    data = json.loads(manifest_json.read_text(encoding="utf-8"))
+    start_job = next(job for job in data["jobs"] if job["image_id"] == "IMG_S001_START")
+    assert data["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_qwen_edit_reference"
+    assert start_job["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_qwen2512_prompt_only"
+    assert start_job["comfyui_workflow_name"] == "txt2img_keyframe_realistic"
+    assert start_job["comfyui_control_mode"] == "prompt_only"
+    assert start_job["reference_guidance_active"] is False
+    assert start_job["reference_guidance_override_reason"] == "prompt_only_establishing_shot_guardrail"
+
+    end_job = next(job for job in data["jobs"] if job["image_id"] == "IMG_S001_END")
+    assert end_job["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_qwen2512_prompt_only"
+    assert end_job["comfyui_workflow_name"] == "txt2img_keyframe_realistic"
+    assert end_job["comfyui_control_mode"] == "prompt_only"
+    assert end_job["reference_guidance_active"] is False
+    assert end_job["reference_guidance_override_reason"] == "prompt_only_establishing_shot_guardrail"
+
+
+def test_new_keyframe_jobs_upgrade_guofeng_scenic_umbrella_shot_to_scenic_preset(tmp_path: Path) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260601_231000_guofeng_scenic_override"
+    intake_dir = project_dir / "00_intake"
+    keyframe_dir = project_dir / "04_keyframes"
+    images_dir = project_dir / "05_images"
+    intake_dir.mkdir(parents=True, exist_ok=True)
+    keyframe_dir.mkdir(parents=True, exist_ok=True)
+    images_dir.mkdir(parents=True, exist_ok=True)
+
+    brief = load_example_brief()
+    brief.update({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "status": "locked",
+        "confirmed_by_user": True,
+        "allowed_next_stage": "STAGE_01_SCRIPT_GENERATION",
+        "locked_at": "2026-06-01T23:10:00+08:00",
+    })
+    brief["normalized"]["style"] = "国风水墨/古风"
+    brief["normalized"]["final_output"] = "生成关键帧图片素材包"
+    locked_brief = intake_dir / "project_brief.locked.json"
+    locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    keyframe = json.loads((TEMPLATES / "keyframe_prompts.example.json").read_text(encoding="utf-8"))
+    keyframe["project_id"] = project_dir.name
+    keyframe["source_brief"] = str(locked_brief).replace("\\", "/")
+    keyframe["shot_prompts"] = keyframe["shot_prompts"][:1]
+    keyframe["shot_prompts"][0]["camera_prompt"] = "medium scenic shot"
+    keyframe["shot_prompts"][0]["start_keyframe_prompt"] = "ancient Chinese woman holding one oil-paper umbrella in misty rain"
+    keyframe["shot_prompts"][0]["end_keyframe_prompt"] = "the same woman turns with the same oil-paper umbrella under mist"
+    keyframe_json = keyframe_dir / "keyframe_prompts.json"
+    keyframe_json.write_text(json.dumps(keyframe, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    manifest_json = images_dir / "keyframe_image_manifest.json"
+    assert new_keyframe_image_jobs.main([
+        "new_keyframe_image_jobs.py",
+        str(locked_brief),
+        str(keyframe_json),
+        str(manifest_json),
+        "--allow-beyond-requested-scope",
+    ]) == 0
+
+    data = json.loads(manifest_json.read_text(encoding="utf-8"))
+    start_job = next(job for job in data["jobs"] if job["image_id"] == "IMG_S001_START")
+    assert start_job["comfyui_style_preset_key"] == "scenic_single_subject_umbrella"
+    assert "not a beauty close-up portrait" in start_job["comfyui_style_positive_anchor"]
+    assert "beauty close-up portrait" in start_job["comfyui_style_negative_anchor"]
 
 
 def test_sync_keyframe_image_manifest_blocks_risky_umbrella_scene_until_approved(tmp_path: Path) -> None:

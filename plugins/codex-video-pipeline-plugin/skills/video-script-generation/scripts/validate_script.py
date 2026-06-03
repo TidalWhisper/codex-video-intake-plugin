@@ -19,6 +19,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT / "scripts"))
+from pipeline_blueprints import extract_story_anchors  # noqa: E402
+
 REQUIRED_TOP = [
     "schema_version", "stage", "status", "project_id", "source_brief",
     "title", "logline", "theme", "characters", "settings", "duration_plan",
@@ -37,6 +42,33 @@ def load_json(path: Path) -> dict[str, Any]:
 
 def is_blank(value: Any) -> bool:
     return value is None or (isinstance(value, str) and not value.strip())
+
+
+def try_load_source_brief(source_brief: Any) -> dict[str, Any] | None:
+    if not isinstance(source_brief, str) or not source_brief.strip():
+        return None
+    path = Path(source_brief)
+    if not path.is_absolute():
+        path = (Path.cwd() / path).resolve()
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def music_cue_matches_profile(cue: Any, profile: str) -> bool:
+    text = str(cue or "").strip().lower()
+    if not profile:
+        return not text
+    if profile == "song":
+        return text.startswith("song")
+    if profile == "instrumental":
+        return text.startswith("instrumental")
+    if profile == "underscore":
+        return text.startswith("underscore")
+    return True
 
 
 def validate(data: dict[str, Any], mode: str = "final") -> tuple[bool, list[str], list[str]]:
@@ -103,12 +135,54 @@ def validate(data: dict[str, Any], mode: str = "final") -> tuple[bool, list[str]
         sections = script.get("sections")
         if not isinstance(sections, list) or not sections:
             errors.append("script.sections must be a non-empty list in final mode")
+        music_profile = str(script.get("music_profile") or "").strip()
+        if music_profile and isinstance(sections, list):
+            for idx, section in enumerate(sections):
+                if not isinstance(section, dict):
+                    errors.append(f"script.sections[{idx}] must be an object")
+                    continue
+                if not music_cue_matches_profile(section.get("music_cue"), music_profile):
+                    errors.append(
+                        f"script.sections[{idx}].music_cue must match script.music_profile={music_profile}"
+                    )
 
     self_check = data.get("self_check")
     if isinstance(self_check, dict):
-        for key in ["matches_locked_brief", "duration_fits", "genre_style_fits", "ready_for_storyboard"]:
+        for key in [
+            "matches_locked_brief",
+            "duration_fits",
+            "genre_style_fits",
+            "aspect_ratio_fits",
+            "character_requirement_fits",
+            "voice_fits",
+            "music_fits",
+            "final_output_scope_fits",
+            "ready_for_storyboard",
+        ]:
             if self_check.get(key) is not True:
                 errors.append(f"self_check.{key} must be true in final mode")
+
+    source_brief = try_load_source_brief(data.get("source_brief"))
+    if source_brief:
+        expected = extract_story_anchors(source_brief, 1).to_dict()
+        expected_age = str(expected.get("subject_age") or "").strip()
+        expected_subject = str(expected.get("subject") or "").strip()
+        expected_scene = str(expected.get("scene_label") or "").strip()
+
+        if expected_age and isinstance(characters, list) and characters:
+            first_age = str((characters[0] or {}).get("age") or "").strip()
+            if expected_age not in first_age:
+                errors.append(f"characters[0].age must preserve explicit brief age: expected {expected_age}")
+
+        if expected_subject and any(token in expected_subject for token in ["规划师", "巡护员", "摄影师", "设计师", "工程师"]):
+            first_name = str((characters[0] or {}).get("name") or "").strip() if isinstance(characters, list) and characters else ""
+            if expected_subject not in first_name:
+                errors.append(f"characters[0].name must preserve explicit brief subject identity: expected {expected_subject}")
+
+        if expected_scene and expected_scene not in {"故事现场", "古风场景", "未来感场景"} and isinstance(settings, list):
+            normalized_settings = [str(item or "").strip() for item in settings]
+            if not any(expected_scene in item or item in expected_scene for item in normalized_settings):
+                errors.append(f"settings must preserve explicit brief scene: expected {expected_scene}")
 
     return not errors, errors, warnings
 

@@ -14,6 +14,25 @@ Load:
 ```text
 config/stage05_style_profiles.example.yaml
 references/stage05-style-selection-spec.md
+references/zimage-style-switch-unified-spec.md
+```
+
+If the target workflow is the local original Amazing Z-Photo UI graph, load this skill first and follow it as a hard supplement:
+
+```text
+$video-keyframe-amazing-z-photo-style-switch
+```
+
+If the target workflow is the local original Amazing Z-Comics UI graph, load this skill first and follow it as a hard supplement:
+
+```text
+$video-keyframe-amazing-z-comics-style-switch
+```
+
+If the target workflow is the local original Amazing Z-Image-A UI graph, load this skill first and follow it as a hard supplement:
+
+```text
+$video-keyframe-amazing-z-image-a-style-switch
 ```
 
 If working on an existing route, also read:
@@ -64,3 +83,6 @@ For every Stage 05 style family, leave behind:
 - Do not treat timeout handling or prompt wording as a substitute for model selection.
 - Do not mark `guofeng` or `stylized` production-ready without style-specific evidence.
 - If no suitable local model exists, say so explicitly and keep the route in a blocked or provisional state.
+- For `amazing-z-photo_SAFETENSORS.json`, do not fake style switching by copying one style template into another node; the real control surface is `#88 STYLE SELECTOR`, with `#57` remaining the only main prompt field.
+- For `amazing-z-comics_SAFETENSORS.json`, do not fake style switching by copying one style template into another node; the real control surface is `#88 STYLE SELECTOR`, with `#57` remaining the only main prompt field.
+- For `amazing-z-image-a_SAFETENSORS.json`, do not fake style switching by copying one style template into another node; the real control surface is `#88 STYLE SELECTOR`, with `#57` remaining the only main prompt field.

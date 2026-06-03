@@ -83,6 +83,30 @@ def _list_of_str(value: Any) -> list[str]:
     return [str(item).strip() for item in _as_list(value) if str(item or "").strip()]
 
 
+def _stage01_locked_brief_path(project_dir: Path) -> Path:
+    return project_dir / "00_intake" / "project_brief.locked.json"
+
+
+def _stage01_script_json_path(project_dir: Path) -> Path:
+    return project_dir / "01_script" / "script.json"
+
+
+def _stage01_runner_command(project_dir: Path) -> str:
+    locked_brief = _stage01_locked_brief_path(project_dir)
+    script_json = _stage01_script_json_path(project_dir)
+    return (
+        "python skills/video-production-pipeline/scripts/run_stage01_from_locked_brief.py "
+        f"{as_posix(locked_brief)} {as_posix(script_json)}"
+    )
+
+
+def _stage01_generated(data: dict[str, Any], project_dir: Path) -> bool:
+    current_stage = _text(data.get("current_stage"))
+    if current_stage == "STAGE_01_SCRIPT_GENERATION":
+        return True
+    return _stage01_script_json_path(project_dir).exists()
+
+
 def _origin_counts() -> dict[str, int]:
     return {key: 0 for key in ORIGIN_KEYS}
 
@@ -583,22 +607,50 @@ def _creator_steps(
     stage_truth: dict[str, dict[str, Any]],
     reference_state: dict[str, Any] | None,
 ) -> list[dict[str, Any]]:
+    project_dir = Path(_text(data.get("project_dir")) or ".")
+    stage01_command = _stage01_runner_command(project_dir) if _bool(data.get("brief_locked")) else ""
+    script_generated = _stage01_generated(data, project_dir)
     early = [
         {
             "step": "立项",
             "status": "confirmed" if _bool(data.get("brief_locked")) else "current",
             "current_result": "项目 brief 已锁定。" if _bool(data.get("brief_locked")) else "项目 brief 仍未锁定。",
             "current_blocker": "" if _bool(data.get("brief_locked")) else "先锁定立项 brief，系统才有可信输入。",
-            "next_action": "锁定项目 brief。" if not _bool(data.get("brief_locked")) else "进入剧本阶段。",
+            "next_action": "锁定项目 brief。" if not _bool(data.get("brief_locked")) else "锁 brief 后，自动进入 Stage 01 剧本生成。",
             "risk_hint": "",
         },
         {
             "step": "剧本",
-            "status": "confirmed" if _bool(data.get("script_confirmed")) else ("current" if _bool(data.get("brief_locked")) else "pending"),
-            "current_result": "剧本已确认。" if _bool(data.get("script_confirmed")) else "剧本仍待确认。",
-            "current_blocker": "" if _bool(data.get("script_confirmed")) else "剧本未确认前，不建议推进到后续正式链路。",
-            "next_action": "确认剧本内容。" if not _bool(data.get("script_confirmed")) else "进入分镜阶段。",
+            "status": (
+                "confirmed"
+                if _bool(data.get("script_confirmed"))
+                else ("generated" if script_generated else ("current" if _bool(data.get("brief_locked")) else "pending"))
+            ),
+            "current_result": (
+                "剧本已确认。"
+                if _bool(data.get("script_confirmed"))
+                else (
+                    "Stage 01 剧本已生成，待用户确认。"
+                    if script_generated
+                    else ("Stage 01 自动剧本生成尚未执行。" if _bool(data.get("brief_locked")) else "剧本仍待确认。")
+                )
+            ),
+            "current_blocker": (
+                ""
+                if _bool(data.get("script_confirmed"))
+                else (
+                    "剧本还未确认，不能正式推进到 Stage 02 分镜。"
+                    if script_generated
+                    else ("锁 brief 后还没跑 Stage 01 自动剧本生成。" if _bool(data.get("brief_locked")) else "剧本未确认前，不建议推进到后续正式链路。")
+                )
+            ),
+            "next_action": (
+                "进入分镜阶段。"
+                if _bool(data.get("script_confirmed"))
+                else ("确认剧本内容。" if script_generated else ("运行 Stage 01 自动剧本生成。" if _bool(data.get("brief_locked")) else "先完成立项并锁定 brief。"))
+            ),
             "risk_hint": "",
+            "command": stage01_command if _bool(data.get("brief_locked")) and not _bool(data.get("script_confirmed")) and not script_generated else "",
         },
     ]
     storyboard_ready = _bool(data.get("storyboard_confirmed")) and _bool(data.get("character_bible_confirmed")) and _bool(data.get("keyframe_prompts_confirmed"))
@@ -732,6 +784,15 @@ def _recommended_entry(
     reference_state: dict[str, Any] | None,
     current_step: dict[str, Any],
 ) -> dict[str, Any]:
+    current_step_name = _text(current_step.get("step"))
+    current_step_command = _text(current_step.get("command"))
+    if current_step_name == "剧本" and current_step_command:
+        return {
+            "label": "运行 Stage 01 自动剧本生成",
+            "command": current_step_command,
+            "kind": "command",
+            "description": "Stage 00 锁 brief 后，$video-production-pipeline 的下一步就是自动进入 Stage 01 并调用官方 Stage 01 执行脚本。",
+        }
     stage05 = stage_truth.get("stage05")
     workbench_path = project_dir / "05_images" / "stage05_review_workbench.html"
     if stage05 is not None:

@@ -60,9 +60,10 @@ def resolve_path(base_json: Path, raw: str | None) -> Path | None:
 
 
 def parse_visual_spec(brief: dict) -> tuple[str, str, int]:
-    aspect = brief.get("aspect_ratio") or brief.get("visual_spec", {}).get("aspect_ratio") or "9:16"
-    resolution = brief.get("resolution") or brief.get("visual_spec", {}).get("resolution") or "1080P"
-    fps = brief.get("fps") or brief.get("visual_spec", {}).get("fps") or 24
+    normalized = brief.get("normalized") if isinstance(brief.get("normalized"), dict) else {}
+    aspect = normalized.get("aspect_ratio") or brief.get("aspect_ratio") or brief.get("visual_spec", {}).get("aspect_ratio") or "9:16"
+    resolution = normalized.get("resolution") or brief.get("resolution") or brief.get("visual_spec", {}).get("resolution") or "1080P"
+    fps = normalized.get("fps") or brief.get("fps") or brief.get("visual_spec", {}).get("fps") or 24
     try:
         fps = int(fps)
     except Exception:

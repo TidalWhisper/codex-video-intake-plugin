@@ -80,9 +80,24 @@ routes:
       - 写实电影感
       - 广告高级感
       - 温暖治愈
-    current_workflow_mapping_key: stage05_realistic_cinematic
-    current_workflow_target: txt2img_keyframe_realistic_zimage_photo_bridge
+    current_workflow_mapping_key: stage05_realistic_cinematic_amazing_z_photo_original
+    current_workflow_target: amazing_z_photo_safetensors
     current_model_candidate: Tongyi-MAI/Z-Image
+    prompt_only_target:
+      workflow_mapping_key: stage05_realistic_cinematic_qwen2512_prompt_only
+      workflow_name: txt2img_keyframe_realistic
+      model_id: Qwen/Qwen-Image-2512
+      preferred_workflow_candidate: txt2img_keyframe_realistic
+      preferred_model_candidate: Qwen/Qwen-Image-2512
+      migration_state: official_fallback_for_semantic_alignment
+      preferred_workflow_source_ref: workflows/comfyui/txt2img_keyframe_realistic.workflow_api.json
+      preferred_workflow_format: api_workflow
+      preferred_workflow_custom_node_dependencies: []
+      preferred_workflow_import_blockers: []
+      notes:
+        - When the shot is still prompt-only, prefer the official/native Qwen 2512 route because the current Z-Image photo bridge drifted into behind-the-scenes film-set imagery on the 2026-06-01 semantic review pack.
+        - Keep the community Z-Image bridge as a comparison candidate, not the default prompt-only execution route, until it can pass environment-first realistic scenes without meta-filmmaking contamination.
+        - 2026-06-01 matrix recheck still shows that the Qwen prompt-only route can relapse into film-set contamination on some realistic prompts, so it remains the least-bad runnable fallback rather than a semantically accepted final route.
     reference_guided_target:
       workflow_mapping_key: stage05_realistic_cinematic_qwen_edit_reference
       workflow_name: txt2img_keyframe_shortdrama_qwen_edit_reference
@@ -93,12 +108,17 @@ routes:
         - This follows the same community-backed ReferenceLatent pattern already used for short-drama character consistency.
     adoption_strategy:
       community_preference_policy: prefer_community_optimized_when_available
-      preferred_workflow_candidate: txt2img_keyframe_realistic_zimage_photo_bridge
+      preferred_workflow_candidate: amazing_z_photo_safetensors
       preferred_model_candidate: Tongyi-MAI/Z-Image
       migration_state: repo_transitional
       notes:
-        - The reduced Z-Image photo bridge has local smoke evidence on 2026-05-30 and is now the default local ComfyUI fallback for realistic_cinematic.
-        - The bridge workflow preserves the upstream Z-Image photo model stack while removing rgthree-only UI routing so the Stage 05 executor can patch it as API JSON.
+        - The original local Amazing Z-Photo UI workflow is now wired into Stage 05 through the repo UI-graph conversion path and validated with a full 19-style local render pack on 2026-06-02.
+        - Keep the prompt-only Qwen 2512 override for environment-first realistic shots until the original Z-Photo branch consistently passes semantic acceptance on establishing-shot composition.
+        - The reduced Z-Image photo bridge has local smoke evidence on 2026-05-30, but it failed semantic review on 2026-06-01 for environment-first realistic scenes by drifting into meta filmmaking imagery.
+        - The official/native Qwen 2512 route is therefore promoted as the default prompt-only fallback for realistic_cinematic until a community workflow can beat it on semantic alignment instead of only runtime stability.
+        - The Z-Image bridge stays registered as a comparison candidate and as a route-specific fallback for future re-evaluation.
+        - Local re-run on 2026-06-01 shows the Qwen prompt-only fallback removes the film-set contamination for `S001_start` / `S001_end`, but the frame still needs a wider establishing composition before it can be called accepted.
+        - The broader matrix recheck on 2026-06-01 still reproduced film-set contamination on `realistic_review_pack/S001_start` and `S003_start`, so this route is still semantically unstable and must not be claimed as fully accepted.
     workflow_candidates:
       - workflow_name: txt2img_keyframe_realistic
         source_type: repo_existing
@@ -135,19 +155,18 @@ routes:
         priority: 1
       - workflow_name: amazing_z_photo_safetensors
         source_type: community_workflow
-        source_ref: https://github.com/martin-rizzo/AmazingZImageWorkflow/blob/master/amazing-z-photo_SAFETENSORS.json
+        source_ref: F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-photo_SAFETENSORS.json
         origin: community
         stack_profile: zimage_photo_commercial
         workflow_format: ui_graph
         custom_node_dependencies:
           - rgthree-comfy
-        import_blockers:
-          - Upstream file is a ComfyUI UI graph with 266 nodes, not an API workflow export.
-          - Current Stage 05 executor only patches API workflow JSON by node id and cannot consume rgthree UI logic directly.
-        adoption_state: ready_to_import
+        import_blockers: []
+        adoption_state: current_repo
         evidence_refs:
-          - https://github.com/martin-rizzo/AmazingZImageWorkflow/blob/master/amazing-z-photo_SAFETENSORS.json
-          - https://github.com/aistudynow/Z-Image-Turbo-Lora-Stack-V4
+          - F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-photo_SAFETENSORS.json
+          - E:/Codex-Plugin/codex-video-intake-plugin/.tmp-style-compare-20260602-photo-allstyles/manifest.json
+          - E:/Codex-Plugin/codex-video-intake-plugin/.tmp-style-compare-20260602-photo-allstyles/contact_sheet_allstyles.png
         priority: 1
       - workflow_name: hidream_i1_comfyui
         source_type: external_template
@@ -271,16 +290,32 @@ routes:
       - 日系动画风（日本动漫感）
       - 温暖治愈
     current_workflow_mapping_key: stage05_anime_jp
-    current_workflow_target: txt2img_keyframe_anime
-    current_model_candidate: circlestone-labs/Anima
+    current_workflow_target: amazing_z_image_a_safetensors
+    current_model_candidate: Tongyi-MAI/Z-Image
     adoption_strategy:
       community_preference_policy: prefer_community_optimized_when_available
-      preferred_workflow_candidate: anima_comparison_workflow
-      preferred_model_candidate: circlestone-labs/Anima
-      migration_state: needs_api_conversion
+      preferred_workflow_candidate: amazing_z_image_a_safetensors
+      preferred_model_candidate: Tongyi-MAI/Z-Image
+      migration_state: repo_transitional
       notes:
-        - The repo generic anime workflow is only a compatibility bridge. The first true replacement should be an Anima-native or Z-Anime-native graph instead of a reused generic stack.
+        - The original local Amazing Z-Image-A UI workflow is now the current JP-anime route in Stage 05 and was validated with a full 19-style local render pack on 2026-06-02.
+        - Keep the older generic anime bridge only as a fallback comparison route; the mainline route now relies on the proven local UI-graph style switch instead of pretending the generic anime API graph is still the best current answer.
     workflow_candidates:
+      - workflow_name: amazing_z_image_a_safetensors
+        source_type: community_workflow
+        source_ref: F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-image-a_SAFETENSORS.json
+        origin: community
+        stack_profile: zimage_image_a_style_switch_ui
+        workflow_format: ui_graph
+        custom_node_dependencies:
+          - rgthree-comfy
+        import_blockers: []
+        adoption_state: current_repo
+        evidence_refs:
+          - F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-image-a_SAFETENSORS.json
+          - E:/Codex-Plugin/codex-video-intake-plugin/.tmp-style-compare-20260602-image-a-allstyles/manifest.json
+          - E:/Codex-Plugin/codex-video-intake-plugin/.tmp-style-compare-20260602-image-a-allstyles/contact_sheet_allstyles.png
+        priority: 1
       - workflow_name: txt2img_keyframe_anime
         source_type: repo_existing
         source_ref: workflows/comfyui/txt2img_keyframe_anime.workflow_api.json
@@ -289,7 +324,7 @@ routes:
         adoption_state: current_repo
         evidence_refs:
           - workflows/comfyui/txt2img_keyframe_anime.workflow_api.json
-        priority: 1
+        priority: 2
       - workflow_name: anima_comparison_workflow
         source_type: external_template
         source_ref: https://huggingface.co/circlestone-labs/Anima/blob/main/anima_comparison.json
@@ -298,7 +333,7 @@ routes:
         adoption_state: needs_api_conversion
         evidence_refs:
           - https://huggingface.co/circlestone-labs/Anima/blob/main/anima_comparison.json
-        priority: 1
+        priority: 2
       - workflow_name: z_anime_workflow_v1
         source_type: external_template
         source_ref: https://huggingface.co/SeeSee21/Z-Anime/blob/main/workflows/Z-Anime-Workflow-v1.json
@@ -307,7 +342,7 @@ routes:
         adoption_state: ready_to_import
         evidence_refs:
           - https://huggingface.co/SeeSee21/Z-Anime/blob/main/workflows/Z-Anime-Workflow-v1.json
-        priority: 1
+        priority: 2
       - workflow_name: neta_lumina_official
         source_type: external_template
         source_ref: https://huggingface.co/neta-art/Neta-Lumina/blob/main/lumina_workflow.json
@@ -318,15 +353,20 @@ routes:
           - https://huggingface.co/neta-art/Neta-Lumina/blob/main/lumina_workflow.json
         priority: 2
     model_candidates:
+      - model_id: Tongyi-MAI/Z-Image
+        source: huggingface
+        suitability: adapted-fit
+        priority: 1
+        notes: Current local Stage 05 route because the original Amazing Z-Image-A workflow already exposes a verified anime style branch and full multi-style evidence.
       - model_id: circlestone-labs/Anima
         source: huggingface
         suitability: native-fit
-        priority: 1
-        notes: Anime-first image model and preferred candidate for dedicated JP anime route.
+        priority: 2
+        notes: Anime-first image model and long-term candidate, but not the current validated local UI workflow route.
       - model_id: xuedi7/Z-Anime
         source: huggingface
         suitability: native-fit
-        priority: 1
+        priority: 2
         notes: Complete anime fine-tune candidate and likely easiest migration from current route.
       - model_id: neta-art/Neta-Lumina
         source: huggingface
@@ -417,15 +457,58 @@ routes:
 
   western_cartoon:
     display_name: Western Cartoon
-    status: backlog
+    status: candidate
     style_family: anime
     maturity: phase2_priority
     suitable_stage00_styles:
       - 美式动画/卡通风（欧美动画感）
     current_workflow_mapping_key: stage05_western_cartoon
-    current_workflow_target: txt2img_keyframe_anime
-    workflow_candidates: []
-    model_candidates: []
+    current_workflow_target: amazing_z_comics_safetensors
+    current_model_candidate: Tongyi-MAI/Z-Image
+    adoption_strategy:
+      community_preference_policy: prefer_community_optimized_when_available
+      preferred_workflow_candidate: amazing_z_comics_safetensors
+      preferred_model_candidate: Tongyi-MAI/Z-Image
+      migration_state: repo_transitional
+      notes:
+        - The original local Amazing Z-Comics UI workflow is now the current Western-cartoon route in Stage 05 and was validated with a full 19-style local render pack on 2026-06-02.
+        - Keep the older generic anime API graph only as a fallback comparison path; the mainline route should now exercise the real UI-graph style switch.
+    workflow_candidates:
+      - workflow_name: amazing_z_comics_safetensors
+        source_type: community_workflow
+        source_ref: F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-comics_SAFETENSORS.json
+        origin: community
+        stack_profile: zimage_comics_style_switch_ui
+        workflow_format: ui_graph
+        custom_node_dependencies:
+          - rgthree-comfy
+        import_blockers: []
+        adoption_state: current_repo
+        evidence_refs:
+          - F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-comics_SAFETENSORS.json
+          - E:/Codex-Plugin/codex-video-intake-plugin/.tmp-style-compare-20260602-comics-allstyles/manifest.json
+          - E:/Codex-Plugin/codex-video-intake-plugin/.tmp-style-compare-20260602-comics-allstyles/contact_sheet_allstyles.png
+        priority: 1
+      - workflow_name: txt2img_keyframe_anime
+        source_type: repo_existing
+        source_ref: workflows/comfyui/txt2img_keyframe_anime.workflow_api.json
+        origin: repo_transitional
+        stack_profile: zimage_compat_anime
+        adoption_state: current_repo
+        evidence_refs:
+          - workflows/comfyui/txt2img_keyframe_anime.workflow_api.json
+        priority: 2
+    model_candidates:
+      - model_id: Tongyi-MAI/Z-Image
+        source: huggingface
+        suitability: adapted-fit
+        priority: 1
+        notes: Current local Stage 05 route because the original Amazing Z-Comics workflow already exposes a verified Western-comics style branch and full multi-style evidence.
+      - model_id: circlestone-labs/Anima
+        source: huggingface
+        suitability: adapted-fit
+        priority: 2
+        notes: Fallback comparison candidate only, not the current validated local Western-cartoon workflow.
     smoke_focus:
       - western cartoon facial proportions
       - colorful simplified background
@@ -450,6 +533,12 @@ routes:
         negative_anchor: extra hands, extra fingers, duplicated arm, broken wrist, detached umbrella handle, floating umbrella, impossible grip, tangled sleeve anatomy, multiple overlapping hand silhouettes, malformed elbow, fractured shoulder line, second umbrella, duplicate umbrella canopy, extra parasol in background, mirrored accessory duplication
         notes:
           - Use this preset for the current guofeng smoke route until a stronger structure-controlled workflow exists.
+      scenic_single_subject_umbrella:
+        display_name: Scenic Single Subject Umbrella
+        positive_anchor: You are composing a Chinese guofeng ink-wash scenic illustration, not a beauty close-up portrait. Keep one elegant young woman with one oil-paper umbrella only, exactly two arms and two hands, believable umbrella-handle contact, and a readable full upper body or full figure silhouette. Favor medium scenic framing, visible rain atmosphere, riverbank or pavilion depth, and scene storytelling where the environment occupies meaningful space around the protagonist. Keep the umbrella canopy fully readable and avoid face-dominant glamour composition.
+        negative_anchor: beauty close-up portrait, bust-only composition, oversized face, centered glamour pose, selfie framing, cropped umbrella canopy, modern beauty editorial, extra hands, extra fingers, duplicated arm, floating umbrella handle, second umbrella, duplicate umbrella canopy, mirrored accessory duplication
+        notes:
+          - Use this preset for misty-rain or environment-first umbrella shots where the current route tends to collapse into portrait art.
     adoption_strategy:
       community_preference_policy: prefer_community_optimized_when_available
       preferred_workflow_candidate: txt2img_keyframe_guofeng_ink
@@ -459,6 +548,7 @@ routes:
         - The repo-specific guofeng workflow stays primary for now because the downloaded external workflow source currently resolves to an unrelated Liuyifei LoRA graph and should not be imported as-is.
         - Keep searching for a real dedicated guofeng workflow artifact while preserving the explicit guofeng model stack in the repo route.
         - Local Stage 05 smoke completed successfully on 2026-05-30 under `video_projects/real_smoke_20260530_stage05_guofeng_ink`.
+        - The 2026-06-01 scenic review still shows this route drifting back into portrait-first composition; the scenic umbrella preset helps, but it is not yet a true medium scenic shot route.
     workflow_candidates:
       - workflow_name: txt2img_keyframe_guofeng_ink
         source_type: repo_existing
@@ -667,8 +757,8 @@ routes:
     style_presets:
       heroic_splash_art:
         display_name: Heroic Splash Art
-        positive_anchor: You are a game visual development artist creating a premium character-action illustration plate. The image should emphasize heroic silhouette clarity, armor and costume readability, layered atmospheric depth, dynamic but believable motion, strong value separation, and polished premium rendering. Deliver clean artwork only for downstream editing, with no integrated title treatment, no wordmark, no logo badge, no UI frame, no caption band, and no text carved into the environment or foreground props.
-        negative_anchor: casual street photo, weak pose, low-stakes documentary realism, flat background, tiny subject scale, washed-out palette, generic stock-photo framing, visible title text, Chinese characters, logo lockup, subtitle bar, UI overlay, watermark typography, poster headline, giant letters, footer plaque, fake franchise logo, engraved scene text
+        positive_anchor: You are a game visual development artist creating a premium character-action illustration plate. The image should emphasize heroic silhouette clarity, armor and costume readability, layered atmospheric depth, dynamic but believable motion, strong value separation, and polished premium rendering. Deliver clean artwork only for downstream editing, with no integrated title treatment, no wordmark, no logo badge, no UI frame, no caption band, no top-header typography, and no text carved into the environment or foreground props. Keep the upper sky and top edge visually clean for later editorial use.
+        negative_anchor: casual street photo, weak pose, low-stakes documentary realism, flat background, tiny subject scale, washed-out palette, generic stock-photo framing, visible title text, Chinese characters, pseudo Chinese characters, top title header, sky title text, logo lockup, subtitle bar, UI overlay, watermark typography, poster headline, giant letters, footer plaque, fake franchise logo, engraved scene text
         notes:
           - Intended for character-centric or battle-ready game illustrations that stay usable as clean Stage 05 image plates instead of finished poster layouts.
       chromatic_battle_poster:
@@ -686,6 +776,7 @@ routes:
         - game_cg now keeps the verified Z-Image image-b substrate but lands on its own clean-plate bridge file so route-specific prompt anchors can diverge from stylized_concept without sharing the same workflow artifact forever.
         - Local smoke evidence was added on 2026-05-30 under video_projects/real_smoke_20260530_stage05_gamecg_bridge.
         - This is still a bridge-stage solution and should eventually be replaced by stronger community game-CG-specific workflows when evidence is available.
+        - 2026-06-01 A/B shows the current Z-Image clean plate suppresses text poorly, while the local Qwen illustration fallback removes the text but loses the horse / mount semantics, so this route is still not semantically accepted.
     workflow_candidates:
       - workflow_name: txt2img_keyframe_game_cg_clean_plate
         source_type: repo_bridge
@@ -701,6 +792,19 @@ routes:
           - scripts/providers/build_stage05_zimage_image_b_bridge.py
           - video_projects/real_smoke_20260530_stage05_gamecg_bridge/05_images/keyframe_image_manifest.json
         priority: 1
+      - workflow_name: txt2img_keyframe_stylized_concept
+        source_type: repo_existing
+        source_ref: workflows/comfyui/txt2img_keyframe_stylized_concept.workflow_api.json
+        origin: repo_transitional
+        stack_profile: hidream_dev_sd3
+        adoption_state: research_gap
+        import_blockers:
+          - Local ComfyUI host on this machine does not currently expose the HiDream CLIP / VAE pair required by `txt2img_keyframe_stylized_concept`.
+        evidence_refs:
+          - workflows/comfyui/txt2img_keyframe_stylized_concept.workflow_api.json
+          - https://huggingface.co/Comfy-Org/HiDream-I1_ComfyUI
+          - video_projects/community_stage05_20260601_gamecgfix_stylized_review_pack/05_images/keyframes/S001_start.png
+        priority: 2
       - workflow_name: txt2img_keyframe_stylized_zimage_image_b_bridge
         source_type: repo_bridge
         source_ref: workflows/comfyui/txt2img_keyframe_stylized_zimage_image_b_bridge.workflow_api.json

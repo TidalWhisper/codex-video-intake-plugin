@@ -57,6 +57,50 @@ def test_scene_matrix_smoke_prepare_only_creates_multi_pack_manifests(tmp_path: 
     assert prepared["stylized_review_pack"]["stage05_route_key"] == "game_cg"
     assert prepared["realistic_review_pack"]["quality_review"]["risky_image_count"] == 4
     assert prepared["guofeng_review_pack"]["quality_review"]["risky_image_count"] == 6
+    assert prepared["realistic_review_pack"]["semantic_review_template"][0]["expected_subject_count"] == 1
+    assert "不能多手多脚" in prepared["realistic_review_pack"]["semantic_review_template"][0]["must_match"][-1]
+
+
+def test_scene_matrix_smoke_prepare_only_supports_realistic_expanded_packs(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(scene_matrix_smoke, "ROOT", tmp_path)
+    monkeypatch.setattr(scene_matrix_smoke, "TEMPLATES", ROOT / "templates")
+    monkeypatch.setattr(scene_matrix_smoke, "IMAGES", ROOT / "skills" / "video-keyframe-images" / "scripts")
+
+    prefix = "stage05_realistic_expanded_test"
+    summary_path = tmp_path / "video_projects" / f"{prefix}_summary.json"
+    assert scene_matrix_smoke.main([
+        "--scene-pack",
+        "realistic_establishing_expanded_pack",
+        "--scene-pack",
+        "realistic_healing_expanded_pack",
+        "--scene-pack",
+        "realistic_editorial_expanded_pack",
+        "--project-prefix",
+        prefix,
+        "--summary-out",
+        str(summary_path),
+    ]) == 0
+
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    prepared = {item["pack_key"]: item for item in summary["prepared_packs"]}
+
+    assert len(prepared) == 3
+    assert prepared["realistic_establishing_expanded_pack"]["stage05_route_key"] == "realistic_cinematic"
+    assert prepared["realistic_healing_expanded_pack"]["stage05_route_key"] == "realistic_cinematic"
+    assert prepared["realistic_editorial_expanded_pack"]["stage05_route_key"] == "realistic_cinematic"
+    assert prepared["realistic_establishing_expanded_pack"]["normalized_style"] == "写实电影感"
+    assert prepared["realistic_healing_expanded_pack"]["normalized_style"] == "温暖治愈"
+    assert prepared["realistic_editorial_expanded_pack"]["normalized_style"] == "广告高级感"
+    assert all(
+        item["expected_subject_count"] == 1
+        for pack in prepared.values()
+        for item in pack["semantic_review_template"]
+    )
+    assert all(
+        "镜头与构图大方向一致" in item["must_match"][1]
+        for pack in prepared.values()
+        for item in pack["semantic_review_template"]
+    )
 
 
 def test_scene_matrix_smoke_summary_refreshes_manifest_after_run(tmp_path: Path, monkeypatch) -> None:
@@ -106,3 +150,4 @@ def test_scene_matrix_smoke_summary_refreshes_manifest_after_run(tmp_path: Path,
     assert prepared["allowed_next_stage"] == "manual_review_required"
     assert prepared["jobs"][0]["status"] == "generated"
     assert prepared["jobs"][0]["provider"] == "comfyui_txt2img"
+    assert prepared["semantic_review_template"][0]["start_image_id"] == "IMG_S001_START"

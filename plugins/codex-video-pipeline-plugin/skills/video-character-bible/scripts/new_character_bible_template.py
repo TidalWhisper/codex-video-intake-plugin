@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
-"""Create a Stage 03 character-bible draft from a locked brief, script, and storyboard."""
+"""Create a Stage 03 character-bible draft from Codex structured output."""
 from __future__ import annotations
 
 import json
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
+SCRIPT_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(SCRIPT_DIR))
 sys.path.insert(0, str(ROOT / "scripts"))
-from pipeline_core.pipeline_blueprints import build_stage03_character_bible  # noqa: E402
 from pipeline_core.project_state import load_json_file, update_project_manifest_for_stage  # noqa: E402
-from pipeline_core.reference_image_readiness import (  # noqa: E402
-    build_reference_image_plan,
-    build_reference_image_status,
-    build_stage05_execution_readiness,
-)
 from pipeline_core.requirement_compiler import compile_requirements, requested_output_allows_stage  # noqa: E402
+from pipeline_core.codex_flow import structured_validation_errors  # noqa: E402
+import validate_character_bible as validate_character_bible_module  # noqa: E402
+from build_stage03_prompt_packet import build_packet, ensure_locked_brief  # noqa: E402
+from build_stage03_repair_packet import build_repair_packet  # noqa: E402
+from write_stage03_outputs import write_stage03_outputs  # noqa: E402
 
 
 def load_json(path: Path) -> dict:
@@ -32,103 +32,32 @@ def write_text(path: Path, content: str) -> None:
     path.write_text(content.rstrip() + "\n", encoding="utf-8")
 
 
-def write_reference_image_start_here(
-    stage03_dir: Path,
-    *,
-    reference_plan: dict,
-    reference_status: dict,
-    stage05_execution_readiness: dict,
-) -> None:
-    reference_dir = stage03_dir / "reference_images"
-    reference_dir.mkdir(parents=True, exist_ok=True)
-    missing_paths = reference_status.get("missing_paths") if isinstance(reference_status.get("missing_paths"), list) else []
-    lines = [
-        "# 角色参考图补齐入口",
-        "",
-        "这一步是给普通创作者准备的默认入口，不需要先理解 manifest。",
-        "",
-        f"- 角色参考图是否已齐：{'是' if reference_status.get('all_present') else '否'}",
-        f"- 是否可安全自动进入 Stage 05：{'是' if stage05_execution_readiness.get('safe_to_auto_generate') else '否'}",
-        f"- 参考图目录：`{str(reference_dir).replace(chr(92), '/')}`",
-        "",
-        "## 现在该做什么",
-        "",
-    ]
-    if missing_paths:
-        lines.extend([
-            "- 请先为主角补一张清晰、正面的角色参考图。",
-            "- 建议优先保证脸型、发型、服装轮廓和主要随身物一眼可认。",
-            "- 把图片放到下面这些目标路径里：",
-            *[f"  - `{path_text}`" for path_text in missing_paths],
-            "",
-            "## 放好以后",
-            "",
-            "- 继续进入 Stage 04 / Stage 05 时，系统会自动重新检查这些参考图。",
-            "- 如果后面 Stage 05 已经先出过一版关键帧，也可以用已有关键帧回填角色参考图。",
-        ])
-    else:
-        lines.extend([
-            "- 当前角色参考图已经就绪。",
-            "- 可以继续进入 Stage 04，并在确认后安全自动进入 Stage 05。",
-        ])
-    write_text(stage03_dir / "reference_image_start_here.md", "\n".join(lines))
-
-
-def write_stage03_companions(
-    out_path: Path,
-    template: dict,
-    *,
-    reference_plan: dict,
-    reference_status: dict,
-    stage05_execution_readiness: dict,
-) -> None:
-    characters = template.get("characters") if isinstance(template.get("characters"), list) else []
-    bible_lines = ["# Stage 03 Character Bible", ""]
-    for character in characters:
-        if not isinstance(character, dict):
-            continue
-        appearance = character.get("appearance") if isinstance(character.get("appearance"), dict) else {}
-        bible_lines.extend([
-            f"## {character.get('name')} ({character.get('character_id')})",
-            f"- 角色：{character.get('role')}",
-            f"- 年龄：{character.get('age')}",
-            f"- 性别呈现：{character.get('gender_presentation')}",
-            f"- 外貌：脸 {appearance.get('face')} / 头发 {appearance.get('hair')} / 服装 {appearance.get('clothing')}",
-            f"- 个性：{character.get('personality')}",
-            f"- 情绪弧线：{' / '.join(character.get('emotional_arc') or [])}",
-            f"- 声音：{(character.get('voice_profile') or {}).get('suggested_voice')}",
-            "",
-        ])
-    missing_paths = reference_status.get("missing_paths") if isinstance(reference_status.get("missing_paths"), list) else []
-    review_lines = [
-        "# Stage 03 Character Review",
-        "",
-        "- 是否匹配 brief/script/storyboard：是",
-        f"- 角色参考图计划：{'已生成' if reference_plan.get('reference_images') else '未生成'}",
-        f"- 角色参考图就绪：{'是' if reference_status.get('all_present') else '否'}",
-        "- 是否准备好进入 Stage 04：是",
-        f"- 是否准备好安全自动进入 Stage 05：{'是' if stage05_execution_readiness.get('safe_to_auto_generate') else '否'}",
-        (
-            "- 下一步：先补齐这些角色参考图，再进入安全自动 Stage 05："
-            + "、".join(str(path_text) for path_text in missing_paths)
-        ) if missing_paths else "- 下一步：待用户确认后进入 Stage 04。",
-    ]
-    write_text(out_path.parent / "character_bible.md", "\n".join(bible_lines))
-    write_text(out_path.parent / "character_review.md", "\n".join(review_lines))
-    (out_path.parent / "reference_image_plan.json").write_text(json.dumps(reference_plan, ensure_ascii=False, indent=2), encoding="utf-8")
-    write_reference_image_start_here(
-        out_path.parent,
-        reference_plan=reference_plan,
-        reference_status=reference_status,
-        stage05_execution_readiness=stage05_execution_readiness,
-    )
+def write_json(path: Path, data: object) -> None:
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def main(argv: list[str]) -> int:
     allow_beyond_scope = "--allow-beyond-requested-scope" in argv
-    argv = [arg for arg in argv if arg != "--allow-beyond-requested-scope"]
+    llm_output_override: Path | None = None
+    filtered: list[str] = []
+    idx = 0
+    while idx < len(argv):
+        arg = argv[idx]
+        if arg == "--allow-beyond-requested-scope":
+            idx += 1
+            continue
+        if arg == "--llm-output":
+            if idx + 1 >= len(argv):
+                print("ERROR: --llm-output requires a path", file=sys.stderr)
+                return 2
+            llm_output_override = Path(argv[idx + 1])
+            idx += 2
+            continue
+        filtered.append(arg)
+        idx += 1
+    argv = filtered
     if len(argv) != 5:
-        print("Usage: python new_character_bible_template.py <locked_brief.json> <script.json> <storyboard.json> <character_bible.json>", file=sys.stderr)
+        print("Usage: python new_character_bible_template.py [--llm-output <stage03_llm_output.json>] <locked_brief.json> <script.json> <storyboard.json> <character_bible.json>", file=sys.stderr)
         return 2
     brief_path = Path(argv[1])
     script_path = Path(argv[2])
@@ -137,9 +66,7 @@ def main(argv: list[str]) -> int:
     brief = load_json(brief_path)
     script = load_json(script_path)
     storyboard = load_json(storyboard_path)
-    if brief.get("status") != "locked" or brief.get("confirmed_by_user") is not True:
-        print("ERROR: brief must be locked and confirmed_by_user=true", file=sys.stderr)
-        return 1
+    ensure_locked_brief(brief)
     compiled = compile_requirements(brief)
     if not allow_beyond_scope and not requested_output_allows_stage("STAGE_03", compiled):
         print("ERROR: requested output scope does not allow Stage 03. Re-run with --allow-beyond-requested-scope to override.", file=sys.stderr)
@@ -151,47 +78,58 @@ def main(argv: list[str]) -> int:
         print("ERROR: storyboard.stage must be STAGE_02_STORYBOARD_GENERATION", file=sys.stderr)
         return 1
 
-    template = build_stage03_character_bible(brief, script, storyboard)
-    template["project_id"] = brief.get("project_id") or script.get("project_id") or storyboard.get("project_id") or brief_path.parents[1].name
-    template["source_brief"] = str(brief_path).replace("\\", "/")
-    template["source_script"] = str(script_path).replace("\\", "/")
-    template["source_storyboard"] = str(storyboard_path).replace("\\", "/")
-    template["created_at"] = datetime.now(timezone.utc).isoformat()
-
-    characters = template.get("characters") if isinstance(template.get("characters"), list) else []
-    reference_plan = build_reference_image_plan(str(template.get("project_id") or ""), characters)
-    reference_status = build_reference_image_status(out_path.parent, reference_plan)
-    stage05_execution_readiness = build_stage05_execution_readiness(
-        continuity_mode=str((template.get("compiled_requirements") or {}).get("continuity_mode") or ""),
-        reference_image_required=bool(template.get("reference_image_required")),
-        reference_image_status=reference_status,
-    )
-    template["reference_image_plan"] = reference_plan
-    template["reference_image_status"] = reference_status
-    template["stage05_execution_readiness"] = stage05_execution_readiness
-    self_check = template.get("self_check") if isinstance(template.get("self_check"), dict) else {}
-    self_check["reference_images_planned"] = bool(reference_plan.get("reference_images"))
-    self_check["reference_images_ready"] = bool(reference_status.get("all_present"))
-    self_check["safe_for_character_locked_image_generation"] = bool(stage05_execution_readiness.get("safe_to_auto_generate"))
-    notes = self_check.get("notes") if isinstance(self_check.get("notes"), list) else []
-    missing_paths = reference_status.get("missing_paths") if isinstance(reference_status.get("missing_paths"), list) else []
-    if missing_paths:
-        notes = [
-            *notes,
-            "Reference images still missing for character-locked continuity: " + ", ".join(str(path_text) for path_text in missing_paths),
-        ]
-    self_check["notes"] = notes
-    template["self_check"] = self_check
-
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(template, ensure_ascii=False, indent=2), encoding="utf-8")
-    write_stage03_companions(
-        out_path,
-        template,
-        reference_plan=reference_plan,
-        reference_status=reference_status,
-        stage05_execution_readiness=stage05_execution_readiness,
-    )
+    prompt_packet_path = out_path.parent / "stage03_prompt_packet.json"
+    write_json(prompt_packet_path, build_packet(brief, script, storyboard, brief_path, script_path, storyboard_path))
+
+    llm_output_path = llm_output_override or (out_path.parent / "stage03_llm_output.json")
+    if not llm_output_path.exists():
+        print(
+            f"ERROR: missing Stage 03 Codex structured output: {llm_output_path}. "
+            "Generate stage03_llm_output.json from stage03_prompt_packet.json first.",
+            file=sys.stderr,
+        )
+        return 1
+
+    llm_output = load_json(llm_output_path)
+    try:
+        character_payload = write_stage03_outputs(
+            brief,
+            script,
+            storyboard,
+            llm_output,
+            brief_path,
+            script_path,
+            storyboard_path,
+            llm_output_path,
+            out_path,
+        )
+    except SystemExit as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+
+    ok, errors, warnings = validate_character_bible_module.validate(character_payload, mode="final")
+    if not ok:
+        validation_errors = structured_validation_errors(errors)
+        validation_errors_path = out_path.parent / "stage03_validation_errors.json"
+        write_json(validation_errors_path, {"errors": validation_errors})
+        repair_packet = build_repair_packet(
+            brief,
+            script,
+            storyboard,
+            character_payload,
+            brief_path,
+            script_path,
+            storyboard_path,
+            out_path,
+            validation_errors,
+        )
+        repair_packet_path = out_path.parent / "stage03_repair_packet.json"
+        write_json(repair_packet_path, repair_packet)
+        print(f"CHARACTER BIBLE VALIDATION FAILED: {out_path}", file=sys.stderr)
+        print(f"STAGE03_REPAIR_PACKET_CREATED: {repair_packet_path}", file=sys.stderr)
+        return 1
+
     update_project_manifest_for_stage(
         out_path,
         current_stage="STAGE_03_CHARACTER_BIBLE_GENERATION",
@@ -199,7 +137,12 @@ def main(argv: list[str]) -> int:
         flags={"character_bible_confirmed": False},
         status="active",
     )
-    print(f"CHARACTER BIBLE TEMPLATE CREATED: {out_path}")
+    if warnings:
+        for warning in warnings:
+            print(f"WARNING: {warning}")
+    print(f"STAGE03_CHARACTER_BIBLE_CREATED: {out_path}")
+    print(f"STAGE03_PROMPT_PACKET_CREATED: {prompt_packet_path}")
+    print(f"STAGE03_LLM_OUTPUT_USED: {llm_output_path}")
     return 0
 
 

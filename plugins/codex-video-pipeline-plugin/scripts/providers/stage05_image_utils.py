@@ -40,6 +40,9 @@ DEFAULT_STAGE05_NEGATIVE_HINTS = (
 GAME_CG_NEGATIVE_HINTS = (
     "wordmark",
     "headline text",
+    "top title header",
+    "sky title text",
+    "pseudo chinese characters",
     "title card",
     "title plaque",
     "cover layout",
@@ -162,10 +165,32 @@ def _prop_guardrail_sections(job: dict[str, Any]) -> list[str]:
 
 def _route_guardrail_sections(job: dict[str, Any]) -> list[str]:
     route_key = str(job.get("stage05_route_key") or "").strip()
+    camera_text = " ".join(
+        str(job.get(key) or "")
+        for key in ["camera_prompt", "prompt", "style_prompt", "consistency_prompt"]
+    ).lower()
+    override_reason = str(job.get("reference_guidance_override_reason") or "").strip()
+    if route_key == "realistic_cinematic" and (
+        override_reason.startswith("prompt_only_")
+        or "establishing shot" in camera_text
+        or ("wide shot" in camera_text and any(hint in camera_text for hint in ("shoreline", "beach", "sea", "street", "skyline")))
+    ):
+        return [
+            "Composition: true environmental establishing shot with coastline, sky, or surrounding location clearly visible; keep the subject smaller in frame instead of turning it into a portrait close-up",
+            "Scene intent: this is part of the story world itself, not a behind-the-scenes production still, not a fashion editorial set, and not a staged studio shoot",
+            "Avoid: film set, camera rig, monitor, lighting stand, crew equipment, indoor soundstage, interview chair setup, glamour beauty pose, face-dominant crop",
+        ]
+    if route_key == "guofeng_ink" and ("medium scenic shot" in camera_text or "wide scenic shot" in camera_text or "scenic shot" in camera_text):
+        return [
+            "Composition: keep this as a medium scenic guofeng frame with visible rain atmosphere and readable surrounding environment, not a face-dominant beauty portrait",
+            "Framing: show full umbrella canopy and enough robe silhouette or body posture to read the scene, with pavilion, riverbank, trees, mist, or other poetic depth cues visible around the subject",
+            "Avoid: centered beauty close-up, glamour poster portrait, oversized face crop, bust-only framing, cropped umbrella canopy",
+        ]
     if route_key == "game_cg":
         return [
             "Output: deliver clean full-bleed artwork only for downstream video use, not a finished poster, cover, title card, or marketing layout",
             "Composition: no footer title plaque, no centered wordmark, no logo badge, no caption band, no UI frame, no floating emblem, and no fake engraved scene text",
+            "Frame hygiene: keep the upper sky and top border free of any title header, fake runes, pseudo Chinese characters, or decorative lettering of any kind",
             "Instruction: if the request implies splash art or key art, interpret it as artwork-only image content without any rendered lettering or branding elements",
         ]
     return []

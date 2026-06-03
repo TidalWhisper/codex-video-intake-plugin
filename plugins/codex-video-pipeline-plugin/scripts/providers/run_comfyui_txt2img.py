@@ -15,6 +15,7 @@ if str(THIS_DIR.parent) not in sys.path:
     sys.path.insert(0, str(THIS_DIR.parent))
 
 from comfyui_client import ComfyUIClient, ComfyUIError
+import comfyui_ui_workflow
 from comfyui_file_staging import stage_input_file
 from openai_image_client import image_size_for_aspect_ratio
 from pipeline_core.requirement_compiler import compiled_requirements_from_context, requested_output_scope_guard_message
@@ -77,6 +78,7 @@ def request_record(
         "comfyui_style_preset_key": job.get("comfyui_style_preset_key"),
         "comfyui_style_preset_label": job.get("comfyui_style_preset_label"),
         "comfyui_control_mode": job.get("comfyui_control_mode"),
+        "reference_guidance_override_reason": job.get("reference_guidance_override_reason"),
         "comfyui_optimization_profile": optimization_profile,
         "comfyui_optimization_profile_label": optimization_profile_label,
         "prompt": job["prompt"],
@@ -200,13 +202,27 @@ def workflow_replacements_for_job(
     seed: int,
     optimization: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    replacements = {
+    candidate_replacements = {
         "positive_prompt": build_provider_prompt(job),
         "negative_prompt": effective_negative_prompt(job),
         "seed": seed,
         "width": width,
         "height": height,
+        "short_side": min(width, height),
+        "long_side": max(width, height),
+        "output_prefix": f"Stage05/{job.get('image_id') or 'image'}",
     }
+    replacements = {
+        field_name: value
+        for field_name, value in candidate_replacements.items()
+        if field_name in nodes
+    }
+    style_selector = str(job.get("comfyui_style_selector") or job.get("comfyui_upstream_style_preset") or "").strip()
+    if style_selector:
+        if "style_selector" in nodes:
+            replacements["style_selector"] = style_selector
+        if "upstream_style_preset" in nodes:
+            replacements["upstream_style_preset"] = style_selector
     style_anchor = str(job.get("comfyui_style_positive_anchor") or "").strip()
     if style_anchor and "style_anchor" in nodes:
         replacements["style_anchor"] = style_anchor
@@ -416,6 +432,11 @@ def main(argv: list[str] | None = None) -> int:
     selected_workflow_mapping_key = workflow_mapping_keys_used[0] if len(workflow_mapping_keys_used) == 1 else None
     selected_optimization_profile = optimization_profiles_used[0] if len(optimization_profiles_used) == 1 else None
     selected_optimization_label = optimization_labels_used[0] if len(optimization_labels_used) == 1 else None
+    selected_model_id = request_records[0]["comfyui_model_id"] if request_records and len({record.get("comfyui_model_id") for record in request_records}) == 1 else data.get("comfyui_model_id")
+    selected_preferred_workflow_candidate = request_records[0]["preferred_comfyui_workflow_candidate"] if request_records and len({record.get("preferred_comfyui_workflow_candidate") for record in request_records}) == 1 else data.get("preferred_comfyui_workflow_candidate")
+    selected_preferred_model_candidate = request_records[0]["preferred_comfyui_model_candidate"] if request_records and len({record.get("preferred_comfyui_model_candidate") for record in request_records}) == 1 else data.get("preferred_comfyui_model_candidate")
+    selected_workflow_source_ref = request_records[0]["preferred_comfyui_workflow_source_ref"] if request_records and len({record.get("preferred_comfyui_workflow_source_ref") for record in request_records}) == 1 else data.get("preferred_comfyui_workflow_source_ref")
+    selected_control_mode = request_records[0]["comfyui_control_mode"] if request_records and len({record.get("comfyui_control_mode") for record in request_records}) == 1 else data.get("comfyui_control_mode")
 
     requests_path = manifest_path.parent / "comfyui_image_requests.json"
     request_manifest = {
@@ -432,17 +453,17 @@ def main(argv: list[str] | None = None) -> int:
         "optimization_profile_source": str(optimization_config_path).replace("\\", "/"),
         "workflow_path": workflow_paths_used[0] if len(workflow_paths_used) == 1 else None,
         "workflow_paths": workflow_paths_used,
-        "comfyui_model_id": data.get("comfyui_model_id"),
-        "preferred_comfyui_workflow_candidate": data.get("preferred_comfyui_workflow_candidate"),
-        "preferred_comfyui_model_candidate": data.get("preferred_comfyui_model_candidate"),
+        "comfyui_model_id": selected_model_id,
+        "preferred_comfyui_workflow_candidate": selected_preferred_workflow_candidate,
+        "preferred_comfyui_model_candidate": selected_preferred_model_candidate,
         "route_migration_state": data.get("route_migration_state"),
-        "preferred_comfyui_workflow_source_ref": data.get("preferred_comfyui_workflow_source_ref"),
+        "preferred_comfyui_workflow_source_ref": selected_workflow_source_ref,
         "preferred_comfyui_workflow_format": data.get("preferred_comfyui_workflow_format"),
         "preferred_comfyui_workflow_custom_node_dependencies": data.get("preferred_comfyui_workflow_custom_node_dependencies"),
         "preferred_comfyui_workflow_import_blockers": data.get("preferred_comfyui_workflow_import_blockers"),
         "comfyui_style_preset_key": data.get("comfyui_style_preset_key"),
         "comfyui_style_preset_label": data.get("comfyui_style_preset_label"),
-        "comfyui_control_mode": data.get("comfyui_control_mode"),
+        "comfyui_control_mode": selected_control_mode,
         "creator_runtime_feedback": data.get("creator_runtime_status"),
         "generated_at": utc_now(),
         "requests": request_records,
@@ -523,24 +544,41 @@ def main(argv: list[str] | None = None) -> int:
                 input_dir=settings["input_dir"],
                 nodes=mapping_entry["nodes"],
             )
-            workflow = apply_node_inputs(
-                workflow_template,
-                mapping_entry["nodes"],
-                {
-                    **workflow_replacements_for_job(
-                        base_job,
-                        mapping_entry["nodes"],
-                        width=width,
-                        height=height,
-                        seed=seed,
-                        optimization=optimization,
-                    ),
-                    **reference_replacements,
-                },
-            )
+            replacements = {
+                **workflow_replacements_for_job(
+                    base_job,
+                    mapping_entry["nodes"],
+                    width=width,
+                    height=height,
+                    seed=seed,
+                    optimization=optimization,
+                ),
+                **reference_replacements,
+            }
+            workflow_format = comfyui_ui_workflow.resolve_workflow_format(mapping_entry)
+            if workflow_format == "ui_graph":
+                patched_workflow = comfyui_ui_workflow.apply_ui_node_inputs(
+                    workflow_template,
+                    mapping_entry["nodes"],
+                    replacements,
+                )
+                submission_payload = comfyui_ui_workflow.convert_ui_workflow_to_prompt(
+                    patched_workflow,
+                    base_url=settings["base_url"],
+                    node_modules_dir=(Path.cwd() / ".tmp-playwright" / "node_modules"),
+                )
+                workflow = submission_payload["prompt"]
+                extra_data = submission_payload.get("extra_data")
+            else:
+                workflow = apply_node_inputs(
+                    workflow_template,
+                    mapping_entry["nodes"],
+                    replacements,
+                )
+                extra_data = None
             if staged_reference_images:
                 request_item["staged_reference_images"] = staged_reference_images
-            submitted = client.submit_prompt(workflow)
+            submitted = client.submit_prompt(workflow, extra_data=extra_data)
             request_item["prompt_id"] = submitted["prompt_id"]
             history_entry = client.wait_for_prompt(
                 str(submitted["prompt_id"]),
@@ -568,22 +606,38 @@ def main(argv: list[str] | None = None) -> int:
                 repair_job["repair_negative_prompt_additions"] = auto_repair_plan.get("repair_negative_hints") or []
                 repair_seed = seed + 9973
                 try:
-                    repair_workflow = apply_node_inputs(
-                        workflow_template,
-                        mapping_entry["nodes"],
-                        {
-                            **workflow_replacements_for_job(
-                                repair_job,
-                                mapping_entry["nodes"],
-                                width=width,
-                                height=height,
-                                seed=repair_seed,
-                                optimization=optimization,
-                            ),
-                            **reference_replacements,
-                        },
-                    )
-                    repair_submitted = client.submit_prompt(repair_workflow)
+                    repair_replacements = {
+                        **workflow_replacements_for_job(
+                            repair_job,
+                            mapping_entry["nodes"],
+                            width=width,
+                            height=height,
+                            seed=repair_seed,
+                            optimization=optimization,
+                        ),
+                        **reference_replacements,
+                    }
+                    if workflow_format == "ui_graph":
+                        patched_repair_workflow = comfyui_ui_workflow.apply_ui_node_inputs(
+                            workflow_template,
+                            mapping_entry["nodes"],
+                            repair_replacements,
+                        )
+                        repair_submission_payload = comfyui_ui_workflow.convert_ui_workflow_to_prompt(
+                            patched_repair_workflow,
+                            base_url=settings["base_url"],
+                            node_modules_dir=(Path.cwd() / ".tmp-playwright" / "node_modules"),
+                        )
+                        repair_workflow = repair_submission_payload["prompt"]
+                        repair_extra_data = repair_submission_payload.get("extra_data")
+                    else:
+                        repair_workflow = apply_node_inputs(
+                            workflow_template,
+                            mapping_entry["nodes"],
+                            repair_replacements,
+                        )
+                        repair_extra_data = None
+                    repair_submitted = client.submit_prompt(repair_workflow, extra_data=repair_extra_data)
                     repair_history_entry = client.wait_for_prompt(
                         str(repair_submitted["prompt_id"]),
                         poll_interval=args.poll_interval,

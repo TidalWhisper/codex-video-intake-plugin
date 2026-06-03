@@ -254,3 +254,37 @@ def test_sync_project_truth_frontloads_reference_image_recovery_before_stage05(t
     assert "参考图" in overview["current_blocker"]
     assert overview["recommended_entry"]["label"] == "打开角色参考图说明"
     assert overview["recommended_entry"]["path"].endswith("03_characters/reference_image_start_here.md")
+
+
+def test_sync_project_truth_marks_stage01_generated_as_pending_confirmation(tmp_path: Path) -> None:
+    project_dir = tmp_path / "video_projects" / "stage01_generated_pending_confirm"
+    (project_dir / "01_script").mkdir(parents=True, exist_ok=True)
+    manifest_path = project_dir / "project_manifest.json"
+    manifest_path.write_text(json.dumps({
+        "project_id": project_dir.name,
+        "project_title": "黄昏海滩散步",
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "current_stage": "STAGE_01_SCRIPT_GENERATION",
+        "status": "active",
+        "brief_locked": True,
+        "script_confirmed": False,
+        "allowed_next_stage": None,
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    (project_dir / "01_script" / "script.json").write_text(json.dumps({
+        "stage": "STAGE_01_SCRIPT_GENERATION",
+        "project_id": project_dir.name,
+        "title": "海风停在黄昏里",
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    assert project_state.sync_project_manifest_truth(manifest_path) == manifest_path
+
+    synced = json.loads(manifest_path.read_text(encoding="utf-8"))
+    overview = synced["creator_status_overview"]
+    script_step = next(step for step in overview["steps"] if step["step"] == "剧本")
+    assert synced["current_stage"] == "STAGE_01_SCRIPT_GENERATION"
+    assert overview["trusted_stage"] == "STAGE_01_SCRIPT_GENERATION"
+    assert script_step["status"] == "generated"
+    assert "已生成" in script_step["current_result"]
+    assert "待用户确认" in script_step["current_result"]
+    assert "Stage 02" in script_step["current_blocker"]
+    assert script_step["next_action"] == "确认剧本内容。"

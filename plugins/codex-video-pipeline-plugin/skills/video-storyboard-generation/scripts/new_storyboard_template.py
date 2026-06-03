@@ -1,17 +1,22 @@
 #!/usr/bin/env python3
-"""Create a Stage 02 storyboard draft from a locked brief and script."""
+"""Create a Stage 02 storyboard draft from Codex structured output."""
 from __future__ import annotations
 
 import json
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
+SCRIPT_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(SCRIPT_DIR))
 sys.path.insert(0, str(ROOT / "scripts"))
-from pipeline_core.pipeline_blueprints import build_stage02_storyboard  # noqa: E402
 from pipeline_core.project_state import load_json_file, update_project_manifest_for_stage  # noqa: E402
 from pipeline_core.requirement_compiler import compile_requirements, requested_output_allows_stage  # noqa: E402
+from pipeline_core.codex_flow import structured_validation_errors  # noqa: E402
+import validate_storyboard as validate_storyboard_module  # noqa: E402
+from build_stage02_prompt_packet import build_packet, ensure_locked_brief  # noqa: E402
+from build_stage02_repair_packet import build_repair_packet  # noqa: E402
+from write_stage02_outputs import write_stage02_outputs  # noqa: E402
 
 
 def load_json(path: Path) -> dict:
@@ -27,54 +32,39 @@ def write_text(path: Path, content: str) -> None:
     path.write_text(content.rstrip() + "\n", encoding="utf-8")
 
 
-def write_stage02_companions(out_path: Path, template: dict) -> None:
-    shots = template.get("shots") if isinstance(template.get("shots"), list) else []
-    storyboard_lines = ["# Stage 02 Storyboard", ""]
-    for shot in shots:
-        if not isinstance(shot, dict):
-            continue
-        storyboard_lines.extend([
-            f"## {shot.get('shot_id')} {shot.get('start')} - {shot.get('end')}",
-            f"- 场景：{shot.get('scene')}",
-            f"- 地点/天气：{shot.get('location') or shot.get('scene')} / {shot.get('weather') or '按故事气氛执行'}",
-            f"- 镜头：{shot.get('camera')}",
-            f"- 构图：{shot.get('composition')}",
-            f"- 关键道具：{shot.get('key_prop') or '无'}",
-            f"- 动作：{shot.get('action')}",
-            f"- 情绪：{shot.get('emotion')}",
-            f"- 对白：{shot.get('dialogue') or '无'}",
-            f"- 旁白：{shot.get('voiceover') or '无'}",
-            f"- 声音：{shot.get('sound_music') or '无'}",
-            f"- 转场：{shot.get('transition_to_next')}",
-            "",
-        ])
-    review_lines = [
-        "# Stage 02 Storyboard Review",
-        "",
-        "- 是否匹配 locked brief：是",
-        "- 是否匹配 script：是",
-        f"- 镜头数：{template.get('shot_count')}",
-        f"- 目标时长：{template.get('target_duration_sec')} 秒",
-        "- 下一步：待用户确认后进入 Stage 03。",
-    ]
-    write_text(out_path.parent / "storyboard.md", "\n".join(storyboard_lines))
-    write_text(out_path.parent / "storyboard_review.md", "\n".join(review_lines))
+def write_json(path: Path, data: object) -> None:
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def main(argv: list[str]) -> int:
     allow_beyond_scope = "--allow-beyond-requested-scope" in argv
-    argv = [arg for arg in argv if arg != "--allow-beyond-requested-scope"]
+    llm_output_override: Path | None = None
+    filtered: list[str] = []
+    idx = 0
+    while idx < len(argv):
+        arg = argv[idx]
+        if arg == "--allow-beyond-requested-scope":
+            idx += 1
+            continue
+        if arg == "--llm-output":
+            if idx + 1 >= len(argv):
+                print("ERROR: --llm-output requires a path", file=sys.stderr)
+                return 2
+            llm_output_override = Path(argv[idx + 1])
+            idx += 2
+            continue
+        filtered.append(arg)
+        idx += 1
+    argv = filtered
     if len(argv) != 4:
-        print("Usage: python new_storyboard_template.py <locked_brief.json> <script.json> <storyboard.json>", file=sys.stderr)
+        print("Usage: python new_storyboard_template.py [--llm-output <stage02_llm_output.json>] <locked_brief.json> <script.json> <storyboard.json>", file=sys.stderr)
         return 2
     brief_path = Path(argv[1])
     script_path = Path(argv[2])
     out_path = Path(argv[3])
     brief = load_json(brief_path)
     script = load_json(script_path)
-    if brief.get("status") != "locked" or brief.get("confirmed_by_user") is not True:
-        print("ERROR: brief must be locked and confirmed_by_user=true", file=sys.stderr)
-        return 1
+    ensure_locked_brief(brief)
     compiled = compile_requirements(brief)
     if not allow_beyond_scope and not requested_output_allows_stage("STAGE_02", compiled):
         print("ERROR: requested output scope does not allow Stage 02. Re-run with --allow-beyond-requested-scope to override.", file=sys.stderr)
@@ -83,15 +73,38 @@ def main(argv: list[str]) -> int:
         print("ERROR: script.stage must be STAGE_01_SCRIPT_GENERATION", file=sys.stderr)
         return 1
 
-    template = build_stage02_storyboard(brief, script)
-    template["project_id"] = brief.get("project_id") or script.get("project_id") or brief_path.parents[1].name
-    template["source_brief"] = str(brief_path).replace("\\", "/")
-    template["source_script"] = str(script_path).replace("\\", "/")
-    template["created_at"] = datetime.now(timezone.utc).isoformat()
-
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(template, ensure_ascii=False, indent=2), encoding="utf-8")
-    write_stage02_companions(out_path, template)
+    prompt_packet_path = out_path.parent / "stage02_prompt_packet.json"
+    write_json(prompt_packet_path, build_packet(brief, script, brief_path, script_path))
+
+    llm_output_path = llm_output_override or (out_path.parent / "stage02_llm_output.json")
+    if not llm_output_path.exists():
+        print(
+            f"ERROR: missing Stage 02 Codex structured output: {llm_output_path}. "
+            "Generate stage02_llm_output.json from stage02_prompt_packet.json first.",
+            file=sys.stderr,
+        )
+        return 1
+
+    llm_output = load_json(llm_output_path)
+    try:
+        storyboard_payload = write_stage02_outputs(brief, script, llm_output, brief_path, script_path, llm_output_path, out_path)
+    except SystemExit as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+
+    ok, errors, warnings = validate_storyboard_module.validate(storyboard_payload, mode="final")
+    if not ok:
+        validation_errors = structured_validation_errors(errors)
+        validation_errors_path = out_path.parent / "stage02_validation_errors.json"
+        write_json(validation_errors_path, {"errors": validation_errors})
+        repair_packet = build_repair_packet(brief, script, storyboard_payload, brief_path, script_path, out_path, validation_errors)
+        repair_packet_path = out_path.parent / "stage02_repair_packet.json"
+        write_json(repair_packet_path, repair_packet)
+        print(f"STORYBOARD VALIDATION FAILED: {out_path}", file=sys.stderr)
+        print(f"STAGE02_REPAIR_PACKET_CREATED: {repair_packet_path}", file=sys.stderr)
+        return 1
+
     update_project_manifest_for_stage(
         out_path,
         current_stage="STAGE_02_STORYBOARD_GENERATION",
@@ -99,7 +112,12 @@ def main(argv: list[str]) -> int:
         flags={"storyboard_confirmed": False},
         status="active",
     )
-    print(f"STORYBOARD TEMPLATE CREATED: {out_path}")
+    if warnings:
+        for warning in warnings:
+            print(f"WARNING: {warning}")
+    print(f"STAGE02_STORYBOARD_CREATED: {out_path}")
+    print(f"STAGE02_PROMPT_PACKET_CREATED: {prompt_packet_path}")
+    print(f"STAGE02_LLM_OUTPUT_USED: {llm_output_path}")
     return 0
 
 

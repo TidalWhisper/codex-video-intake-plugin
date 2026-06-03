@@ -52,7 +52,8 @@
       {
         "time": "00:00-00:06",
         "visual": "落日余晖洒在海面，女孩沿着潮线缓慢前行。",
-        "voiceover": "有些告别，不一定要说出口。"
+        "voiceover": "有些告别，不一定要说出口。",
+        "music_cue": "underscore: 背景配乐托住海边黄昏的氛围"
       }
     ]
   },
@@ -60,6 +61,11 @@
     "matches_locked_brief": true,
     "duration_fits": true,
     "genre_style_fits": true,
+    "aspect_ratio_fits": true,
+    "character_requirement_fits": true,
+    "voice_fits": true,
+    "music_fits": true,
+    "final_output_scope_fits": true,
     "ready_for_storyboard": true,
     "notes": []
   },

@@ -1,0 +1,187 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Stage 01 Codex LLM Output",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "title_candidates",
+    "selected_title",
+    "logline",
+    "theme",
+    "protagonist_state",
+    "narrative_movement",
+    "ending_direction",
+    "avoid",
+    "characters",
+    "settings",
+    "beats",
+    "self_check"
+  ],
+  "properties": {
+    "title_candidates": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "selected_title": {
+      "type": "string"
+    },
+    "logline": {
+      "type": "string"
+    },
+    "theme": {
+      "type": "string"
+    },
+    "protagonist_state": {
+      "type": "string"
+    },
+    "narrative_movement": {
+      "type": "string"
+    },
+    "ending_direction": {
+      "type": "string"
+    },
+    "avoid": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "characters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "age",
+          "role",
+          "identity_anchor"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "age": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "identity_anchor": {
+            "type": "string"
+          }
+        }
+      },
+      "minItems": 1
+    },
+    "settings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "beats": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "beat_id",
+          "start",
+          "end",
+          "summary",
+          "emotion",
+          "visual",
+          "voiceover",
+          "dialogue",
+          "music_cue"
+        ],
+        "properties": {
+          "beat_id": {
+            "type": "string"
+          },
+          "start": {
+            "type": "string"
+          },
+          "end": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "emotion": {
+            "type": "string"
+          },
+          "visual": {
+            "type": "string"
+          },
+          "voiceover": {
+            "type": "string"
+          },
+          "dialogue": {
+            "type": "string"
+          },
+          "music_cue": {
+            "type": "string"
+          }
+        }
+      },
+      "minItems": 1
+    },
+    "self_check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "matches_locked_brief",
+        "duration_fits",
+        "genre_style_fits",
+        "aspect_ratio_fits",
+        "character_requirement_fits",
+        "voice_fits",
+        "music_fits",
+        "final_output_scope_fits",
+        "ready_for_storyboard",
+        "notes"
+      ],
+      "properties": {
+        "matches_locked_brief": {
+          "type": "boolean"
+        },
+        "duration_fits": {
+          "type": "boolean"
+        },
+        "genre_style_fits": {
+          "type": "boolean"
+        },
+        "aspect_ratio_fits": {
+          "type": "boolean"
+        },
+        "character_requirement_fits": {
+          "type": "boolean"
+        },
+        "voice_fits": {
+          "type": "boolean"
+        },
+        "music_fits": {
+          "type": "boolean"
+        },
+        "final_output_scope_fits": {
+          "type": "boolean"
+        },
+        "ready_for_storyboard": {
+          "type": "boolean"
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

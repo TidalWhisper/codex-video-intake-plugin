@@ -186,6 +186,20 @@ Also update `script.json.self_check`.
 
 ## Required JSON validation
 
+Normal Stage 01 runtime must use the Codex-first hard chain:
+
+```text
+project_brief.locked.json
+-> build_stage01_prompt_packet.py
+-> stage01_prompt_packet.json
+-> Codex generates stage01_llm_output.json
+-> new_script_template.py writes official Stage 01 files
+-> validate_script.py --mode final
+-> if needed, build_stage01_repair_packet.py + Codex repair retry
+```
+
+Do not require the user to manually fill `stage01_llm_output.json` during normal `$video-production-pipeline` execution.
+
 After writing `script.json`, run:
 
 ```bash
@@ -201,9 +215,9 @@ python skills/video-script-generation/scripts/validate_script.py --mode final <p
 If the validator fails, fix the JSON and run validation again before reporting success.
 
 
-### Draft template validation
+### Recovery-only draft validation
 
-When you only scaffold an empty `script.json` with `new_script_template.py`, validate it in draft mode:
+Only when debugging `new_script_template.py` in isolation, validate draft shape with:
 
 ```bash
 python skills/video-script-generation/scripts/validate_script.py --mode draft <project_dir>/01_script/script.json

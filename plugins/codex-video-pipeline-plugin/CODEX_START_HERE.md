@@ -16,6 +16,7 @@
 5. docs/PROVIDER_INTEGRATION_CONTRACTS.md
 6. docs/COMFYUI_WORKFLOW_EXPORT_GUIDE.md
 7. docs/CODEX_LOCAL_TASK_RUNBOOK.md
+8. docs/STAGE05_MAINLINE_GUARDRAILS.md
 
 读完后，先输出：
 - 当前插件已经完成到哪个阶段
@@ -122,6 +123,16 @@ Codex 后续修改时必须遵守：
 6. 不允许把 provider placeholder 当成真实 provider。
 7. 不允许在没有工作流 JSON 的情况下声称 ComfyUI 已接入完成。
 8. 不允许在没有 API client、配置项、测试和真实输出证据的情况下声称 GPT Image 2 已接入完成。
+9. Stage 05 工作流与模型选型，必须先找开源社区已经验证过的成熟方案，再考虑官方模板，最后才允许仓库内自写桥接。
+10. 如果社区成熟方案不存在、导不进来、或在本机缺模型缺节点，必须先明确写出 blocker，不能假装“已完成改造”。
+11. 不允许只因为 workflow 跑出了图，就把某条路线升级成默认；必须做多风格、多场景的语义验收，并确认结果符合文字描述。
+12. 对 `game_cg`、`guofeng scenic`、`realistic establishing shot` 这类高漂移路线，不允许只靠 prompt 微调反复碰运气；优先继续检索社区成熟 workflow / model stack。
+13. Stage 05 主线推进必须遵守 `docs/STAGE05_MAINLINE_GUARDRAILS.md`；未经用户明确批准，不允许从当前主线扩展到其他风格路线、其他镜头集合或其他横向 A/B 试验。
+14. 如果任务涉及 `F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-photo_SAFETENSORS.json`，必须先读取 `$video-keyframe-amazing-z-photo-style-switch`；其中 `#57` 是唯一主 prompt 输入，`#88 STYLE SELECTOR` 才是真实 style 开关，不能用内部 style 文本节点伪装成已理解。
+15. 如果任务涉及 `F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-comics_SAFETENSORS.json`，必须先读取 `$video-keyframe-amazing-z-comics-style-switch`；其中 `#57` 是唯一主 prompt 输入，`#88 STYLE SELECTOR` 才是真实 style 开关，不能用内部 style 文本节点伪装成已理解。
+16. 如果任务涉及 `F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-image-a_SAFETENSORS.json`，必须先读取 `$video-keyframe-amazing-z-image-a-style-switch`；其中 `#57` 是唯一主 prompt 输入，`#88 STYLE SELECTOR` 才是真实 style 开关，不能用内部 style 文本节点伪装成已理解。
+17. 如果任务涉及上述三套本地 Zimage UI workflow 之一，必须先读取统一总规范 `skills/video-keyframe-style-selection/references/zimage-style-switch-unified-spec.md`，再读取对应的单独 skill。
+18. 如果任务涉及 Stage 00 立项提问，必须先读取 `skills/video-project-intake/references/first_layer_options.md` 和 `skills/video-project-intake/references/stage00_question_blocks.md`；对用户展示的字母选项必须与 canonical 映射完全一致，禁止自创、改写或重排选项菜单。
 ```
 
 ## 6. 本地开发前先跑自检

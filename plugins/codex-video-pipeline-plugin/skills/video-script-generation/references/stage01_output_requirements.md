@@ -44,3 +44,28 @@ F. 重新生成剧本
 ```
 
 Only after explicit user confirmation may the project manifest set `allowed_next_stage` to `STAGE_02_STORYBOARD`.
+
+## Planned Codex-First Refactor
+
+This document now also defines the design-track direction for a future Stage 01 refactor.
+
+Planned architecture:
+
+- Python compiles constraints and validates outputs.
+- Codex generates the creative text.
+- Python writes md/json artifacts and drives repair loops.
+
+First-batch design artifacts:
+
+- `references/stage01_llm_output.schema.json`
+- `references/stage01_codex_generation_prompt.md`
+- `references/stage01_codex_repair_prompt.md`
+- `references/stage01_repair_packet.schema.json`
+- `scripts/build_stage01_prompt_packet.py`
+- `scripts/write_stage01_outputs.py`
+- `scripts/build_stage01_repair_packet.py`
+
+Important:
+
+- These artifacts are design-track only in the current batch.
+- The active production Stage 01 path has not been switched yet.

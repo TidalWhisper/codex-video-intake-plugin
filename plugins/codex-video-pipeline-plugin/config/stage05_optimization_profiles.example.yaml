@@ -45,6 +45,9 @@ workflow_profiles:
           scheduler: sgm_uniform
           denoise: 1.0
 
+  stage05_realistic_cinematic_qwen2512_prompt_only:
+    inherits: txt2img_keyframe_realistic
+
   stage05_shortdrama_realistic:
     inherits: txt2img_keyframe_realistic
 
@@ -131,6 +134,19 @@ workflow_profiles:
   stage05_realistic_cinematic_zimage_photo_bridge:
     inherits: txt2img_keyframe_realistic_zimage_photo_bridge
 
+  stage05_realistic_cinematic_amazing_z_photo_original:
+    inherits: txt2img_keyframe_realistic_zimage_photo_bridge
+    profiles:
+      preview:
+        workflow_replacements:
+          style_selector: production_photo
+      balanced:
+        workflow_replacements:
+          style_selector: production_photo
+      quality:
+        workflow_replacements:
+          style_selector: production_photo
+
   txt2img_keyframe_anime:
     default_profile: balanced
     profiles:
@@ -166,10 +182,30 @@ workflow_profiles:
           second_pass_cfg: 1.1
 
   stage05_anime_jp:
-    inherits: txt2img_keyframe_anime
+    inherits: stage05_realistic_cinematic_amazing_z_photo_original
+    profiles:
+      preview:
+        workflow_replacements:
+          style_selector: anime
+      balanced:
+        workflow_replacements:
+          style_selector: anime
+      quality:
+        workflow_replacements:
+          style_selector: anime
 
   stage05_western_cartoon:
-    inherits: txt2img_keyframe_anime
+    inherits: stage05_realistic_cinematic_amazing_z_photo_original
+    profiles:
+      preview:
+        workflow_replacements:
+          style_selector: comic_1
+      balanced:
+        workflow_replacements:
+          style_selector: comic_1
+      quality:
+        workflow_replacements:
+          style_selector: comic_1
 
   txt2img_keyframe_anime_cn_newguofeng:
     default_profile: balanced

@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Stage 04 LLM Output",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "shot_prompts",
+    "transition_prompts",
+    "global_negative_prompt",
+    "self_check"
+  ],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["draft", "confirmed"]
+    },
+    "prompt_language": {"type": "string"},
+    "visual_strategy": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "shot_prompts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "shot_id",
+          "duration_sec",
+          "characters",
+          "scene_summary",
+          "start_keyframe_prompt",
+          "end_keyframe_prompt",
+          "motion_prompt",
+          "camera_prompt",
+          "lighting_prompt",
+          "style_prompt",
+          "consistency_prompt",
+          "negative_prompt",
+          "image_generation_notes",
+          "video_generation_notes",
+          "dependencies"
+        ],
+        "properties": {
+          "shot_id": {"type": "string"},
+          "source_shot_ref": {"type": "string"},
+          "duration_sec": {"type": "number", "exclusiveMinimum": 0},
+          "characters": {
+            "type": "array",
+            "items": {"type": "string"}
+          },
+          "scene_summary": {"type": "string"},
+          "intent_summary": {"type": "string"},
+          "story_anchor_bundle": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "start_keyframe_prompt": {"type": "string"},
+          "end_keyframe_prompt": {"type": "string"},
+          "motion_prompt": {"type": "string"},
+          "camera_prompt": {"type": "string"},
+          "lighting_prompt": {"type": "string"},
+          "style_prompt": {"type": "string"},
+          "consistency_prompt": {"type": "string"},
+          "identity_anchor_prompt": {"type": "string"},
+          "negative_prompt": {"type": "string"},
+          "image_generation_notes": {"type": "string"},
+          "video_generation_notes": {"type": "string"},
+          "performance_prompt": {"type": "string"},
+          "dialogue_delivery_prompt": {"type": "string"},
+          "dependencies": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["reference_images"],
+            "properties": {
+              "reference_images": {
+                "type": "array",
+                "items": {"type": "string"}
+              },
+              "previous_shot_id": {
+                "type": ["string", "null"]
+              },
+              "next_shot_id": {
+                "type": ["string", "null"]
+              }
+            }
+          }
+        }
+      }
+    },
+    "transition_prompts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "transition_id",
+          "from_shot_id",
+          "to_shot_id",
+          "transition_type",
+          "transition_motion_prompt",
+          "continuity_requirements"
+        ],
+        "properties": {
+          "transition_id": {"type": "string"},
+          "from_shot_id": {"type": "string"},
+          "to_shot_id": {"type": "string"},
+          "transition_type": {"type": "string"},
+          "transition_motion_prompt": {"type": "string"},
+          "continuity_requirements": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "string"}
+          }
+        }
+      }
+    },
+    "global_negative_prompt": {"type": "string"},
+    "self_check": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "matches_locked_brief",
+        "matches_script",
+        "matches_storyboard",
+        "uses_character_consistency",
+        "covers_all_storyboard_shots",
+        "ready_for_image_generation"
+      ],
+      "properties": {
+        "matches_locked_brief": {"type": "boolean"},
+        "matches_script": {"type": "boolean"},
+        "matches_storyboard": {"type": "boolean"},
+        "uses_character_consistency": {"type": "boolean"},
+        "covers_all_storyboard_shots": {"type": "boolean"},
+        "ready_for_image_generation": {"type": "boolean"},
+        "notes": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    }
+  }
+}

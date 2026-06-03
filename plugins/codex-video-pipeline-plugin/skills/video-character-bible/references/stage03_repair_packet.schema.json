@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Stage 03 Repair Packet",
+  "type": "object",
+  "required": [
+    "packet_version",
+    "project_id",
+    "failed_checks",
+    "allowed_edits",
+    "forbidden_edits",
+    "current_draft"
+  ]
+}

@@ -209,6 +209,10 @@ def resolve_current_comfyui_target(route_key: str, route_entry: dict[str, Any]) 
 
 def resolve_route_style_preset(style_entry: dict[str, Any], route_entry: dict[str, Any]) -> dict[str, Any]:
     preset_key = str(style_entry.get("route_preset") or "").strip() or None
+    return resolve_named_style_preset(route_entry, preset_key)
+
+
+def resolve_named_style_preset(route_entry: dict[str, Any], preset_key: str | None) -> dict[str, Any]:
     style_presets = route_entry.get("style_presets")
     if not preset_key or not isinstance(style_presets, dict):
         return {

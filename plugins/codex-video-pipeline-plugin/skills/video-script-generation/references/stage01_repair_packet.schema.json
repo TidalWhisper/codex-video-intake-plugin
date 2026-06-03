@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Stage 01 Codex Repair Packet",
+  "type": "object",
+  "required": [
+    "project_id",
+    "source_brief",
+    "source_script",
+    "failed_checks",
+    "allowed_edits",
+    "forbidden_edits",
+    "current_draft"
+  ],
+  "properties": {
+    "project_id": {
+      "type": "string"
+    },
+    "source_brief": {
+      "type": "string"
+    },
+    "source_script": {
+      "type": "string"
+    },
+    "failed_checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "code",
+          "path",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "allowed_edits": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "forbidden_edits": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "current_draft": {
+      "type": "object"
+    }
+  }
+}

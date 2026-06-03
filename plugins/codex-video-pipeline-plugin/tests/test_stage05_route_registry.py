@@ -38,17 +38,18 @@ def test_load_stage05_route_registry_example_is_valid() -> None:
     assert route_key == "anime_jp"
     assert style_entry["primary_route"] == "anime_jp"
     assert route_entry["current_workflow_mapping_key"] == "stage05_anime_jp"
-    assert route_entry["current_workflow_target"] == "txt2img_keyframe_anime"
-    assert route_entry["current_model_candidate"] == "circlestone-labs/Anima"
+    assert route_entry["current_workflow_target"] == "amazing_z_image_a_safetensors"
+    assert route_entry["current_model_candidate"] == "Tongyi-MAI/Z-Image"
     target = stage05_route_registry.resolve_current_comfyui_target(route_key, route_entry)
     assert target["workflow_mapping_key"] == "stage05_anime_jp"
-    assert target["workflow_name"] == "txt2img_keyframe_anime"
+    assert target["workflow_name"] == "amazing_z_image_a_safetensors"
     assert target["style_family"] == "anime"
-    assert target["model_id"] == "circlestone-labs/Anima"
-    assert target["preferred_workflow_candidate"] == "anima_comparison_workflow"
-    assert target["preferred_model_candidate"] == "circlestone-labs/Anima"
-    assert target["migration_state"] == "needs_api_conversion"
-    assert target["preferred_workflow_source_ref"] == "https://huggingface.co/circlestone-labs/Anima/blob/main/anima_comparison.json"
+    assert target["model_id"] == "Tongyi-MAI/Z-Image"
+    assert target["preferred_workflow_candidate"] == "amazing_z_image_a_safetensors"
+    assert target["preferred_model_candidate"] == "Tongyi-MAI/Z-Image"
+    assert target["migration_state"] == "repo_transitional"
+    assert target["preferred_workflow_source_ref"] == "F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-image-a_SAFETENSORS.json"
+    assert target["preferred_workflow_format"] == "ui_graph"
     cn_route_key, _, cn_route_entry = stage05_route_registry.get_stage05_route_for_style(data, "国漫动画风（中国动画/新国风）")
     assert cn_route_key == "anime_cn_newguofeng"
     assert cn_route_entry["current_workflow_target"] == "txt2img_keyframe_anime_cn_newguofeng"
@@ -60,6 +61,10 @@ def test_load_stage05_route_registry_example_is_valid() -> None:
     assert guofeng_preset["preset_label"] == "Elegant Single Subject Umbrella"
     assert "exactly two arms and two hands" in guofeng_preset["positive_anchor"]
     assert "one oil-paper umbrella only in the full frame" in guofeng_preset["positive_anchor"]
+    scenic_preset = stage05_route_registry.resolve_named_style_preset(guofeng_route_entry, "scenic_single_subject_umbrella")
+    assert scenic_preset["preset_label"] == "Scenic Single Subject Umbrella"
+    assert "not a beauty close-up portrait" in scenic_preset["positive_anchor"]
+    assert "beauty close-up portrait" in scenic_preset["negative_anchor"]
     stylized_route_key, stylized_style_entry, stylized_route_entry = stage05_route_registry.get_stage05_route_for_style(data, "赛博朋克")
     assert stylized_route_key == "stylized_concept"
     assert stylized_route_entry["current_workflow_target"] == "txt2img_keyframe_stylized_zimage_image_b_bridge"
@@ -87,6 +92,11 @@ def test_load_stage05_route_registry_example_is_valid() -> None:
     assert "premium character-action illustration plate" in game_cg_preset["positive_anchor"]
     realistic_route_key, _, realistic_route_entry = stage05_route_registry.get_stage05_route_for_style(data, "写实电影感")
     assert realistic_route_key == "realistic_cinematic"
+    assert realistic_route_entry["current_workflow_mapping_key"] == "stage05_realistic_cinematic_amazing_z_photo_original"
+    assert realistic_route_entry["current_workflow_target"] == "amazing_z_photo_safetensors"
+    assert realistic_route_entry["current_model_candidate"] == "Tongyi-MAI/Z-Image"
+    assert realistic_route_entry["prompt_only_target"]["workflow_mapping_key"] == "stage05_realistic_cinematic_qwen2512_prompt_only"
+    assert realistic_route_entry["prompt_only_target"]["workflow_name"] == "txt2img_keyframe_realistic"
     assert realistic_route_entry["reference_guided_target"]["workflow_mapping_key"] == "stage05_realistic_cinematic_qwen_edit_reference"
     assert realistic_route_entry["reference_guided_target"]["workflow_name"] == "txt2img_keyframe_shortdrama_qwen_edit_reference"
 

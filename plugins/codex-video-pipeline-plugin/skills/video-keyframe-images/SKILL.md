@@ -12,6 +12,10 @@ You are the Stage 05 keyframe image production controller for the Codex video pi
 This skill is normally called by `$video-production-pipeline` after the user confirms Stage 04. The user should not need to call this skill manually unless recovering or rerunning Stage 05.
 
 Before changing any Stage 05 ComfyUI style route, use `$video-keyframe-style-selection` and read `config/stage05_style_profiles.example.yaml`.
+If the route touches one of the original local Zimage UI workflows, also read `skills/video-keyframe-style-selection/references/zimage-style-switch-unified-spec.md` before loading the workflow-specific supplement.
+If the route touches the original local `amazing-z-photo_SAFETENSORS.json` workflow, also load `$video-keyframe-amazing-z-photo-style-switch` before changing mappings, prompts, or style-switch logic.
+If the route touches the original local `amazing-z-comics_SAFETENSORS.json` workflow, also load `$video-keyframe-amazing-z-comics-style-switch` before changing mappings, prompts, or style-switch logic.
+If the route touches the original local `amazing-z-image-a_SAFETENSORS.json` workflow, also load `$video-keyframe-amazing-z-image-a-style-switch` before changing mappings, prompts, or style-switch logic.
 
 ## Inputs
 
@@ -124,9 +128,10 @@ Current execution semantics:
 
 Current default ComfyUI route families still map to transitional workflow targets through route-specific mapping keys:
 
-- `realistic_cinematic` → `stage05_realistic_cinematic` → `txt2img_keyframe_realistic_zimage_photo_bridge`
-- `anime_jp` → `stage05_anime_jp` → `txt2img_keyframe_anime`
+- `realistic_cinematic` → `stage05_realistic_cinematic_amazing_z_photo_original` → `amazing_z_photo_safetensors`
+- `anime_jp` → `stage05_anime_jp` → `amazing_z_image_a_safetensors`
 - `anime_cn_newguofeng` → `stage05_anime_cn_newguofeng` → `txt2img_keyframe_anime_cn_newguofeng`
+- `western_cartoon` → `stage05_western_cartoon` → `amazing_z_comics_safetensors`
 - `guofeng_ink` → `stage05_guofeng_ink` → `txt2img_keyframe_guofeng_ink`
 - `stylized_concept` → `stage05_stylized_concept` → `txt2img_keyframe_stylized_zimage_image_b_bridge`
 
@@ -238,6 +243,9 @@ If user chooses A:
 
 - Do not write Stage 05 outputs outside the project folder.
 - Do not skip image evidence.
+- For the original Amazing Z-Photo workflow, treat `#57` as the only main prompt field and `#88 STYLE SELECTOR` as the real style switch. Do not replace real style switching with manual text copying between internal style nodes.
+- For the original Amazing Z-Comics workflow, treat `#57` as the only main prompt field and `#88 STYLE SELECTOR` as the real style switch. Do not replace real style switching with manual text copying between internal style nodes.
+- For the original Amazing Z-Image-A workflow, treat `#57` as the only main prompt field and `#88 STYLE SELECTOR` as the real style switch. Do not replace real style switching with manual text copying between internal style nodes.
 - Do not say images were generated unless the corresponding files exist.
 - In v0.7.0, Stage 05 confirmation should continue to Stage 06 automatically in the normal pipeline.
 - Do not modify Stage 00–04 source files unless the user explicitly asks for regeneration.

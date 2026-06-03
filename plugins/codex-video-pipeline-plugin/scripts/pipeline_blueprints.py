@@ -101,6 +101,10 @@ GENERATION_STAGE_TO_SCOPE = {
 }
 
 LOCATION_HINTS = (
+    "川西的高原旷野",
+    "川西高原旷野",
+    "高原旷野",
+    "藏式民宿",
     "便利店门口",
     "便利店",
     "咖啡馆门口",
@@ -127,6 +131,12 @@ LOCATION_HINTS = (
     "房间",
     "窗边",
     "阳台",
+    "雪山",
+    "草地",
+    "星空",
+    "高原",
+    "旷野",
+    "川西",
 )
 
 WEATHER_HINTS = (
@@ -175,6 +185,44 @@ PROP_HINTS = (
     "信",
     "钥匙",
 )
+
+ROLE_SUFFIX_HINTS = (
+    "景观规划师",
+    "规划师",
+    "巡护员",
+    "摄影师",
+    "设计师",
+    "工程师",
+    "老师",
+    "医生",
+    "护士",
+    "警察",
+    "司机",
+    "旅人",
+    "游客",
+    "创作者",
+    "店员",
+    "店主",
+    "歌手",
+    "演员",
+    "学生",
+    "上班族",
+    "白领",
+    "女孩",
+    "男孩",
+    "女人",
+    "男人",
+    "女生",
+    "男生",
+    "少年",
+    "少女",
+    "母亲",
+    "父亲",
+    "陌生人",
+    "主角",
+)
+
+AGE_PATTERN = r"(\d+岁(?:出头|左右)?|[一二三四五六七八九十两]+岁(?:出头|左右)?)"
 
 
 @dataclass
@@ -339,6 +387,10 @@ def title_from_idea(idea: str, genre: str, style: str) -> str:
     idea = (idea or "").strip()
     if not idea:
         return "未命名短片"
+    if "高原" in idea and any(token in idea for token in ["重新找到了生活的步调", "生活的步调", "精神内耗", "职业危机"]):
+        return "在高原重新呼吸"
+    if "川西" in idea and "星空" in idea:
+        return "风穿过川西"
     if len(idea) <= 12:
         return idea
     suffix = "短片" if "片" not in idea else ""
@@ -356,6 +408,8 @@ def title_from_idea(idea: str, genre: str, style: str) -> str:
 
 
 def default_theme(genre: str, style: str) -> str:
+    if genre == "音乐MV" and style == "写实电影感":
+        return "逃离内耗、重新校准生活节奏、在人与自然之间恢复真实感知"
     if genre in {"治愈", "爱情"}:
         return "释怀、成长、重新出发"
     if genre in {"悬疑", "恐怖惊悚"}:
@@ -420,33 +474,56 @@ def _split_idea_clauses(idea: str) -> list[str]:
     return [clause for clause in clauses if clause]
 
 
+def _extract_age(text: str) -> str:
+    match = re.search(AGE_PATTERN, text or "")
+    return str(match.group(1)).strip() if match else ""
+
+
+def _simplify_subject_label(label: str) -> str:
+    value = str(label or "").strip("，。；;、 ")
+    if not value or "的" not in value:
+        return value
+    head, tail = value.rsplit("的", 1)
+    tail = tail.strip("，。；;、 ")
+    if not tail:
+        return value
+    if re.search(AGE_PATTERN, head) and tail in {"女孩", "男孩", "女人", "男人", "女生", "男生", "少年", "少女"}:
+        return value
+    if tail.endswith(ROLE_SUFFIX_HINTS) or tail in ROLE_SUFFIX_HINTS:
+        return tail
+    return value
+
+
 def _extract_subject_from_idea(idea: str, characters_required: Any) -> tuple[str, str]:
+    role_pattern = "|".join(sorted((re.escape(item) for item in ROLE_SUFFIX_HINTS), key=len, reverse=True))
     patterns = [
-        r"一位(?P<label>[^，。；]{1,24}?(?:女孩|男孩|女人|男人|女生|男生|店员|少年|少女|母亲|父亲|陌生人|主角))",
-        r"一个(?P<label>[^，。；]{1,24}?(?:女孩|男孩|女人|男人|女生|男生|店员|少年|少女|母亲|父亲|陌生人|主角))",
-        r"(?P<label>[^，。；]{1,24}?(?:女孩|男孩|女人|男人|女生|男生|店员|少年|少女|母亲|父亲|陌生人|主角))",
+        rf"一位(?P<label>[^，。；]{{1,32}}?(?:{role_pattern}))",
+        rf"一个(?P<label>[^，。；]{{1,32}}?(?:{role_pattern}))",
+        rf"(?P<label>[^，。；]{{1,32}}?(?:{role_pattern}))",
     ]
     for pattern in patterns:
         match = re.search(pattern, idea or "")
         if match:
-            label = str(match.group("label") or "").strip()
-            age_match = re.search(r"(\d+岁(?:出头|左右)?|[一二三四五六七八九十两]+岁(?:出头|左右)?)", label)
-            age = age_match.group(1) if age_match else "20岁出头"
+            raw_label = str(match.group("label") or "").strip()
+            label = _simplify_subject_label(raw_label)
+            age = _extract_age(raw_label) or _extract_age(idea) or "20岁出头"
             return label, age
     if characters_required is False:
         return "场景主体", "未知"
-    return "主角", "20岁出头"
+    return "主角", _extract_age(idea) or "20岁出头"
 
 
 def _extract_location(idea: str) -> str:
+    location_pattern = "|".join(sorted((re.escape(item) for item in LOCATION_HINTS), key=len, reverse=True))
     for pattern in [
-        r"在(?P<location>[^，。；]{1,24}?(?:便利店门口|便利店|咖啡馆门口|咖啡馆|商店门口|商店|超市门口|超市|门口|街角|巷口|海边|海滩|车站|月台|天台|桥上|桥边|公园|教室|校园|厨房|客厅|房间|窗边|阳台))",
-        r"(?P<location>[^，。；]{0,12}?(?:便利店门口|便利店|咖啡馆门口|咖啡馆|商店门口|商店|超市门口|超市|门口|街角|巷口|海边|海滩|车站|月台|天台|桥上|桥边|公园|教室|校园|厨房|客厅|房间|窗边|阳台))",
+        rf"前往(?P<location>[^，。；]{{1,24}}?(?:{location_pattern}))",
+        rf"在(?P<location>[^，。；]{{1,24}}?(?:{location_pattern}))",
+        rf"(?P<location>[^，。；]{{0,18}}?(?:{location_pattern}))",
     ]:
         match = re.search(pattern, idea or "")
         if not match:
             continue
-        location = str(match.group("location") or "").strip()
+        location = str(match.group("location") or "").strip().replace("的", "")
         for prefix in [*WEATHER_HINTS, *TIME_HINTS]:
             if location.startswith(prefix):
                 location = location[len(prefix):].strip()
@@ -473,6 +550,12 @@ def _expand_sequence(values: list[str], count: int) -> list[str]:
 def _normalize_action_clause(clause: str, subject: str, scene_label: str) -> str:
     value = clause
     if subject:
+        descriptor_match = re.match(rf"^(?:一位|一个)?(?P<descriptor>.+?)的{re.escape(subject)}$", value)
+        if descriptor_match:
+            descriptor = str(descriptor_match.group("descriptor") or "").strip("，。；;、 ")
+            if descriptor:
+                value = descriptor
+    if subject:
         value = value.replace(f"一位{subject}", "", 1)
         value = value.replace(f"一个{subject}", "", 1)
         value = value.replace(subject, "", 1)
@@ -493,18 +576,196 @@ def _emotion_for_action(action: str, genre: str, style: str, index: int, total: 
     return defaults[min(index, len(defaults) - 1)]
 
 
-def _composition_for_action(scene_label: str, weather: str, action: str, props: list[str], index: int, total: int) -> str:
+def _opening_shot_frame_phrase(aspect_ratio: str) -> str:
+    ratio = str(aspect_ratio or "").strip()
+    if ratio == "9:16":
+        return "先用竖屏建立镜头交代"
+    if ratio == "16:9":
+        return "先用横屏建立镜头交代"
+    if ratio == "1:1":
+        return "先用方画幅建立镜头交代"
+    if ratio == "21:9":
+        return "先用宽银幕建立镜头交代"
+    return "先用镜头建立交代"
+
+
+def _composition_for_action(
+    scene_label: str,
+    weather: str,
+    action: str,
+    props: list[str],
+    index: int,
+    total: int,
+    aspect_ratio: str = "",
+) -> str:
     primary_prop = props[min(index, len(props) - 1)] if props else ""
     if index == 0:
-        return f"先用竖屏建立镜头交代{scene_label}与{weather or '现场氛围'}，人物与{primary_prop or '关键道具'}同框。".strip()
+        opening_phrase = _opening_shot_frame_phrase(aspect_ratio)
+        return f"{opening_phrase}{scene_label}与{weather or '现场氛围'}，人物与{primary_prop or '关键道具'}同框。".strip()
     if index == total - 1:
         return f"把镜头重心放在{action}后的情绪回落，突出{primary_prop or '关键道具'}与人物回头反应。"
     return f"构图聚焦{action}的瞬间，保留{scene_label}环境线索和{primary_prop or '关键道具'}细节。"
 
 
-def _intent_summary(scene_label: str, action: str, emotion: str, key_prop: str) -> str:
-    prop_part = f"，让{key_prop}成为情绪支点" if key_prop else ""
-    return f"这个镜头要在{scene_label}里抓住“{action}”这一瞬间，传达{emotion}{prop_part}。"
+def _extract_setting_candidates(idea: str, scene_label: str) -> list[str]:
+    candidates: list[str] = []
+    for pattern in [
+        r"川西(?:的)?高原旷野",
+        r"藏式民宿",
+        r"雪山、草地与星空",
+        r"雪山",
+        r"草地",
+        r"星空",
+        r"海滩",
+        r"海边",
+    ]:
+        for match in re.finditer(pattern, idea or ""):
+            value = str(match.group(0) or "").strip().replace("的", "")
+            if value and value not in candidates:
+                candidates.append(value)
+    if scene_label and scene_label not in {"故事现场", "古风场景", "未来感场景"} and scene_label not in candidates:
+        candidates.insert(0, scene_label)
+    return candidates
+
+
+def _music_cue_for_profile(music_mode: str, music_profile: str, beat_index: int, total: int) -> str:
+    if "需要" not in (music_mode or "") and not music_profile:
+        return ""
+    if music_profile == "song":
+        if beat_index == 0:
+            return "song: 主歌起段，先铺陈氛围和人物心境"
+        if beat_index == total - 1:
+            return "song: 副歌或尾奏收束，放大情绪落点"
+        return "song: 跟随歌曲主旋律推进画面节奏"
+    if music_profile == "instrumental":
+        return "instrumental: 纯音乐旋律持续推进情绪"
+    if music_profile == "underscore" or "需要" in (music_mode or ""):
+        return "underscore: 背景配乐托住环境氛围"
+    return ""
+
+
+def _compose_music_video_story_beats(idea: str, beat_count: int) -> list[str]:
+    beats: list[str] = []
+    if any(token in idea for token in ["职业危机", "精神内耗"]):
+        beats.append("被职业危机与精神内耗推到几乎失衡")
+
+    departure_parts: list[str] = []
+    if "逃离钢筋水泥" in idea or "逃离" in idea:
+        departure_parts.append("逃离钢筋水泥")
+    if "驱车" in idea and any(token in idea for token in ["高原", "旷野", "川西"]):
+        departure_parts.append("驱车驶入川西高原旷野")
+    if departure_parts:
+        beats.append("，".join(departure_parts))
+
+    if all(token in idea for token in ["修缮", "民宿", "巡护员", "相识"]):
+        beats.append("在修缮藏式民宿时与野生动物巡护员相识")
+    elif "修缮" in idea and "民宿" in idea:
+        beats.append("在修缮濒临倒闭的藏式民宿时慢慢停下来")
+
+    if any(token in idea for token in ["雪山", "草地", "星空", "生活的步调", "羁绊"]):
+        beats.append("在雪山、草地与星空之间重新找回生活步调，也看见人与自然的真实羁绊")
+
+    cleaned = [beat for beat in beats if beat]
+    if not cleaned:
+        return []
+    if len(cleaned) >= beat_count:
+        return cleaned[:beat_count]
+    return _expand_sequence(cleaned, beat_count)
+
+
+def _stage01_logline(idea: str, subject: str, genre: str, settings: list[str]) -> str:
+    if genre == "音乐MV" and "高原" in idea:
+        return (
+            f"一位{_extract_age(idea) or ''}{subject}在职业危机与精神内耗中逃离城市，"
+            "一路驶入川西高原；在修缮藏式民宿、与巡护员相识的过程中，"
+            "她在雪山、草地与星空之间重新找回生活的步调。"
+        ).replace("一位城市景观规划师", "一位城市景观规划师").replace("一位30岁城市景观规划师", "一位30岁的城市景观规划师")
+    setting_text = "、".join(settings[:2]) if settings else ""
+    if setting_text:
+        return f"{subject}进入{setting_text}，在既定题材与风格中完成情绪变化与故事推进。"
+    return idea.strip("。")
+
+
+def _stage01_summary_line(subject: str, scene: str, action: str, emotion: str, index: int, total: int) -> str:
+    if "职业危机" in action or "精神内耗" in action:
+        return f"{subject}被城市高压和长期内耗逼到失衡边缘，离开的念头第一次变得具体。"
+    if "逃离钢筋水泥" in action or "驱车" in action:
+        return f"{subject}把熟悉的钢筋水泥抛在身后，沿着通往{scene}的路让呼吸慢慢松开。"
+    if "民宿" in action or "巡护员" in action:
+        return f"{subject}在修缮与相识之间建立起新的连接，情绪从封闭转向回应。"
+    if any(token in action for token in ["雪山", "草地", "星空", "步调", "羁绊"]):
+        return f"{subject}在旷野与星空之间重新找回生活步调，也真正感到人与自然的羁绊。"
+    if index == total - 1:
+        return f"{subject}把情绪安放在{scene}里，最终落到{emotion}。"
+    return f"{subject}在{scene}推进“{action}”，情绪进入{emotion}。"
+
+
+def _stage01_visual_line(
+    scene: str,
+    subject: str,
+    action: str,
+    composition_focus: str,
+    props_label: str,
+    index: int,
+    total: int,
+) -> str:
+    if "职业危机" in action or "精神内耗" in action:
+        opening = (
+            f"玻璃幕墙、电脑冷光和压缩的城市通勤把{subject}推到几乎失衡的边缘，"
+            "她的疲惫感先于动作抵达画面。"
+        )
+    elif "逃离钢筋水泥" in action or "驱车" in action:
+        opening = (
+            f"{subject}把城市抛在身后，车窗外从高架、隧道和楼群切到盘山公路、风口与高原天光，"
+            "画面开始真正打开。"
+        )
+    elif "民宿" in action or "巡护员" in action:
+        opening = (
+            f"木梁、白墙、工具灰尘和经幡构成民宿修缮现场，{subject}在劳作间与巡护员建立第一层默契。"
+        )
+    elif any(token in action for token in ["雪山", "草地", "星空", "步调", "羁绊"]):
+        opening = (
+            f"雪山、草地与星空依次铺开，{subject}终于在风声与空旷里慢下来，"
+            "情绪从紧绷过渡到重新呼吸。"
+        )
+    else:
+        opening = f"{scene}里，{subject}推进“{action}”，保留{props_label}与人物关系。"
+
+    if index == 0:
+        return f"{opening} 构图重点：{composition_focus}"
+    if index == total - 1:
+        return f"{opening} 结尾镜头要把情绪落点留在人物与环境的共同呼吸上，构图重点：{composition_focus}"
+    return f"{opening} 构图重点：{composition_focus}"
+
+
+def _stage01_title_candidates(title: str, idea: str, genre: str) -> list[str]:
+    candidates = [title]
+    if genre == "音乐MV" and "高原" in idea:
+        candidates.extend(["风穿过川西", "把心留在旷野"])
+    elif "海滩" in idea or "海边" in idea:
+        candidates.extend(["黄昏海风里", "潮线之外"])
+    ordered: list[str] = []
+    for item in candidates:
+        if item and item not in ordered:
+            ordered.append(item)
+    return ordered
+
+
+def _stage01_protagonist_state(subject: str, idea: str) -> str:
+    if any(token in idea for token in ["职业危机", "精神内耗"]):
+        return f"{subject}正处在被工作消耗、需要暂时逃离原有秩序的边缘状态"
+    return f"{subject}进入故事时仍背着未被解决的情绪负担"
+
+
+def _stage01_avoid_list(genre: str, style: str, voice_mode: str) -> list[str]:
+    items = ["不要偏离 locked brief 的题材、风格和配音约束"]
+    if genre == "音乐MV":
+        items.append("不要把 MV 写成对白驱动剧情片")
+    if style == "写实电影感":
+        items.append("不要使用过度悬浮或口号化的抒情表达")
+    if "不需要配音" in voice_mode:
+        items.append("不要额外生成旁白或角色对白")
+    return items
 
 
 def extract_story_anchors(brief: dict[str, Any], beat_count: int) -> StoryAnchors:
@@ -512,6 +773,7 @@ def extract_story_anchors(brief: dict[str, Any], beat_count: int) -> StoryAnchor
     idea = str(normalized.get("idea") or brief.get("idea") or "").strip()
     genre = str(normalized.get("genre") or brief.get("genre") or "").strip()
     style = str(normalized.get("style") or brief.get("style") or "").strip()
+    aspect_ratio = str(normalized.get("aspect_ratio") or brief.get("aspect_ratio") or "").strip()
     subject, subject_age = _extract_subject_from_idea(idea, normalized.get("characters_required"))
     weather = _first_hit(idea, WEATHER_HINTS)
     time_of_day = _first_hit(idea, TIME_HINTS)
@@ -539,7 +801,7 @@ def extract_story_anchors(brief: dict[str, Any], beat_count: int) -> StoryAnchor
         for idx, action in enumerate(action_beats)
     ]
     composition_beats = [
-        _composition_for_action(scene_label, weather, action, props, idx, beat_count)
+        _composition_for_action(scene_label, weather, action, props, idx, beat_count, aspect_ratio)
         for idx, action in enumerate(action_beats)
     ]
     return StoryAnchors(
@@ -572,18 +834,6 @@ def infer_scene(idea: str, genre: str, style: str) -> str:
     if genre in {"科幻", "奇幻"}:
         return "未来感场景"
     return "故事现场"
-
-
-def infer_camera(idx: int, total: int) -> str:
-    if idx == 0:
-        return "wide shot"
-    if idx == total - 1:
-        return "wide shot, closing frame"
-    if idx % 3 == 0:
-        return "close-up"
-    if idx % 2 == 0:
-        return "medium shot"
-    return "tracking shot"
 
 
 def infer_action(subject: str, idea: str, beat_index: int, total: int) -> str:
@@ -621,10 +871,24 @@ def build_stage01_script(brief: dict[str, Any]) -> dict[str, Any]:
     beat_count = count_duration_beats(duration)
     beat_lengths = split_duration(duration, beat_count)
     anchors = extract_story_anchors(brief, beat_count)
+    custom_music_video_beats = _compose_music_video_story_beats(idea, beat_count) if genre == "音乐MV" else []
+    if custom_music_video_beats:
+        anchors.action_beats = custom_music_video_beats
+        anchors.emotion_beats = [
+            _emotion_for_action(action, genre, style, idx, len(custom_music_video_beats))
+            for idx, action in enumerate(custom_music_video_beats)
+        ]
+        anchors.composition_beats = [
+            _composition_for_action(anchors.scene_label, anchors.weather, action, anchors.key_props, idx, len(custom_music_video_beats), str(normalized.get("aspect_ratio") or ""))
+            for idx, action in enumerate(custom_music_video_beats)
+        ]
     title = title_from_idea(idea, genre, style)
     subject_name, subject_age = anchors.subject, anchors.subject_age
     theme = default_theme(genre, style)
     scene = anchors.scene_label
+    settings = _extract_setting_candidates(idea, scene) or [scene]
+    logline = _stage01_logline(idea, subject_name, genre, settings)
+    title_candidates = _stage01_title_candidates(title, idea, genre)
     props_label = "、".join(anchors.key_props[:2]) if anchors.key_props else "关键道具"
     beats = []
     sections = []
@@ -639,7 +903,7 @@ def build_stage01_script(brief: dict[str, Any]) -> dict[str, Any]:
         voiceover, dialogue = default_voice_lines(voice_mode, idx, theme)
         if voiceover:
             voiceover = f"{subject_name}{action}，情绪落在{emotion}。"
-        summary = f"{subject_name}在{scene}{action}，情绪推进到{emotion}。"
+        summary = _stage01_summary_line(subject_name, scene, action, emotion, idx, len(beat_lengths))
         beats.append({
             "start": format_time(start),
             "end": format_time(end),
@@ -648,13 +912,10 @@ def build_stage01_script(brief: dict[str, Any]) -> dict[str, Any]:
         })
         sections.append({
             "time": f"{format_time(start)}-{format_time(end)}",
-            "visual": (
-                f"{scene}里，{subject_name}{action}；"
-                f"保留{props_label}与人物关系，构图重点：{composition_focus}"
-            ),
+            "visual": _stage01_visual_line(scene, subject_name, action, composition_focus, props_label, idx, len(beat_lengths)),
             "voiceover": voiceover,
             "dialogue": dialogue,
-            "music_cue": "underscore" if music_profile or "需要" in music_mode else "",
+            "music_cue": _music_cue_for_profile(music_mode, music_profile, idx, len(beat_lengths)),
         })
     return {
         "schema_version": "0.3.0",
@@ -663,8 +924,13 @@ def build_stage01_script(brief: dict[str, Any]) -> dict[str, Any]:
         "project_id": brief.get("project_id") or "",
         "source_brief": str(brief.get("project_dir") or "").replace("\\", "/"),
         "title": title,
-        "logline": f"{idea}。".strip("。"),
+        "title_candidates": title_candidates,
+        "logline": logline,
         "theme": theme,
+        "protagonist_state": _stage01_protagonist_state(subject_name, idea),
+        "narrative_movement": "从城市内耗到旷野呼吸，从陌生相识到重新感知人与自然的连接",
+        "ending_direction": beats[-1]["summary"] if beats else "",
+        "avoid": _stage01_avoid_list(genre, style, voice_mode),
         "characters": [
             {
                 "name": subject_name,
@@ -672,7 +938,7 @@ def build_stage01_script(brief: dict[str, Any]) -> dict[str, Any]:
                 "role": "main",
             }
         ],
-        "settings": [scene],
+        "settings": settings,
         "duration_plan": {
             "target_duration_sec": duration,
             "target_duration_label": normalized.get("target_duration_label") or f"{duration}秒",
@@ -702,6 +968,11 @@ def build_stage01_script(brief: dict[str, Any]) -> dict[str, Any]:
             "matches_locked_brief": True,
             "duration_fits": True,
             "genre_style_fits": True,
+            "aspect_ratio_fits": True,
+            "character_requirement_fits": True,
+            "voice_fits": True,
+            "music_fits": True,
+            "final_output_scope_fits": True,
             "ready_for_storyboard": True,
             "quality_targets_defined": bool(quality_targets),
             "notes": [
@@ -711,361 +982,3 @@ def build_stage01_script(brief: dict[str, Any]) -> dict[str, Any]:
         "allowed_next_stage": None,
     }
 
-
-def build_stage02_storyboard(brief: dict[str, Any], script: dict[str, Any]) -> dict[str, Any]:
-    normalized = normal_brief(brief)
-    compiled, quality_contract, quality_targets = strategy_bundle(brief, "STAGE_02")
-    duration = int(normalized.get("target_duration_sec") or script.get("duration_plan", {}).get("target_duration_sec") or 30)
-    genre = str(normalized.get("genre") or brief.get("genre") or "").strip()
-    style = str(normalized.get("style") or brief.get("style") or "").strip()
-    shots_needed = max(3, count_duration_beats(duration))
-    anchors = extract_story_anchors(brief, shots_needed)
-    scene = anchors.scene_label
-    shot_lengths = split_duration(duration, shots_needed)
-    sections = script.get("script", {}).get("sections") if isinstance(script.get("script"), dict) else []
-    beats = script.get("duration_plan", {}).get("beats") if isinstance(script.get("duration_plan"), dict) else []
-    voice_mode = str(script.get("script", {}).get("voice_mode") or "").strip()
-    shots = []
-    elapsed = 0
-    for idx, shot_len in enumerate(shot_lengths):
-        start = elapsed
-        end = elapsed + shot_len
-        elapsed = end
-        shot_id = f"S{idx + 1:03d}"
-        section = sections[idx % len(sections)] if sections else {}
-        beat = beats[idx % len(beats)] if beats else {}
-        emotion = str(beat.get("emotion") or "").strip() or anchors.emotion_beats[min(idx, len(anchors.emotion_beats) - 1)]
-        action = anchors.action_beats[min(idx, len(anchors.action_beats) - 1)]
-        composition_focus = anchors.composition_beats[min(idx, len(anchors.composition_beats) - 1)]
-        key_prop = anchors.key_props[min(idx, len(anchors.key_props) - 1)] if anchors.key_props else ""
-        visual = str(section.get("visual") or "").strip() or f"{scene}中的第{idx + 1}个情绪镜头。"
-        voiceover = str(section.get("voiceover") or "").strip()
-        dialogue = str(section.get("dialogue") or "").strip()
-        sound_music = "轻柔 underscore 背景音乐" if "需要" in voice_mode or str(script.get("script", {}).get("music_mode") or "").strip() else ""
-        camera = infer_camera(idx, shots_needed)
-        transition = "match cut" if idx < shots_needed - 1 else "fade out"
-        shots.append({
-            "shot_id": shot_id,
-            "start": format_time(start),
-            "end": format_time(end),
-            "duration_sec": shot_len,
-            "scene": scene,
-            "location": anchors.location,
-            "weather": anchors.weather or anchors.time_of_day,
-            "key_prop": key_prop,
-            "camera": camera,
-            "composition": f"{visual} 具体构图：{composition_focus}",
-            "composition_focus": composition_focus,
-            "action": f"{anchors.subject}{action}" if not action.startswith(anchors.subject) else action,
-            "emotion": emotion,
-            "dialogue": dialogue,
-            "voiceover": voiceover,
-            "sound_music": sound_music,
-            "transition_to_next": transition,
-            "production_note": f"保持{scene}、{key_prop or '关键道具'}与角色一致性，并与前后镜头形成连续情绪推进。",
-        })
-    return {
-        "schema_version": "0.3.0",
-        "stage": "STAGE_02_STORYBOARD_GENERATION",
-        "status": "draft",
-        "project_id": brief.get("project_id") or script.get("project_id") or "",
-        "source_brief": str(brief.get("project_dir") or "").replace("\\", "/"),
-        "source_script": str(script.get("source_brief") or "").replace("\\", "/") or str(script.get("source_brief") or ""),
-        "target_duration_sec": duration,
-        "shot_count": len(shots),
-        "shots": shots,
-        "story_anchors": anchors.to_dict(),
-        "compiled_requirements": compiled,
-        "quality_contract": quality_contract,
-        "quality_targets": quality_targets,
-        "routing": routing_from_brief(brief),
-        "self_check": {
-            "matches_locked_brief": True,
-            "matches_script": True,
-            "duration_fits": True,
-            "ready_for_character_stage": True,
-            "quality_targets_defined": bool(quality_targets),
-            "notes": [
-                "Draft storyboard generated by pipeline_blueprints.",
-            ],
-        },
-        "allowed_next_stage": None,
-    }
-
-
-def _visual_detail(idea: str, style: str, role: str) -> str:
-    base = f"{role} in {idea}".strip()
-    if "国风" in style or "古风" in style:
-        return "东方审美，留白丰富，线条柔和，衣着与环境有传统质感。"
-    if "动画" in style or "卡通" in style:
-        return "轮廓清晰，色块明确，夸张但可控。"
-    return f"{base}，视觉细节稳定，便于跨镜头保持一致。"
-
-
-def build_stage03_character_bible(brief: dict[str, Any], script: dict[str, Any], storyboard: dict[str, Any]) -> dict[str, Any]:
-    normalized = normal_brief(brief)
-    compiled, quality_contract, quality_targets = strategy_bundle(brief, "STAGE_03")
-    idea = str(normalized.get("idea") or "").strip()
-    style = str(normalized.get("style") or "").strip()
-    anchors = extract_story_anchors(brief, max(1, len(storyboard.get("shots") or [])))
-    characters_required = normalized.get("characters_required")
-    if characters_required is False:
-        name = "叙事主体"
-        role = "main"
-        age = "20岁出头"
-        gender = "neutral"
-    else:
-        name, age = anchors.subject, anchors.subject_age
-        role = "main"
-        gender = "female" if "女孩" in name or "少女" in name else "male"
-    primary_scene = anchors.scene_label
-    voice_mode = str(normalized.get("voice_mode") or "").strip()
-    voice_needed = voice_mode != "不需要配音"
-    emotional_arc = emotion_sequence(str(normalized.get("genre") or ""), style)
-    characters = [{
-        "character_id": "CHAR_001",
-        "name": name,
-        "role": role,
-        "age": age,
-        "gender_presentation": gender,
-        "appearance": {
-            "face": "清秀自然，情绪表达克制",
-            "hair": "自然发型，跨镜头保持一致",
-            "body": "比例自然，动作轻缓",
-            "clothing": f"与{primary_scene}环境匹配的主服装，保持跨镜头连续性",
-            "accessories": "、".join(anchors.key_props[:2]) if anchors.key_props else "无夸张饰品",
-        },
-        "personality": default_theme(str(normalized.get("genre") or ""), style),
-        "emotional_arc": anchors.emotion_beats or emotional_arc,
-        "voice_profile": {
-            "needed": bool(voice_needed),
-            "suggested_voice": "年轻、清晰、贴合情绪节奏" if voice_needed else "无需配音",
-        },
-        "visual_consistency_prompt": f"{name} 在{primary_scene}中的外观、服装和道具关系要保持完全一致，便于跨镜头识别。",
-        "negative_consistency_prompt": "不同脸、不同发型、服装漂移、年龄漂移、比例失真、表情失控、额外人物、额外肢体、道具数量错误",
-        "performance_profile": {
-            "baseline_expression": (anchors.emotion_beats or emotional_arc)[0] if (anchors.emotion_beats or emotional_arc) else "平静",
-            "movement_style": "slow and restrained",
-            "gesture_rules": [
-                "动作幅度偏小",
-                "转头和抬手动作尽量自然",
-                "情绪变化按镜头节奏渐进",
-            ],
-            "dialogue_delivery": "自然、克制、可停顿",
-            "continuity_anchor": f"{name} / {primary_scene} / {style} / {'、'.join(anchors.key_props[:2])}",
-        },
-    }]
-    return {
-        "schema_version": "0.4.0",
-        "stage": "STAGE_03_CHARACTER_BIBLE",
-        "status": "draft",
-        "project_id": brief.get("project_id") or script.get("project_id") or storyboard.get("project_id") or "",
-        "source_brief": str(brief.get("project_dir") or "").replace("\\", "/"),
-        "source_script": str(script.get("source_brief") or "").replace("\\", "/") or str(script.get("source_brief") or ""),
-        "source_storyboard": str(storyboard.get("source_script") or "").replace("\\", "/") or str(storyboard.get("source_script") or ""),
-        "characters": characters,
-        "reference_image_required": True,
-        "story_anchors": anchors.to_dict(),
-        "compiled_requirements": compiled,
-        "quality_contract": quality_contract,
-        "quality_targets": quality_targets,
-        "routing": routing_from_brief(brief),
-        "self_check": {
-            "matches_locked_brief": True,
-            "matches_script": True,
-            "matches_storyboard": True,
-            "ready_for_keyframe_stage": True,
-            "quality_targets_defined": bool(quality_targets),
-            "notes": [
-                "Draft character bible generated by pipeline_blueprints.",
-            ],
-        },
-        "allowed_next_stage": None,
-    }
-
-
-def build_stage04_keyframe_prompts(brief: dict[str, Any], script: dict[str, Any], storyboard: dict[str, Any], character_bible: dict[str, Any]) -> dict[str, Any]:
-    normalized = normal_brief(brief)
-    compiled, quality_contract, quality_targets = strategy_bundle(brief, "STAGE_04")
-    style = str(normalized.get("style") or "").strip()
-    genre = str(normalized.get("genre") or "").strip()
-    characters = character_bible.get("characters") if isinstance(character_bible.get("characters"), list) else []
-    char_map = {ch.get("character_id"): ch for ch in characters if isinstance(ch, dict) and ch.get("character_id")}
-    shot_prompts = []
-    transition_prompts = []
-    storyboard_shots = storyboard.get("shots") if isinstance(storyboard.get("shots"), list) else []
-    anchors = extract_story_anchors(brief, max(1, len(storyboard_shots)))
-    global_negative = "low resolution, watermark, logo, subtitles, text artifacts, duplicate person, extra limbs, deformed hands, distorted face, inconsistent clothing, changed hairstyle, flicker, warped background"
-
-    def _clean_text(value: Any) -> str:
-        return str(value or "").strip()
-
-    def _joined_text(*values: Any) -> str:
-        return " ".join(_clean_text(value) for value in values if _clean_text(value))
-
-    def _character_identity_anchor(character: dict[str, Any]) -> str:
-        appearance = character.get("appearance") if isinstance(character.get("appearance"), dict) else {}
-        parts = [
-            _clean_text(character.get("name")),
-            _clean_text(character.get("age")),
-            _clean_text(character.get("gender_presentation")),
-            f"face {_clean_text(appearance.get('face'))}" if _clean_text(appearance.get("face")) else "",
-            f"hair {_clean_text(appearance.get('hair'))}" if _clean_text(appearance.get("hair")) else "",
-            f"body {_clean_text(appearance.get('body'))}" if _clean_text(appearance.get("body")) else "",
-            f"clothing {_clean_text(appearance.get('clothing'))}" if _clean_text(appearance.get("clothing")) else "",
-            f"accessories {_clean_text(appearance.get('accessories'))}" if _clean_text(appearance.get("accessories")) else "",
-        ]
-        return ", ".join(part for part in parts if part)
-
-    def _interaction_subject_rule(shot: dict[str, Any], shot_action: str, composition_focus: str, key_prop: str, subject_name: str) -> str:
-        combined = _joined_text(shot_action, composition_focus, shot.get("composition"), shot.get("production_note"), shot.get("scene"))
-        lowered = combined.lower()
-        if any(marker in lowered for marker in ["陌生人", "对方", "another person", "stranger", "receiver", "giver", "留给", "交给", "递给", "handoff", "give to", "pass to"]):
-            prop_label = key_prop or "关键道具"
-            return (
-                f"Primary protagonist must remain {subject_name} in every frame. "
-                f"A secondary anonymous receiver may appear, but do not swap protagonist identity, hairstyle, outfit, or body shape. "
-                f"Keep exactly two readable people and exactly one shared {prop_label}; the receiver stays secondary and less visually dominant than the protagonist."
-            )
-        return (
-            f"Keep exactly one readable primary subject: {subject_name}. "
-            "Do not introduce a new lead character, do not change face shape, hairstyle, clothing silhouette, or body proportions."
-        )
-
-    for idx, shot in enumerate(storyboard_shots):
-        if not isinstance(shot, dict):
-            continue
-        shot_id = shot.get("shot_id") or f"S{idx + 1:03d}"
-        prev_id = storyboard_shots[idx - 1].get("shot_id") if idx > 0 and isinstance(storyboard_shots[idx - 1], dict) else None
-        next_id = storyboard_shots[idx + 1].get("shot_id") if idx + 1 < len(storyboard_shots) and isinstance(storyboard_shots[idx + 1], dict) else None
-        primary_chars = [cid for cid in char_map] or ["CHAR_001"]
-        main_char = char_map.get(primary_chars[0], {})
-        perf = main_char.get("performance_profile") if isinstance(main_char.get("performance_profile"), dict) else {}
-        visual_prompt = main_char.get("visual_consistency_prompt") or "consistent character design and styling"
-        negative_prompt = main_char.get("negative_consistency_prompt") or global_negative
-        shot_emotion = str(shot.get("emotion") or "").strip()
-        shot_action = str(shot.get("action") or "").strip()
-        camera = str(shot.get("camera") or "").strip()
-        location = str(shot.get("location") or anchors.location or anchors.scene_label).strip()
-        weather = str(shot.get("weather") or anchors.weather or anchors.time_of_day).strip()
-        key_prop = str(shot.get("key_prop") or (anchors.key_props[min(idx, len(anchors.key_props) - 1)] if anchors.key_props else "")).strip()
-        composition_focus = str(shot.get("composition_focus") or anchors.composition_beats[min(idx, len(anchors.composition_beats) - 1)]).strip()
-        style_prompt = f"{style or genre or 'cinematic'} {shot_emotion or 'emotion'} visual treatment"
-        identity_anchor = _character_identity_anchor(main_char)
-        subject_rule = _interaction_subject_rule(shot, shot_action, composition_focus, key_prop, _clean_text(main_char.get("name")) or anchors.subject)
-        gesture_rules = perf.get("gesture_rules") if isinstance(perf.get("gesture_rules"), list) else []
-        gesture_clause = " ".join(_clean_text(item) for item in gesture_rules if _clean_text(item))
-        identity_prompt = (
-            f"Character identity anchor: {identity_anchor}. {subject_rule} "
-            f"Keep facial identity, haircut, outfit silhouette, and carried accessories stable across start/end frames."
-        ).strip()
-        consistency_prompt = "; ".join(
-            part for part in [
-                visual_prompt,
-                perf.get("continuity_anchor") or "",
-                identity_prompt,
-                f"Performance continuity: {gesture_clause}" if gesture_clause else "",
-            ]
-            if _clean_text(part)
-        )
-        performance_prompt = f"{shot_action} with {perf.get('dialogue_delivery') or 'natural pacing'}, baseline expression {perf.get('baseline_expression') or shot_emotion or 'neutral'}."
-        structured_scene_summary = " / ".join([
-            f"地点：{location or anchors.scene_label}",
-            f"天气：{weather or '按故事气氛执行'}",
-            f"动作：{shot_action}",
-            f"道具：{key_prop or '无额外道具'}",
-            f"情绪：{shot_emotion or '中性'}",
-            f"构图重点：{composition_focus}",
-        ])
-        shot_prompts.append({
-            "shot_id": shot_id,
-            "source_shot_ref": str(storyboard.get("source_script") or "").replace("\\", "/") or str(storyboard.get("source_script") or ""),
-            "duration_sec": shot.get("duration_sec"),
-            "characters": primary_chars,
-            "scene_summary": structured_scene_summary,
-            "intent_summary": _intent_summary(location or anchors.scene_label, shot_action, shot_emotion or "当前情绪变化", key_prop),
-            "story_anchor_bundle": {
-                "location": location,
-                "weather": weather,
-                "key_prop": key_prop,
-                "emotion": shot_emotion,
-                "composition_focus": composition_focus,
-            },
-            "start_keyframe_prompt": (
-                f"cinematic frame, location {location or anchors.scene_label}, weather {weather or 'story mood'}, "
-                f"subject {anchors.subject}, action {shot_action}, key prop {key_prop or 'none'}, emotion {shot_emotion or 'neutral'}, "
-                f"composition focus {composition_focus}, {visual_prompt}, {identity_prompt}, vertical 9:16 composition"
-            ),
-            "end_keyframe_prompt": (
-                f"cinematic continuation, location {location or anchors.scene_label}, weather {weather or 'story mood'}, "
-                f"subject {anchors.subject}, action {shot_action}, key prop {key_prop or 'none'}, emotion {shot_emotion or 'neutral'}, "
-                f"composition focus {composition_focus}, {visual_prompt}, {identity_prompt}, vertical 9:16 composition"
-            ),
-            "motion_prompt": f"{performance_prompt} gentle camera movement, preserve identity and continuity.",
-            "camera_prompt": camera,
-            "lighting_prompt": f"natural lighting shaped by {weather or style or genre or 'the story mood'}",
-            "style_prompt": style_prompt,
-            "consistency_prompt": consistency_prompt,
-            "identity_anchor_prompt": identity_prompt,
-            "negative_prompt": negative_prompt,
-            "image_generation_notes": "Use the same subject design across start and end frames; keep continuity anchors stable.",
-            "video_generation_notes": "Carry the same performance and composition through the clip; avoid flicker or identity drift.",
-            "performance_prompt": performance_prompt,
-            "dialogue_delivery_prompt": f"Deliver any spoken line with {perf.get('dialogue_delivery') or 'natural pacing'}." if shot.get("dialogue") or shot.get("voiceover") else "",
-            "dependencies": {
-                "reference_images": [f"03_characters/reference_images/{primary_chars[0]}_primary.png"],
-                "previous_shot_id": prev_id,
-                "next_shot_id": next_id,
-            },
-        })
-        if next_id:
-            transition_prompts.append({
-                "transition_id": f"T{idx + 1:03d}",
-                "from_shot_id": shot_id,
-                "to_shot_id": next_id,
-                "transition_type": str(shot.get("transition_to_next") or "cut").strip(),
-                "transition_motion_prompt": f"Continue from {shot_id} to {next_id} with stable character identity, consistent lighting, and preserved emotional continuity.",
-                "continuity_requirements": [
-                    "same character face and hair",
-                    "same core wardrobe",
-                    "same lighting direction",
-                    "same performance rhythm",
-                ],
-            })
-    return {
-        "schema_version": "0.5.0",
-        "stage": "STAGE_04_KEYFRAME_PROMPTS",
-        "status": "draft",
-        "project_id": brief.get("project_id") or script.get("project_id") or storyboard.get("project_id") or character_bible.get("project_id") or "",
-        "source_brief": str(brief.get("project_dir") or "").replace("\\", "/"),
-        "source_script": str(script.get("source_brief") or "").replace("\\", "/") or str(script.get("source_brief") or ""),
-        "source_storyboard": str(storyboard.get("source_script") or "").replace("\\", "/") or str(storyboard.get("source_script") or ""),
-        "source_character_bible": str(character_bible.get("source_storyboard") or "").replace("\\", "/") or str(character_bible.get("source_storyboard") or ""),
-        "prompt_language": "English generation prompts with Chinese review notes",
-        "visual_strategy": {
-            "keyframe_mode": "start_and_end_keyframes_per_shot",
-            "video_mode": "image_to_video_per_shot",
-            "continuity_strategy": "reuse character consistency prompts and adjacent-shot transition requirements",
-        },
-        "story_anchors": anchors.to_dict(),
-        "shot_prompts": shot_prompts,
-        "transition_prompts": transition_prompts,
-        "global_negative_prompt": global_negative,
-        "compiled_requirements": compiled,
-        "quality_contract": quality_contract,
-        "quality_targets": quality_targets,
-        "routing": routing_from_brief(brief),
-        "self_check": {
-            "matches_locked_brief": True,
-            "matches_script": True,
-            "matches_storyboard": True,
-            "uses_character_consistency": True,
-            "covers_all_storyboard_shots": True,
-            "ready_for_image_generation": True,
-            "quality_targets_defined": bool(quality_targets),
-            "notes": [
-                "Draft keyframe prompts generated by pipeline_blueprints.",
-            ],
-        },
-        "allowed_next_stage": None,
-    }

@@ -173,6 +173,15 @@ If there are multiple possible latest projects and the target is ambiguous, ask 
 
 Follow the same one-question wizard defined by `$video-project-intake`.
 
+Before asking any Stage 00 question, reread these two sources and follow them exactly:
+
+- `skills/video-project-intake/references/first_layer_options.md`
+- `skills/video-project-intake/references/stage00_question_blocks.md`
+
+`first_layer_options.md` is the canonical normalization map.
+`stage00_question_blocks.md` is the canonical user-visible menu text.
+Do not invent an alternate Stage 00 menu, do not remap option letters, and do not paraphrase the choice list into a different taxonomy.
+
 Question 1: story idea.
 Question 2: target duration.
 Question 3: video genre.
@@ -218,6 +227,8 @@ B. 修改某一项
 C. 重新填写
 ```
 
+The confirmation menu must keep these letters and meanings stable.
+
 5. If user confirms A, lock the brief:
 
 ```bash
@@ -244,6 +255,20 @@ Read:
 <project_dir>/00_intake/project_brief.locked.json
 ```
 
+Run:
+
+```bash
+python skills/video-production-pipeline/scripts/run_stage01_from_locked_brief.py <project_dir>/00_intake/project_brief.locked.json <project_dir>/01_script/script.json
+```
+
+This Stage 01 runtime must automatically do the full Codex-first chain:
+
+1. write `<project_dir>/01_script/stage01_prompt_packet.json`
+2. call Codex in the current environment to generate `<project_dir>/01_script/stage01_llm_output.json`
+3. render official Stage 01 outputs
+4. run final validation
+5. if validation fails, build `stage01_repair_packet.json` and let Codex retry within the allowed repair loop
+
 Create:
 
 ```text
@@ -257,14 +282,6 @@ Create:
 ```
 
 Follow the creative rules from `$video-script-generation`.
-
-Validate:
-
-```bash
-python skills/video-script-generation/scripts/validate_script.py --mode final <project_dir>/01_script/script.json
-```
-
-If validation fails, fix `script.json` and run validation again.
 
 After Stage 01 succeeds, ask:
 

@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Stage 03 LLM Output",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "characters",
+    "reference_image_required",
+    "self_check"
+  ],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["draft", "confirmed"]
+    },
+    "characters": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "character_id",
+          "name",
+          "role",
+          "age",
+          "gender_presentation",
+          "appearance",
+          "personality",
+          "emotional_arc",
+          "voice_profile",
+          "visual_consistency_prompt",
+          "negative_consistency_prompt"
+        ],
+        "properties": {
+          "character_id": {"type": "string"},
+          "name": {"type": "string"},
+          "role": {"type": "string"},
+          "age": {"type": "string"},
+          "gender_presentation": {"type": "string"},
+          "appearance": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["face", "hair", "body", "clothing", "accessories"],
+            "properties": {
+              "face": {"type": "string"},
+              "hair": {"type": "string"},
+              "body": {"type": "string"},
+              "clothing": {"type": "string"},
+              "accessories": {"type": "string"}
+            }
+          },
+          "personality": {"type": "string"},
+          "emotional_arc": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "string"}
+          },
+          "voice_profile": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["needed", "suggested_voice"],
+            "properties": {
+              "needed": {"type": "boolean"},
+              "suggested_voice": {"type": "string"}
+            }
+          },
+          "visual_consistency_prompt": {"type": "string"},
+          "negative_consistency_prompt": {"type": "string"},
+          "performance_profile": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      }
+    },
+    "reference_image_required": {
+      "type": "boolean"
+    },
+    "self_check": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "matches_locked_brief",
+        "matches_script",
+        "matches_storyboard",
+        "ready_for_keyframe_stage"
+      ],
+      "properties": {
+        "matches_locked_brief": {"type": "boolean"},
+        "matches_script": {"type": "boolean"},
+        "matches_storyboard": {"type": "boolean"},
+        "ready_for_keyframe_stage": {"type": "boolean"},
+        "notes": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    }
+  }
+}

@@ -30,6 +30,7 @@ new_keyframe_image_jobs = load_module("new_keyframe_image_jobs_comfy_test", IMAG
 validate_keyframe_image_manifest = load_module("validate_keyframe_image_manifest_comfy_test", IMAGES / "validate_keyframe_image_manifest.py")
 run_comfyui_txt2img = load_module("run_comfyui_txt2img_test", PROVIDERS / "run_comfyui_txt2img.py")
 workflow_mapping = load_module("workflow_mapping_test", PROVIDERS / "workflow_mapping.py")
+comfyui_ui_workflow = load_module("comfyui_ui_workflow_test", PROVIDERS / "comfyui_ui_workflow.py")
 build_stage05_zimage_photo_bridge = load_module(
     "build_stage05_zimage_photo_bridge_test",
     PROVIDERS / "build_stage05_zimage_photo_bridge.py",
@@ -135,6 +136,7 @@ def _write_mapping_and_workflow(tmp_path: Path) -> tuple[Path, dict[str, Path]]:
         "txt2img_keyframe",
         "txt2img_keyframe_realistic",
         "txt2img_keyframe_realistic_zimage_photo_bridge",
+        "stage05_realistic_cinematic_amazing_z_photo_original",
         "txt2img_keyframe_shortdrama_qwen_edit_reference",
         "txt2img_keyframe_shortdrama_qwen_edit_dual_reference",
         "txt2img_keyframe_stylized_zimage_image_b_bridge",
@@ -153,12 +155,14 @@ def _write_mapping_and_workflow(tmp_path: Path) -> tuple[Path, dict[str, Path]]:
         "txt2img_keyframe_guofeng": "txt2img_keyframe_guofeng",
         "txt2img_keyframe_stylized": "txt2img_keyframe_stylized",
         "stage05_realistic_cinematic": "txt2img_keyframe_realistic_zimage_photo_bridge",
+        "stage05_realistic_cinematic_qwen2512_prompt_only": "txt2img_keyframe_realistic",
         "stage05_realistic_cinematic_qwen_edit_reference": "txt2img_keyframe_shortdrama_qwen_edit_reference",
         "stage05_realistic_cinematic_qwen_edit_dual_reference": "txt2img_keyframe_shortdrama_qwen_edit_dual_reference",
         "stage05_shortdrama_realistic": "txt2img_keyframe_realistic",
         "stage05_shortdrama_realistic_qwen_edit_reference": "txt2img_keyframe_shortdrama_qwen_edit_reference",
         "stage05_shortdrama_realistic_qwen_edit_dual_reference": "txt2img_keyframe_shortdrama_qwen_edit_dual_reference",
         "stage05_realistic_cinematic_zimage_photo_bridge": "txt2img_keyframe_realistic_zimage_photo_bridge",
+        "stage05_realistic_cinematic_amazing_z_photo_original": "stage05_realistic_cinematic_amazing_z_photo_original",
         "stage05_anime_jp": "txt2img_keyframe_anime",
         "stage05_anime_cn_newguofeng": "txt2img_keyframe_anime_cn_newguofeng",
         "stage05_western_cartoon": "txt2img_keyframe_anime",
@@ -171,7 +175,22 @@ def _write_mapping_and_workflow(tmp_path: Path) -> tuple[Path, dict[str, Path]]:
     mapping_workflows: dict[str, dict] = {}
     for workflow_name in workflow_names:
         workflow_path = tmp_path / f"{workflow_name}.workflow_api.json"
-        if workflow_name in {"txt2img_keyframe_shortdrama_qwen_edit_reference", "txt2img_keyframe_shortdrama_qwen_edit_dual_reference"}:
+        if workflow_name == "stage05_realistic_cinematic_amazing_z_photo_original":
+            workflow_payload = {
+                "nodes": [
+                    {"id": 57, "type": "PrimitiveNode", "widgets_values": ["placeholder prompt"]},
+                    {"id": 88, "type": "Fast Muter (rgthree)", "mode": 0},
+                    {"id": 90, "type": "PrimitiveString", "widgets_values": ["{$@}"], "mode": 0},
+                    {"id": 38, "type": "PrimitiveStringMultiline", "widgets_values": ["PRODUCTION {$@}"], "mode": 2},
+                    {"id": 92, "type": "PrimitiveStringMultiline", "widgets_values": ["CLASSIC {$@}"], "mode": 2},
+                    {"id": 459, "type": "PrimitiveStringMultiline", "widgets_values": ["DOCUMENTARY {$@}"], "mode": 2},
+                    {"id": 307, "type": "PrimitiveInt", "widgets_values": [1, "fixed"]},
+                    {"id": 243, "type": "PrimitiveInt", "widgets_values": [1088, "fixed"]},
+                    {"id": 248, "type": "PrimitiveInt", "widgets_values": [1600, "fixed"]},
+                    {"id": 9, "type": "SaveImage", "widgets_values": ["ZImage/test/ZI"]},
+                ]
+            }
+        elif workflow_name in {"txt2img_keyframe_shortdrama_qwen_edit_reference", "txt2img_keyframe_shortdrama_qwen_edit_dual_reference"}:
             workflow_payload = {
                 "10": {"inputs": {"image": "reference.png"}, "class_type": "LoadImage"},
                 "11": {"inputs": {"image": "reference_context.png"}, "class_type": "LoadImage"},
@@ -207,6 +226,29 @@ def _write_mapping_and_workflow(tmp_path: Path) -> tuple[Path, dict[str, Path]]:
                 "capabilities": {
                     "supports_reference_images": True,
                     "supported_control_modes": ["prompt_only", "reference_guided"],
+                },
+            }
+        elif workflow_name == "stage05_realistic_cinematic_amazing_z_photo_original":
+            mapping_workflows[mapping_key] = {
+                "file": str(workflow_paths[workflow_name]).replace("\\", "/"),
+                "workflow_format": "ui_graph",
+                "nodes": {
+                    "positive_prompt": {"node_id": "57", "control": "widget_value", "widget_index": 0},
+                    "style_selector": {
+                        "node_id": "88",
+                        "control": "choice_set_mode",
+                        "default_choice": "none",
+                        "choices": {
+                            "none": {"node_id": "90"},
+                            "production_photo": {"node_id": "38"},
+                            "classic_film_photo": {"node_id": "92"},
+                            "street_documentary_photo": {"node_id": "459"},
+                        },
+                    },
+                    "seed": {"node_id": "307", "control": "widget_value", "widget_index": 0},
+                    "short_side": {"node_id": "243", "control": "widget_value", "widget_index": 0},
+                    "long_side": {"node_id": "248", "control": "widget_value", "widget_index": 0},
+                    "output_prefix": {"node_id": "9", "control": "widget_value", "widget_index": 0},
                 },
             }
         else:
@@ -380,13 +422,16 @@ def test_workflow_mapping_applies_single_replacement_to_multiple_nodes(tmp_path:
 
 def test_repo_route_specific_mapping_entries_use_distinct_workflow_files() -> None:
     mapping_data, _ = workflow_mapping.load_workflow_mapping(ROOT / "config" / "workflow_node_mapping.yaml")
+    anime_jp = workflow_mapping.get_workflow_mapping(mapping_data, "stage05_anime_jp")
     direct_anime_cn = workflow_mapping.get_workflow_mapping(mapping_data, "txt2img_keyframe_anime_cn_newguofeng")
     direct_guofeng = workflow_mapping.get_workflow_mapping(mapping_data, "txt2img_keyframe_guofeng_ink")
     direct_stylized = workflow_mapping.get_workflow_mapping(mapping_data, "txt2img_keyframe_stylized_concept")
     anime_cn = workflow_mapping.get_workflow_mapping(mapping_data, "stage05_anime_cn_newguofeng")
+    western_cartoon = workflow_mapping.get_workflow_mapping(mapping_data, "stage05_western_cartoon")
     guofeng = workflow_mapping.get_workflow_mapping(mapping_data, "stage05_guofeng_ink")
     stylized = workflow_mapping.get_workflow_mapping(mapping_data, "stage05_stylized_concept")
     realistic_bridge = workflow_mapping.get_workflow_mapping(mapping_data, "stage05_realistic_cinematic_zimage_photo_bridge")
+    realistic_original = workflow_mapping.get_workflow_mapping(mapping_data, "stage05_realistic_cinematic_amazing_z_photo_original")
     realistic_reference = workflow_mapping.get_workflow_mapping(mapping_data, "stage05_realistic_cinematic_qwen_edit_reference")
     realistic_dual_reference = workflow_mapping.get_workflow_mapping(mapping_data, "stage05_realistic_cinematic_qwen_edit_dual_reference")
     shortdrama_reference = workflow_mapping.get_workflow_mapping(mapping_data, "stage05_shortdrama_realistic_qwen_edit_reference")
@@ -396,10 +441,13 @@ def test_repo_route_specific_mapping_entries_use_distinct_workflow_files() -> No
     assert direct_anime_cn["file"].endswith("txt2img_keyframe_anime_cn_newguofeng.workflow_api.json")
     assert direct_guofeng["file"].endswith("txt2img_keyframe_guofeng_ink.workflow_api.json")
     assert direct_stylized["file"].endswith("txt2img_keyframe_stylized_concept.workflow_api.json")
+    assert anime_jp["file"].endswith("user/default/workflows/Zimage/amazing-z-image-a_SAFETENSORS.json")
     assert anime_cn["file"].endswith("txt2img_keyframe_anime_cn_newguofeng.workflow_api.json")
+    assert western_cartoon["file"].endswith("user/default/workflows/Zimage/amazing-z-comics_SAFETENSORS.json")
     assert guofeng["file"].endswith("txt2img_keyframe_guofeng_ink.workflow_api.json")
     assert stylized["file"].endswith("txt2img_keyframe_stylized_zimage_image_b_bridge.workflow_api.json")
     assert realistic_bridge["file"].endswith("txt2img_keyframe_realistic_zimage_photo_bridge.workflow_api.json")
+    assert realistic_original["file"].endswith("user/default/workflows/Zimage/amazing-z-photo_SAFETENSORS.json")
     assert realistic_reference["file"].endswith("txt2img_keyframe_shortdrama_qwen_edit_reference.workflow_api.json")
     assert realistic_dual_reference["file"].endswith("txt2img_keyframe_shortdrama_qwen_edit_dual_reference.workflow_api.json")
     assert shortdrama_reference["file"].endswith("txt2img_keyframe_shortdrama_qwen_edit_reference.workflow_api.json")
@@ -442,6 +490,35 @@ def test_repo_route_specific_workflows_expose_required_nodes() -> None:
         assert updated[seed_node_id]["inputs"][entry["nodes"]["seed"]["input_name"]] == 123
         assert updated[width_node_id]["inputs"][entry["nodes"]["width"]["input_name"]] == 896
         assert updated[height_node_id]["inputs"][entry["nodes"]["height"]["input_name"]] == 1536
+
+
+def test_ui_graph_mapping_applies_original_amazing_z_control_points(tmp_path: Path) -> None:
+    mapping_path, _ = _write_mapping_and_workflow(tmp_path)
+    mapping_data, _ = workflow_mapping.load_workflow_mapping(mapping_path)
+    workflow, entry, _ = workflow_mapping.load_mapped_workflow(mapping_data, "stage05_realistic_cinematic_amazing_z_photo_original")
+    assert comfyui_ui_workflow.resolve_workflow_format(entry) == "ui_graph"
+    updated = comfyui_ui_workflow.apply_ui_node_inputs(
+        workflow,
+        entry["nodes"],
+        {
+            "positive_prompt": "single woman walking along the shoreline at sunset",
+            "style_selector": "classic_film_photo",
+            "seed": 2468,
+            "short_side": 960,
+            "long_side": 1664,
+            "output_prefix": "Stage05/IMG_S001_START",
+        },
+    )
+    nodes_by_id = {str(node["id"]): node for node in updated["nodes"]}
+    assert nodes_by_id["57"]["widgets_values"][0] == "single woman walking along the shoreline at sunset"
+    assert nodes_by_id["90"]["mode"] == 2
+    assert nodes_by_id["38"]["mode"] == 2
+    assert nodes_by_id["92"]["mode"] == 0
+    assert nodes_by_id["459"]["mode"] == 2
+    assert nodes_by_id["307"]["widgets_values"][0] == 2468
+    assert nodes_by_id["243"]["widgets_values"][0] == 960
+    assert nodes_by_id["248"]["widgets_values"][0] == 1664
+    assert nodes_by_id["9"]["widgets_values"][0] == "Stage05/IMG_S001_START"
 
 
 def test_repo_shortdrama_reference_bridge_accepts_reference_image_path() -> None:
@@ -733,6 +810,37 @@ def test_build_provider_prompt_adds_prop_guardrails_for_umbrella_scenes() -> Non
     assert "logo" in prompt
 
 
+def test_build_provider_prompt_adds_realistic_establishing_guardrails() -> None:
+    prompt = run_comfyui_txt2img.build_provider_prompt({
+        "prompt": "single woman walking along the shoreline at sunset",
+        "style_prompt": "realistic cinematic still",
+        "consistency_prompt": "same woman, same beach, same dress",
+        "camera_prompt": "wide shot",
+        "negative_prompt": "low resolution",
+        "stage05_route_key": "realistic_cinematic",
+        "reference_guidance_override_reason": "prompt_only_establishing_shot_guardrail",
+    })
+    assert "true environmental establishing shot" in prompt
+    assert "not a behind-the-scenes production still" in prompt
+    assert "film set" in prompt
+    assert "camera rig" in prompt
+
+
+def test_build_provider_prompt_adds_guofeng_scenic_guardrails() -> None:
+    prompt = run_comfyui_txt2img.build_provider_prompt({
+        "prompt": "ancient Chinese woman holding one oil-paper umbrella in misty rain",
+        "style_prompt": "guofeng ink wash illustration",
+        "consistency_prompt": "same woman, same umbrella, same hanfu",
+        "camera_prompt": "medium scenic shot",
+        "negative_prompt": "low resolution",
+        "stage05_route_key": "guofeng_ink",
+    })
+    assert "medium scenic guofeng frame" in prompt
+    assert "visible rain atmosphere" in prompt
+    assert "not a face-dominant beauty portrait" in prompt
+    assert "cropped umbrella canopy" in prompt
+
+
 def test_build_provider_prompt_adds_clean_artwork_guardrails_for_game_cg() -> None:
     prompt = run_comfyui_txt2img.build_provider_prompt({
         "prompt": "heroic rider crossing a plateau, game key art",
@@ -763,28 +871,28 @@ def test_run_comfyui_txt2img_dry_run_writes_request_manifest_only(tmp_path: Path
     manifest = json.loads(manifest_json.read_text(encoding="utf-8"))
     assert manifest["style_family"] == "realistic"
     assert manifest["stage05_route_key"] == "realistic_cinematic"
-    assert manifest["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic"
-    assert manifest["comfyui_model_id"] == "Tongyi-MAI/Z-Image"
-    assert manifest["preferred_comfyui_workflow_candidate"] == "txt2img_keyframe_realistic_zimage_photo_bridge"
-    assert manifest["preferred_comfyui_model_candidate"] == "Tongyi-MAI/Z-Image"
-    assert manifest["route_migration_state"] == "repo_transitional"
-    assert manifest["preferred_comfyui_workflow_source_ref"] == "workflows/comfyui/txt2img_keyframe_realistic_zimage_photo_bridge.workflow_api.json"
+    assert manifest["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_qwen2512_prompt_only"
+    assert manifest["comfyui_model_id"] == "Qwen/Qwen-Image-2512"
+    assert manifest["preferred_comfyui_workflow_candidate"] == "txt2img_keyframe_realistic"
+    assert manifest["preferred_comfyui_model_candidate"] == "Qwen/Qwen-Image-2512"
+    assert manifest["route_migration_state"] == "official_fallback_for_semantic_alignment"
+    assert manifest["preferred_comfyui_workflow_source_ref"] == "workflows/comfyui/txt2img_keyframe_realistic.workflow_api.json"
     assert manifest["preferred_comfyui_workflow_format"] == "api_workflow"
     assert manifest["preferred_comfyui_workflow_custom_node_dependencies"] == []
     assert manifest["preferred_comfyui_workflow_import_blockers"] == []
     assert manifest["comfyui_optimization_profile"] == "balanced"
     assert manifest["comfyui_optimization_profile_label"] == "Balanced"
     assert manifest["comfyui_optimization"]["profile_key"] == "balanced"
-    assert manifest["comfyui_optimization"]["workflow_mapping_key"] == "stage05_realistic_cinematic"
+    assert manifest["comfyui_optimization"]["workflow_mapping_key"] == "stage05_realistic_cinematic_qwen2512_prompt_only"
     assert manifest["route_resolution"]["used_registry"] is True
     assert manifest["comfyui_workflow_router"]["realistic"] == "txt2img_keyframe_realistic"
     assert all(job["style_family"] == "realistic" for job in manifest["jobs"])
     assert all(job["stage05_route_key"] == "realistic_cinematic" for job in manifest["jobs"])
-    assert all(job["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic" for job in manifest["jobs"])
-    assert all(job["comfyui_workflow_name"] == "txt2img_keyframe_realistic_zimage_photo_bridge" for job in manifest["jobs"])
-    assert all(job["preferred_comfyui_workflow_candidate"] == "txt2img_keyframe_realistic_zimage_photo_bridge" for job in manifest["jobs"])
-    assert all(job["preferred_comfyui_model_candidate"] == "Tongyi-MAI/Z-Image" for job in manifest["jobs"])
-    assert all(job["route_migration_state"] == "repo_transitional" for job in manifest["jobs"])
+    assert all(job["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_qwen2512_prompt_only" for job in manifest["jobs"])
+    assert all(job["comfyui_workflow_name"] == "txt2img_keyframe_realistic" for job in manifest["jobs"])
+    assert all(job["preferred_comfyui_workflow_candidate"] == "txt2img_keyframe_realistic" for job in manifest["jobs"])
+    assert all(job["preferred_comfyui_model_candidate"] == "Qwen/Qwen-Image-2512" for job in manifest["jobs"])
+    assert all(job["route_migration_state"] == "official_fallback_for_semantic_alignment" for job in manifest["jobs"])
     assert all(job["preferred_comfyui_workflow_format"] == "api_workflow" for job in manifest["jobs"])
     assert all(job["comfyui_optimization_profile"] == "balanced" for job in manifest["jobs"])
     assert all(job["comfyui_optimization_profile_label"] == "Balanced" for job in manifest["jobs"])
@@ -793,36 +901,107 @@ def test_run_comfyui_txt2img_dry_run_writes_request_manifest_only(tmp_path: Path
     assert request_manifest["workflow_selection_mode"] == "stage05_route_registry"
     assert request_manifest["stage05_route_key"] == "realistic_cinematic"
     assert request_manifest["route_resolution_mode"] == "stage00_style_registry"
-    assert request_manifest["workflow_mapping_key"] == "stage05_realistic_cinematic"
-    assert request_manifest["workflow_mapping_keys"] == ["stage05_realistic_cinematic"]
-    assert request_manifest["comfyui_model_id"] == "Tongyi-MAI/Z-Image"
-    assert request_manifest["preferred_comfyui_workflow_candidate"] == "txt2img_keyframe_realistic_zimage_photo_bridge"
-    assert request_manifest["preferred_comfyui_model_candidate"] == "Tongyi-MAI/Z-Image"
-    assert request_manifest["route_migration_state"] == "repo_transitional"
-    assert request_manifest["preferred_comfyui_workflow_source_ref"] == "workflows/comfyui/txt2img_keyframe_realistic_zimage_photo_bridge.workflow_api.json"
+    assert request_manifest["workflow_mapping_key"] == "stage05_realistic_cinematic_qwen2512_prompt_only"
+    assert request_manifest["workflow_mapping_keys"] == ["stage05_realistic_cinematic_qwen2512_prompt_only"]
+    assert request_manifest["comfyui_model_id"] == "Qwen/Qwen-Image-2512"
+    assert request_manifest["preferred_comfyui_workflow_candidate"] == "txt2img_keyframe_realistic"
+    assert request_manifest["preferred_comfyui_model_candidate"] == "Qwen/Qwen-Image-2512"
+    assert request_manifest["route_migration_state"] == "official_fallback_for_semantic_alignment"
+    assert request_manifest["preferred_comfyui_workflow_source_ref"] == "workflows/comfyui/txt2img_keyframe_realistic.workflow_api.json"
     assert request_manifest["preferred_comfyui_workflow_format"] == "api_workflow"
     assert request_manifest["preferred_comfyui_workflow_custom_node_dependencies"] == []
     assert request_manifest["preferred_comfyui_workflow_import_blockers"] == []
     assert request_manifest["optimization_profile"] == "balanced"
     assert request_manifest["optimization_profile_label"] == "Balanced"
-    assert request_manifest["workflow_path"] == str(workflow_paths["txt2img_keyframe_realistic_zimage_photo_bridge"]).replace("\\", "/")
-    assert request_manifest["workflow_paths"] == [str(workflow_paths["txt2img_keyframe_realistic_zimage_photo_bridge"]).replace("\\", "/")]
+    assert request_manifest["workflow_path"] == str(workflow_paths["txt2img_keyframe_realistic"]).replace("\\", "/")
+    assert request_manifest["workflow_paths"] == [str(workflow_paths["txt2img_keyframe_realistic"]).replace("\\", "/")]
     assert len(request_manifest["requests"]) == 2
     assert all(item["status"] == "planned" for item in request_manifest["requests"])
     assert all(item["stage05_route_key"] == "realistic_cinematic" for item in request_manifest["requests"])
     assert all(item["style_family"] == "realistic" for item in request_manifest["requests"])
-    assert all(item["workflow_mapping_key"] == "stage05_realistic_cinematic" for item in request_manifest["requests"])
-    assert all(item["comfyui_model_id"] == "Tongyi-MAI/Z-Image" for item in request_manifest["requests"])
-    assert all(item["workflow_name"] == "txt2img_keyframe_realistic_zimage_photo_bridge" for item in request_manifest["requests"])
-    assert all(item["preferred_comfyui_workflow_candidate"] == "txt2img_keyframe_realistic_zimage_photo_bridge" for item in request_manifest["requests"])
-    assert all(item["preferred_comfyui_model_candidate"] == "Tongyi-MAI/Z-Image" for item in request_manifest["requests"])
-    assert all(item["route_migration_state"] == "repo_transitional" for item in request_manifest["requests"])
+    assert all(item["workflow_mapping_key"] == "stage05_realistic_cinematic_qwen2512_prompt_only" for item in request_manifest["requests"])
+    assert all(item["comfyui_model_id"] == "Qwen/Qwen-Image-2512" for item in request_manifest["requests"])
+    assert all(item["workflow_name"] == "txt2img_keyframe_realistic" for item in request_manifest["requests"])
+    assert all(item["preferred_comfyui_workflow_candidate"] == "txt2img_keyframe_realistic" for item in request_manifest["requests"])
+    assert all(item["preferred_comfyui_model_candidate"] == "Qwen/Qwen-Image-2512" for item in request_manifest["requests"])
+    assert all(item["route_migration_state"] == "official_fallback_for_semantic_alignment" for item in request_manifest["requests"])
     assert all(item["preferred_comfyui_workflow_format"] == "api_workflow" for item in request_manifest["requests"])
     assert all(item["comfyui_optimization_profile"] == "balanced" for item in request_manifest["requests"])
     assert all(item["comfyui_optimization_profile_label"] == "Balanced" for item in request_manifest["requests"])
     assert all(item["width"] == 896 for item in request_manifest["requests"])
     assert all(item["height"] == 1344 for item in request_manifest["requests"])
     assert not any((manifest_json.parent / "keyframes").glob("*.png"))
+
+
+def test_run_comfyui_txt2img_ui_graph_route_converts_original_workflow(monkeypatch, tmp_path: Path) -> None:
+    manifest_json = _prepare_manifest(tmp_path)
+    mapping_path, _ = _write_mapping_and_workflow(tmp_path)
+    manifest = json.loads(manifest_json.read_text(encoding="utf-8"))
+    for job in manifest["jobs"]:
+        job["comfyui_style_selector"] = "production_photo"
+    manifest_json.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    captured_workflows: list[dict] = []
+
+    def _fake_convert(workflow: dict, *, base_url: str, script_path=None, node_modules_dir=None) -> dict:
+        captured_workflows.append(workflow)
+        return {
+            "prompt": {
+                "9": {
+                    "inputs": {
+                        "filename_prefix": "Stage05/IMG_S001_START",
+                    },
+                    "class_type": "SaveImage",
+                }
+            },
+            "extra_data": {
+                "extra_pnginfo": {
+                    "workflow": workflow,
+                }
+            },
+        }
+
+    monkeypatch.setattr(run_comfyui_txt2img.comfyui_ui_workflow, "convert_ui_workflow_to_prompt", _fake_convert)
+
+    output_root = tmp_path / "comfy_output"
+    server, thread = _start_server("success", output_root=output_root)
+    try:
+        config_path = _write_config(tmp_path, base_url=f"http://127.0.0.1:{server.server_port}", output_root=output_root)
+        assert run_comfyui_txt2img.main([
+            str(manifest_json),
+            "--config", str(config_path),
+            "--mapping", str(mapping_path),
+            "--workflow-name", "stage05_realistic_cinematic_amazing_z_photo_original",
+            "--poll-interval", "0.01",
+            "--max-wait-seconds", "2",
+        ]) == 0
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
+
+    assert len(captured_workflows) == 2
+    first_nodes = {str(node["id"]): node for node in captured_workflows[0]["nodes"]}
+    second_nodes = {str(node["id"]): node for node in captured_workflows[1]["nodes"]}
+    assert "落日海滩" in first_nodes["57"]["widgets_values"][0]
+    assert "continuation of S001" in second_nodes["57"]["widgets_values"][0]
+    assert first_nodes["90"]["mode"] == 2
+    assert first_nodes["38"]["mode"] == 0
+    assert first_nodes["92"]["mode"] == 2
+    assert second_nodes["90"]["mode"] == 2
+    assert second_nodes["38"]["mode"] == 0
+    assert second_nodes["92"]["mode"] == 2
+    assert first_nodes["243"]["widgets_values"][0] == 896
+    assert first_nodes["248"]["widgets_values"][0] == 1344
+    assert second_nodes["243"]["widgets_values"][0] == 896
+    assert second_nodes["248"]["widgets_values"][0] == 1344
+    assert first_nodes["9"]["widgets_values"][0] == "Stage05/IMG_S001_START"
+    assert second_nodes["9"]["widgets_values"][0] == "Stage05/IMG_S001_END"
+    submitted_payload = _FakeComfyTxt2ImgHandler.requests[0]
+    assert "extra_data" in submitted_payload
+    request_manifest = json.loads((manifest_json.parent / "comfyui_image_requests.json").read_text(encoding="utf-8"))
+    assert request_manifest["workflow_mapping_key"] == "stage05_realistic_cinematic_amazing_z_photo_original"
+    assert request_manifest["workflow_path"].endswith("stage05_realistic_cinematic_amazing_z_photo_original.workflow_api.json")
 
 
 def test_run_comfyui_txt2img_reference_guided_route_stages_reference_image(tmp_path: Path) -> None:
@@ -1013,27 +1192,27 @@ def test_run_comfyui_txt2img_success_updates_manifest_and_passes_validator(tmp_p
         assert all(job["provider"] == "comfyui_txt2img" for job in data["jobs"])
         assert all(
             job["notes"].startswith(
-                "route=realistic_cinematic; route_state=repo_transitional; preferred_workflow=txt2img_keyframe_realistic_zimage_photo_bridge; profile=balanced; size=896x1344; mapping=stage05_realistic_cinematic; workflow=txt2img_keyframe_realistic_zimage_photo_bridge;"
+                "route=realistic_cinematic; route_state=official_fallback_for_semantic_alignment; preferred_workflow=txt2img_keyframe_realistic; profile=balanced; size=896x1344; mapping=stage05_realistic_cinematic_qwen2512_prompt_only; workflow=txt2img_keyframe_realistic;"
             )
             for job in data["jobs"]
         )
         request_manifest = json.loads((manifest_json.parent / "comfyui_image_requests.json").read_text(encoding="utf-8"))
         assert request_manifest["workflow_name"] == "auto_style_family"
         assert request_manifest["stage05_route_key"] == "realistic_cinematic"
-        assert request_manifest["workflow_mapping_key"] == "stage05_realistic_cinematic"
+        assert request_manifest["workflow_mapping_key"] == "stage05_realistic_cinematic_qwen2512_prompt_only"
         assert request_manifest["optimization_profile"] == "balanced"
         assert request_manifest["optimization_profile_label"] == "Balanced"
-        assert request_manifest["preferred_comfyui_workflow_candidate"] == "txt2img_keyframe_realistic_zimage_photo_bridge"
-        assert request_manifest["preferred_comfyui_model_candidate"] == "Tongyi-MAI/Z-Image"
-        assert request_manifest["route_migration_state"] == "repo_transitional"
+        assert request_manifest["preferred_comfyui_workflow_candidate"] == "txt2img_keyframe_realistic"
+        assert request_manifest["preferred_comfyui_model_candidate"] == "Qwen/Qwen-Image-2512"
+        assert request_manifest["route_migration_state"] == "official_fallback_for_semantic_alignment"
         assert request_manifest["preferred_comfyui_workflow_format"] == "api_workflow"
-        assert request_manifest["workflow_path"] == str(workflow_paths["txt2img_keyframe_realistic_zimage_photo_bridge"]).replace("\\", "/")
+        assert request_manifest["workflow_path"] == str(workflow_paths["txt2img_keyframe_realistic"]).replace("\\", "/")
         assert all(item["status"] == "succeeded" for item in request_manifest["requests"])
         assert all(item["stage05_route_key"] == "realistic_cinematic" for item in request_manifest["requests"])
-        assert all(item["workflow_mapping_key"] == "stage05_realistic_cinematic" for item in request_manifest["requests"])
-        assert all(item["workflow_name"] == "txt2img_keyframe_realistic_zimage_photo_bridge" for item in request_manifest["requests"])
-        assert all(item["preferred_comfyui_workflow_candidate"] == "txt2img_keyframe_realistic_zimage_photo_bridge" for item in request_manifest["requests"])
-        assert all(item["route_migration_state"] == "repo_transitional" for item in request_manifest["requests"])
+        assert all(item["workflow_mapping_key"] == "stage05_realistic_cinematic_qwen2512_prompt_only" for item in request_manifest["requests"])
+        assert all(item["workflow_name"] == "txt2img_keyframe_realistic" for item in request_manifest["requests"])
+        assert all(item["preferred_comfyui_workflow_candidate"] == "txt2img_keyframe_realistic" for item in request_manifest["requests"])
+        assert all(item["route_migration_state"] == "official_fallback_for_semantic_alignment" for item in request_manifest["requests"])
         assert all(item["preferred_comfyui_workflow_format"] == "api_workflow" for item in request_manifest["requests"])
         assert all(item["comfyui_optimization_profile"] == "balanced" for item in request_manifest["requests"])
         workflow_payload = _FakeComfyTxt2ImgHandler.requests[0]["prompt"]
@@ -1191,18 +1370,18 @@ def test_run_comfyui_txt2img_failure_records_errors(tmp_path: Path) -> None:
         assert all(job["errors"] for job in data["jobs"])
         request_manifest = json.loads((manifest_json.parent / "comfyui_image_requests.json").read_text(encoding="utf-8"))
         assert request_manifest["stage05_route_key"] == "realistic_cinematic"
-        assert request_manifest["workflow_mapping_key"] == "stage05_realistic_cinematic"
+        assert request_manifest["workflow_mapping_key"] == "stage05_realistic_cinematic_qwen2512_prompt_only"
         assert request_manifest["optimization_profile"] == "balanced"
-        assert request_manifest["preferred_comfyui_workflow_candidate"] == "txt2img_keyframe_realistic_zimage_photo_bridge"
-        assert request_manifest["route_migration_state"] == "repo_transitional"
+        assert request_manifest["preferred_comfyui_workflow_candidate"] == "txt2img_keyframe_realistic"
+        assert request_manifest["route_migration_state"] == "official_fallback_for_semantic_alignment"
         assert request_manifest["preferred_comfyui_workflow_format"] == "api_workflow"
-        assert request_manifest["workflow_path"] == str(workflow_paths["txt2img_keyframe_realistic_zimage_photo_bridge"]).replace("\\", "/")
+        assert request_manifest["workflow_path"] == str(workflow_paths["txt2img_keyframe_realistic"]).replace("\\", "/")
         assert all(item["status"] == "failed" for item in request_manifest["requests"])
         assert all(item["stage05_route_key"] == "realistic_cinematic" for item in request_manifest["requests"])
-        assert all(item["workflow_mapping_key"] == "stage05_realistic_cinematic" for item in request_manifest["requests"])
-        assert all(item["workflow_name"] == "txt2img_keyframe_realistic_zimage_photo_bridge" for item in request_manifest["requests"])
-        assert all(item["preferred_comfyui_workflow_candidate"] == "txt2img_keyframe_realistic_zimage_photo_bridge" for item in request_manifest["requests"])
-        assert all(item["route_migration_state"] == "repo_transitional" for item in request_manifest["requests"])
+        assert all(item["workflow_mapping_key"] == "stage05_realistic_cinematic_qwen2512_prompt_only" for item in request_manifest["requests"])
+        assert all(item["workflow_name"] == "txt2img_keyframe_realistic" for item in request_manifest["requests"])
+        assert all(item["preferred_comfyui_workflow_candidate"] == "txt2img_keyframe_realistic" for item in request_manifest["requests"])
+        assert all(item["route_migration_state"] == "official_fallback_for_semantic_alignment" for item in request_manifest["requests"])
         assert all(item["preferred_comfyui_workflow_format"] == "api_workflow" for item in request_manifest["requests"])
     finally:
         server.shutdown()

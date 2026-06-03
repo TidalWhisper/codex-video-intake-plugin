@@ -25,8 +25,10 @@ from pipeline_core.stage05_quality_gates import build_quality_gate, summarize_qu
 from pipeline_core.requirement_compiler import compile_requirements, requested_output_allows_stage, stage_meets_requested_output  # noqa: E402
 from pipeline_core.stage05_route_registry import (  # noqa: E402
     RouteRegistryError,
+    get_stage05_route_entry,
     get_stage05_route_for_style,
     load_stage05_route_registry,
+    resolve_named_style_preset,
     resolve_route_style_preset,
     resolve_current_comfyui_target,
 )
@@ -80,6 +82,47 @@ STYLIZED_STYLE_HINTS = (
     "dramatic color",
 )
 
+ENVIRONMENT_FIRST_CAMERA_HINTS = (
+    "establishing shot",
+    "wide shot",
+    "wide scenic shot",
+    "very wide shot",
+    "long shot",
+    "full body",
+    "full-body",
+    "medium wide shot",
+    "wide angle",
+)
+
+ENVIRONMENT_FIRST_PROMPT_HINTS = (
+    "shoreline",
+    "beach walk",
+    "walking along the shoreline",
+    "walking on the beach",
+    "walking by the sea",
+    "city skyline",
+    "street panorama",
+    "mountain vista",
+)
+
+GUOFENG_SCENIC_CAMERA_HINTS = (
+    "medium scenic shot",
+    "wide scenic shot",
+    "scenic shot",
+    "wide shot",
+    "landscape shot",
+)
+
+GUOFENG_SCENIC_PROMPT_HINTS = (
+    "umbrella",
+    "oil-paper umbrella",
+    "misty rain",
+    "mist",
+    "riverside",
+    "riverbank",
+    "pavilion",
+)
+
 INTERACTION_HANDOFF_ROUTE_HINT = "interaction_handoff"
 INTERACTION_HANDOFF_DUAL_REFERENCE_MAPPING_CANDIDATES = (
     "stage05_realistic_cinematic_qwen_edit_dual_reference",
@@ -97,9 +140,20 @@ def load_json(path: Path) -> dict:
 
 
 def parse_visual_spec(brief: dict) -> tuple[str, str]:
-    # Supports both old brief fields and v0.1+ user-answer-derived fields.
-    aspect = brief.get("aspect_ratio") or brief.get("visual_spec", {}).get("aspect_ratio") or "9:16"
-    resolution = brief.get("resolution") or brief.get("visual_spec", {}).get("resolution") or "1080P"
+    # Prefer locked normalized values so downstream stages honor the confirmed Stage 00 spec.
+    normalized = normalized_brief(brief)
+    aspect = (
+        normalized.get("aspect_ratio")
+        or brief.get("aspect_ratio")
+        or brief.get("visual_spec", {}).get("aspect_ratio")
+        or "9:16"
+    )
+    resolution = (
+        normalized.get("resolution")
+        or brief.get("resolution")
+        or brief.get("visual_spec", {}).get("resolution")
+        or "1080P"
+    )
     return str(aspect), str(resolution)
 
 
@@ -306,6 +360,83 @@ def build_identity_anchor_fallback(shot_prompt: dict, storyboard_shot: dict, *, 
     )
 
 
+def _contains_any_hint(text: str, hints: tuple[str, ...]) -> bool:
+    lowered = text.lower()
+    return any(hint in lowered for hint in hints)
+
+
+def reference_guidance_override_reason(
+    *,
+    route_key: str,
+    shot_prompt: dict,
+    storyboard_shot: dict,
+    frame_role: str,
+) -> str | None:
+    if route_key not in {"realistic_cinematic", "shortdrama_realistic"}:
+        return None
+    if frame_role not in {"start", "end"}:
+        return None
+    camera_text = " ".join(
+        str(item or "").strip()
+        for item in [
+            shot_prompt.get("camera_prompt"),
+            storyboard_shot.get("camera"),
+            storyboard_shot.get("composition"),
+        ]
+        if str(item or "").strip()
+    ).lower()
+    prompt_text = " ".join(
+        str(item or "").strip()
+        for item in [
+            shot_prompt.get("scene_summary"),
+            shot_prompt.get("start_keyframe_prompt"),
+            shot_prompt.get("end_keyframe_prompt"),
+            storyboard_shot.get("action"),
+            storyboard_shot.get("location"),
+        ]
+        if str(item or "").strip()
+    ).lower()
+    if _contains_any_hint(camera_text, ENVIRONMENT_FIRST_CAMERA_HINTS):
+        return "prompt_only_establishing_shot_guardrail"
+    if "wide" in camera_text and _contains_any_hint(prompt_text, ENVIRONMENT_FIRST_PROMPT_HINTS):
+        return "prompt_only_environment_first_guardrail"
+    return None
+
+
+def route_style_preset_override_key(
+    *,
+    route_key: str,
+    shot_prompt: dict,
+    storyboard_shot: dict,
+) -> str | None:
+    if route_key != "guofeng_ink":
+        return None
+    camera_text = " ".join(
+        str(item or "").strip()
+        for item in [
+            shot_prompt.get("camera_prompt"),
+            storyboard_shot.get("camera"),
+            storyboard_shot.get("composition"),
+        ]
+        if str(item or "").strip()
+    ).lower()
+    prompt_text = " ".join(
+        str(item or "").strip()
+        for item in [
+            shot_prompt.get("scene_summary"),
+            shot_prompt.get("start_keyframe_prompt"),
+            shot_prompt.get("end_keyframe_prompt"),
+            shot_prompt.get("style_prompt"),
+            storyboard_shot.get("action"),
+            storyboard_shot.get("location"),
+        ]
+        if str(item or "").strip()
+    ).lower()
+    if _contains_any_hint(camera_text, GUOFENG_SCENIC_CAMERA_HINTS) and _contains_any_hint(prompt_text, GUOFENG_SCENIC_PROMPT_HINTS):
+        return "scenic_single_subject_umbrella"
+    return None
+
+
 def infer_style_family(brief: dict, prompts: dict) -> str:
     normalized = normalized_brief(brief)
     style = str(normalized.get("style") or brief.get("style") or "").strip()
@@ -348,6 +479,11 @@ def resolve_stage05_route(brief: dict, prompts: dict) -> dict:
         "comfyui_workflow_mapping_key": fallback_workflow_name,
         "comfyui_workflow_name": fallback_workflow_name,
         "comfyui_model_id": None,
+        "prompt_only_workflow_mapping_key": fallback_workflow_name,
+        "prompt_only_workflow_name": fallback_workflow_name,
+        "prompt_only_comfyui_model_id": None,
+        "prompt_only_preferred_comfyui_workflow_candidate": None,
+        "prompt_only_preferred_comfyui_workflow_source_ref": None,
         "preferred_comfyui_workflow_candidate": None,
         "preferred_comfyui_model_candidate": None,
         "route_migration_state": None,
@@ -377,6 +513,49 @@ def resolve_stage05_route(brief: dict, prompts: dict) -> dict:
         return resolved
 
     comfyui_target = resolve_current_comfyui_target(route_key, route_entry)
+    prompt_only_target = dict(comfyui_target)
+    prompt_only_target_override = route_entry.get("prompt_only_target")
+    if isinstance(prompt_only_target_override, dict):
+        override_workflow_name = str(prompt_only_target_override.get("workflow_name") or "").strip() or prompt_only_target.get("workflow_name")
+        override_mapping_key = str(prompt_only_target_override.get("workflow_mapping_key") or "").strip() or override_workflow_name
+        override_model_id = str(prompt_only_target_override.get("model_id") or "").strip() or prompt_only_target.get("model_id")
+        prompt_only_target = {
+            **prompt_only_target,
+            "workflow_name": override_workflow_name,
+            "workflow_mapping_key": override_mapping_key,
+            "model_id": override_model_id,
+            "preferred_workflow_candidate": str(
+                prompt_only_target_override.get("preferred_workflow_candidate") or override_workflow_name
+            ).strip()
+            or override_workflow_name,
+            "preferred_model_candidate": str(
+                prompt_only_target_override.get("preferred_model_candidate") or override_model_id
+            ).strip()
+            or override_model_id,
+            "migration_state": str(
+                prompt_only_target_override.get("migration_state") or comfyui_target.get("migration_state") or ""
+            ).strip()
+            or comfyui_target.get("migration_state"),
+            "preferred_workflow_source_ref": str(
+                prompt_only_target_override.get("preferred_workflow_source_ref")
+                or f"workflows/comfyui/{override_workflow_name}.workflow_api.json"
+            ).strip()
+            or None,
+            "preferred_workflow_format": str(
+                prompt_only_target_override.get("preferred_workflow_format") or "api_workflow"
+            ).strip()
+            or "api_workflow",
+            "preferred_workflow_custom_node_dependencies": prompt_only_target_override.get(
+                "preferred_workflow_custom_node_dependencies"
+            )
+            if isinstance(prompt_only_target_override.get("preferred_workflow_custom_node_dependencies"), list)
+            else [],
+            "preferred_workflow_import_blockers": prompt_only_target_override.get(
+                "preferred_workflow_import_blockers"
+            )
+            if isinstance(prompt_only_target_override.get("preferred_workflow_import_blockers"), list)
+            else [],
+        }
     style_preset = resolve_route_style_preset(style_entry, route_entry)
     workflow_name = str(comfyui_target.get("workflow_name") or "").strip() or fallback_workflow_name
     workflow_mapping_key = str(comfyui_target.get("workflow_mapping_key") or "").strip() or workflow_name
@@ -405,6 +584,12 @@ def resolve_stage05_route(brief: dict, prompts: dict) -> dict:
             "preferred_workflow_import_blockers": [],
         }
         reference_guided_selected = True
+    elif isinstance(prompt_only_target_override, dict):
+        workflow_name = str(prompt_only_target.get("workflow_name") or "").strip() or workflow_name
+        workflow_mapping_key = str(prompt_only_target.get("workflow_mapping_key") or "").strip() or workflow_mapping_key
+        style_family = str(prompt_only_target.get("style_family") or "").strip() or style_family
+        control_mode = str(prompt_only_target_override.get("control_mode") or "prompt_only").strip() or "prompt_only"
+        comfyui_target = dict(prompt_only_target)
     resolved.update(
         {
             "route_key": route_key,
@@ -412,6 +597,11 @@ def resolve_stage05_route(brief: dict, prompts: dict) -> dict:
             "comfyui_workflow_mapping_key": workflow_mapping_key,
             "comfyui_workflow_name": workflow_name,
             "comfyui_model_id": comfyui_target.get("model_id"),
+            "prompt_only_workflow_mapping_key": prompt_only_target.get("workflow_mapping_key") or fallback_workflow_name,
+            "prompt_only_workflow_name": prompt_only_target.get("workflow_name") or fallback_workflow_name,
+            "prompt_only_comfyui_model_id": prompt_only_target.get("model_id"),
+            "prompt_only_preferred_comfyui_workflow_candidate": prompt_only_target.get("preferred_workflow_candidate"),
+            "prompt_only_preferred_comfyui_workflow_source_ref": prompt_only_target.get("preferred_workflow_source_ref"),
             "preferred_comfyui_workflow_candidate": comfyui_target.get("preferred_workflow_candidate"),
             "preferred_comfyui_model_candidate": comfyui_target.get("preferred_model_candidate"),
             "route_migration_state": comfyui_target.get("migration_state"),
@@ -573,6 +763,13 @@ def main(argv: list[str]) -> int:
     comfyui_style_positive_anchor = route_resolution.get("comfyui_style_positive_anchor")
     comfyui_style_negative_anchor = route_resolution.get("comfyui_style_negative_anchor")
     declared_comfyui_control_mode = str(route_resolution.get("comfyui_control_mode") or "prompt_only")
+    route_entry: dict | None = None
+    if route_resolution.get("used_registry") is True:
+        try:
+            registry, _ = load_stage05_route_registry(root=ROOT)
+            route_entry = get_stage05_route_entry(registry, stage05_route_key)
+        except RouteRegistryError:
+            route_entry = None
     comfyui_optimization = resolve_stage05_optimization(
         comfyui_workflow_mapping_key,
         requested_profile=requested_optimization_profile,
@@ -687,8 +884,50 @@ def main(argv: list[str]) -> int:
             negative_prompt = str(shot.get("negative_prompt") or prompts.get("global_negative_prompt") or "").strip()
             selected_workflow_mapping_key = comfyui_workflow_mapping_key
             selected_workflow_name = comfyui_workflow_name
+            selected_model_id = comfyui_model_id
             selected_preferred_workflow_candidate = preferred_comfyui_workflow_candidate
             selected_preferred_workflow_source_ref = preferred_comfyui_workflow_source_ref
+            selected_control_mode = comfyui_control_mode
+            selected_reference_guidance_active = reference_guidance_active
+            selected_workflow_capability_gaps = list(workflow_capability_gaps)
+            selected_style_preset_key = comfyui_style_preset_key
+            selected_style_preset_label = comfyui_style_preset_label
+            selected_style_positive_anchor = comfyui_style_positive_anchor
+            selected_style_negative_anchor = comfyui_style_negative_anchor
+            reference_guidance_override = reference_guidance_override_reason(
+                route_key=stage05_route_key,
+                shot_prompt=shot,
+                storyboard_shot=storyboard_shot,
+                frame_role=frame_role,
+            )
+            style_preset_override_key = route_style_preset_override_key(
+                route_key=stage05_route_key,
+                shot_prompt=shot,
+                storyboard_shot=storyboard_shot,
+            )
+            if route_entry and style_preset_override_key:
+                override_preset = resolve_named_style_preset(route_entry, style_preset_override_key)
+                if override_preset.get("positive_anchor") or override_preset.get("negative_anchor"):
+                    selected_style_preset_key = override_preset.get("preset_key")
+                    selected_style_preset_label = override_preset.get("preset_label")
+                    selected_style_positive_anchor = override_preset.get("positive_anchor")
+                    selected_style_negative_anchor = override_preset.get("negative_anchor")
+            if reference_guidance_active and reference_guidance_override:
+                selected_workflow_mapping_key = str(route_resolution.get("prompt_only_workflow_mapping_key") or selected_workflow_mapping_key)
+                selected_workflow_name = str(route_resolution.get("prompt_only_workflow_name") or selected_workflow_name)
+                selected_model_id = route_resolution.get("prompt_only_comfyui_model_id") or selected_model_id
+                selected_preferred_workflow_candidate = (
+                    route_resolution.get("prompt_only_preferred_comfyui_workflow_candidate")
+                    or selected_preferred_workflow_candidate
+                )
+                selected_preferred_workflow_source_ref = (
+                    route_resolution.get("prompt_only_preferred_comfyui_workflow_source_ref")
+                    or selected_preferred_workflow_source_ref
+                )
+                selected_control_mode = "prompt_only"
+                selected_reference_guidance_active = False
+                if reference_guidance_override not in selected_workflow_capability_gaps:
+                    selected_workflow_capability_gaps.append(reference_guidance_override)
             reference_bundle_mode = "primary_only"
             if route_hint == INTERACTION_HANDOFF_ROUTE_HINT:
                 prompt_text = ", ".join(
@@ -739,7 +978,7 @@ def main(argv: list[str]) -> int:
                 "style_family": style_family,
                 "comfyui_workflow_mapping_key": selected_workflow_mapping_key,
                 "comfyui_workflow_name": selected_workflow_name,
-                "comfyui_model_id": comfyui_model_id,
+                "comfyui_model_id": selected_model_id,
                 "preferred_comfyui_workflow_candidate": selected_preferred_workflow_candidate,
                 "preferred_comfyui_model_candidate": preferred_comfyui_model_candidate,
                 "route_migration_state": route_migration_state,
@@ -747,16 +986,17 @@ def main(argv: list[str]) -> int:
                 "preferred_comfyui_workflow_format": preferred_comfyui_workflow_format,
                 "preferred_comfyui_workflow_custom_node_dependencies": preferred_comfyui_workflow_custom_node_dependencies,
                 "preferred_comfyui_workflow_import_blockers": preferred_comfyui_workflow_import_blockers,
-                "comfyui_style_preset_key": comfyui_style_preset_key,
-                "comfyui_style_preset_label": comfyui_style_preset_label,
-                "comfyui_style_positive_anchor": comfyui_style_positive_anchor,
-                "comfyui_style_negative_anchor": comfyui_style_negative_anchor,
+                "comfyui_style_preset_key": selected_style_preset_key,
+                "comfyui_style_preset_label": selected_style_preset_label,
+                "comfyui_style_positive_anchor": selected_style_positive_anchor,
+                "comfyui_style_negative_anchor": selected_style_negative_anchor,
                 "comfyui_declared_control_mode": declared_comfyui_control_mode,
-                "comfyui_control_mode": comfyui_control_mode,
+                "comfyui_control_mode": selected_control_mode,
                 "reference_guidance_requested": reference_guidance_requested,
                 "reference_guidance_ready": reference_guidance_ready,
-                "reference_guidance_active": reference_guidance_active,
-                "workflow_capability_gaps": workflow_capability_gaps,
+                "reference_guidance_active": selected_reference_guidance_active,
+                "reference_guidance_override_reason": reference_guidance_override,
+                "workflow_capability_gaps": selected_workflow_capability_gaps,
                 "comfyui_optimization_profile": comfyui_optimization["profile_key"],
                 "comfyui_optimization_profile_label": comfyui_optimization["profile_label"],
                 "aspect_ratio": aspect,
