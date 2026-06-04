@@ -74,6 +74,38 @@ def _normalize_job_field_from_top_level(data: dict, field_name: str) -> None:
         data[field_name] = next(iter(unique_values))
 
 
+def _normalize_style_metadata_fields(data: dict) -> None:
+    jobs = data.get("jobs")
+    if not isinstance(jobs, list):
+        return
+
+    style_fields = [
+        "comfyui_style_preset_key",
+        "comfyui_style_preset_label",
+        "comfyui_style_positive_anchor",
+        "comfyui_style_negative_anchor",
+    ]
+    for field_name in style_fields:
+        top_level_value = _clean_non_empty_str(data.get(field_name))
+        collected_jobs: list[dict] = [job for job in jobs if isinstance(job, dict)]
+        job_values = [_clean_non_empty_str(job.get(field_name)) for job in collected_jobs]
+        normalized_values = [value for value in job_values if value]
+        unique_values = {value for value in normalized_values}
+        has_blank_values = any(value is None for value in job_values)
+        if top_level_value and not normalized_values:
+            for job, job_value in zip(collected_jobs, job_values):
+                if job_value is None:
+                    job[field_name] = top_level_value
+            job_values = [_clean_non_empty_str(job.get(field_name)) for job in collected_jobs]
+            normalized_values = [value for value in job_values if value]
+            unique_values = {value for value in normalized_values}
+            has_blank_values = any(value is None for value in job_values)
+        if len(unique_values) == 1 and not has_blank_values:
+            data[field_name] = next(iter(unique_values))
+        else:
+            data[field_name] = None
+
+
 def normalize_stage05_route_fields(data: dict) -> None:
     route_fields = [
         "stage05_route_key",
@@ -84,10 +116,6 @@ def normalize_stage05_route_fields(data: dict) -> None:
         "route_migration_state",
         "preferred_comfyui_workflow_source_ref",
         "preferred_comfyui_workflow_format",
-        "comfyui_style_preset_key",
-        "comfyui_style_preset_label",
-        "comfyui_style_positive_anchor",
-        "comfyui_style_negative_anchor",
     ]
     route_resolution_field_map = {
         "stage05_route_key": "route_key",
@@ -98,10 +126,6 @@ def normalize_stage05_route_fields(data: dict) -> None:
         "route_migration_state": "route_migration_state",
         "preferred_comfyui_workflow_source_ref": "preferred_comfyui_workflow_source_ref",
         "preferred_comfyui_workflow_format": "preferred_comfyui_workflow_format",
-        "comfyui_style_preset_key": "comfyui_style_preset_key",
-        "comfyui_style_preset_label": "comfyui_style_preset_label",
-        "comfyui_style_positive_anchor": "comfyui_style_positive_anchor",
-        "comfyui_style_negative_anchor": "comfyui_style_negative_anchor",
     }
     route_resolution = data.get("route_resolution")
     for field_name in route_fields:
@@ -128,6 +152,7 @@ def normalize_stage05_route_fields(data: dict) -> None:
                     continue
                 if not isinstance(job.get(field_name), list):
                     job[field_name] = list(top_level_value)
+    _normalize_style_metadata_fields(data)
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -170,10 +170,8 @@ def _route_guardrail_sections(job: dict[str, Any]) -> list[str]:
         str(job.get(key) or "")
         for key in ["camera_prompt", "prompt", "style_prompt", "consistency_prompt"]
     ).lower()
-    override_reason = str(job.get("reference_guidance_override_reason") or "").strip()
     if route_key == "realistic_cinematic" and (
-        override_reason.startswith("prompt_only_")
-        or "establishing shot" in camera_text
+        "establishing shot" in camera_text
         or ("wide shot" in camera_text and any(hint in camera_text for hint in ("shoreline", "beach", "sea", "street", "skyline")))
     ):
         return [
@@ -474,11 +472,9 @@ def _original_zimage_scene_guardrails(job: dict[str, Any], *, cjk: bool) -> list
         str(job.get(key) or "")
         for key in ["camera_prompt", "prompt", "style_prompt", "consistency_prompt"]
     ).lower()
-    override_reason = str(job.get("reference_guidance_override_reason") or "").strip()
     sentences: list[str] = []
     if route_key == "realistic_cinematic" and (
-        override_reason.startswith("prompt_only_")
-        or "establishing shot" in camera_text
+        "establishing shot" in camera_text
         or ("wide shot" in camera_text and any(hint in camera_text for hint in ("shoreline", "beach", "sea", "street", "skyline")))
     ):
         if cjk:

@@ -12,7 +12,7 @@ SUITABILITY_CLASSES = {"native-fit", "adapted-fit", "prompt-only", "unsupported"
 SPECIAL_DASIWA_OUTCOMES = {"approved_for_stage05", "provisional_for_stage05", "better_fit_for_stage06"}
 STYLE_FAMILIES = {"realistic", "anime", "guofeng", "stylized"}
 ADOPTION_STATES = {"current_repo", "ready_to_import", "needs_api_conversion", "stage06_only", "research_gap"}
-ROUTE_MIGRATION_STATES = {"repo_transitional", "ready_to_import", "needs_api_conversion", "stage06_only", "research_gap"}
+ROUTE_MIGRATION_STATES = {"stage05a_reference_bootstrap_locked", "ready_to_import", "needs_api_conversion", "stage06_only", "research_gap"}
 COMMUNITY_PREFERENCE_POLICIES = {"prefer_community_optimized_when_available"}
 
 

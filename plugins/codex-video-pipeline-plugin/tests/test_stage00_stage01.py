@@ -3308,24 +3308,25 @@ def test_new_keyframe_image_jobs_passes_draft_then_placeholder_passes_final(tmp_
     assert data["reference_guidance_requested"] is True
     assert data["reference_guidance_ready"] is False
     assert data["reference_guidance_active"] is False
-    assert "selected_workflow_does_not_accept_reference_images" in data["workflow_capability_gaps"]
-    assert data["comfyui_workflow_capabilities"]["supports_reference_images"] is False
+    assert "reference_images_missing" in data["workflow_capability_gaps"]
+    assert "reference_bootstrap_required_before_stage05b" in data["workflow_capability_gaps"]
+    assert data["comfyui_workflow_capabilities"]["supports_reference_images"] is True
     assert len(data["jobs"]) == 2 * len(keyframe["shot_prompts"])
     assert data["style_family"] == "realistic"
-    assert data["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_amazing_z_photo_original"
-    assert data["comfyui_model_id"] == "Tongyi-MAI/Z-Image"
-    assert data["preferred_comfyui_workflow_candidate"] == "amazing_z_photo_safetensors"
-    assert data["preferred_comfyui_model_candidate"] == "Tongyi-MAI/Z-Image"
-    assert data["route_migration_state"] == "repo_transitional"
-    assert data["preferred_comfyui_workflow_source_ref"] == "F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-photo_SAFETENSORS.json"
+    assert data["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_qwen_edit_nextscene_local"
+    assert data["comfyui_model_id"] == "Qwen/Qwen-Edit-2511"
+    assert data["preferred_comfyui_workflow_candidate"] == "qwen_edit_nextscene_local"
+    assert data["preferred_comfyui_model_candidate"] == "Qwen/Qwen-Edit-2511"
+    assert data["route_migration_state"] == "stage05b_reference_guided_mainline"
+    assert data["preferred_comfyui_workflow_source_ref"] == "F:/ComfyUI/ComfyUI/user/default/workflows/AI漫剧制作/AI漫剧-16宫格分镜图生成-QwenEdit+NextScene（自动分镜）-V1版.json"
     assert data["preferred_comfyui_workflow_format"] == "ui_graph"
-    assert data["comfyui_workflow_router"]["realistic"] == "txt2img_keyframe_realistic"
+    assert data["reference_bootstrap_workflow_router"]["realistic"] == "stage05_realistic_cinematic_amazing_z_photo_original"
     assert all(job["style_family"] == "realistic" for job in data["jobs"])
-    assert all(job["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_amazing_z_photo_original" for job in data["jobs"])
-    assert all(job["comfyui_workflow_name"] == "amazing_z_photo_safetensors" for job in data["jobs"])
-    assert all(job["preferred_comfyui_workflow_candidate"] == "amazing_z_photo_safetensors" for job in data["jobs"])
-    assert all(job["preferred_comfyui_model_candidate"] == "Tongyi-MAI/Z-Image" for job in data["jobs"])
-    assert all(job["route_migration_state"] == "repo_transitional" for job in data["jobs"])
+    assert all(job["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_qwen_edit_nextscene_local" for job in data["jobs"])
+    assert all(job["comfyui_workflow_name"] == "qwen_edit_nextscene_local" for job in data["jobs"])
+    assert all(job["preferred_comfyui_workflow_candidate"] == "qwen_edit_nextscene_local" for job in data["jobs"])
+    assert all(job["preferred_comfyui_model_candidate"] == "Qwen/Qwen-Edit-2511" for job in data["jobs"])
+    assert all(job["route_migration_state"] == "stage05b_reference_guided_mainline" for job in data["jobs"])
     assert all(job["preferred_comfyui_workflow_format"] == "ui_graph" for job in data["jobs"])
     assert all(job["reference_guidance_requested"] is True for job in data["jobs"])
     assert all(job["reference_guidance_active"] is False for job in data["jobs"])
@@ -3411,18 +3412,18 @@ def test_sync_keyframe_image_manifest_backfills_route_key_from_top_level(tmp_pat
 
     synced = json.loads(manifest_json.read_text(encoding="utf-8"))
     assert synced["stage05_route_key"] == "anime_jp"
-    assert synced["comfyui_workflow_mapping_key"] == "stage05_anime_jp"
-    assert synced["comfyui_model_id"] == "Tongyi-MAI/Z-Image"
-    assert synced["preferred_comfyui_workflow_candidate"] == "amazing_z_image_a_safetensors"
-    assert synced["preferred_comfyui_model_candidate"] == "Tongyi-MAI/Z-Image"
-    assert synced["route_migration_state"] == "repo_transitional"
-    assert synced["preferred_comfyui_workflow_source_ref"] == "F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-image-a_SAFETENSORS.json"
+    assert synced["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_qwen_edit_nextscene_local"
+    assert synced["comfyui_model_id"] == "Qwen/Qwen-Edit-2511"
+    assert synced["preferred_comfyui_workflow_candidate"] == "qwen_edit_nextscene_local"
+    assert synced["preferred_comfyui_model_candidate"] == "Qwen/Qwen-Edit-2511"
+    assert synced["route_migration_state"] == "stage05b_reference_guided_mainline"
+    assert synced["preferred_comfyui_workflow_source_ref"] == "F:/ComfyUI/ComfyUI/user/default/workflows/AI漫剧制作/AI漫剧-16宫格分镜图生成-QwenEdit+NextScene（自动分镜）-V1版.json"
     assert all(job["stage05_route_key"] == "anime_jp" for job in synced["jobs"])
-    assert all(job["comfyui_workflow_mapping_key"] == "stage05_anime_jp" for job in synced["jobs"])
-    assert all(job["comfyui_model_id"] == "Tongyi-MAI/Z-Image" for job in synced["jobs"])
-    assert all(job["preferred_comfyui_workflow_candidate"] == "amazing_z_image_a_safetensors" for job in synced["jobs"])
-    assert all(job["preferred_comfyui_model_candidate"] == "Tongyi-MAI/Z-Image" for job in synced["jobs"])
-    assert all(job["route_migration_state"] == "repo_transitional" for job in synced["jobs"])
+    assert all(job["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_qwen_edit_nextscene_local" for job in synced["jobs"])
+    assert all(job["comfyui_model_id"] == "Qwen/Qwen-Edit-2511" for job in synced["jobs"])
+    assert all(job["preferred_comfyui_workflow_candidate"] == "qwen_edit_nextscene_local" for job in synced["jobs"])
+    assert all(job["preferred_comfyui_model_candidate"] == "Qwen/Qwen-Edit-2511" for job in synced["jobs"])
+    assert all(job["route_migration_state"] == "stage05b_reference_guided_mainline" for job in synced["jobs"])
     assert synced["status"] == "draft"
     assert synced["summary"]["generated_image_count"] == 0
 
@@ -3484,15 +3485,15 @@ def test_new_keyframe_image_jobs_activates_reference_guided_mode_when_mapping_su
     fake_mapping_path = tmp_path / "workflow_node_mapping.yaml"
     fake_mapping = {
         "workflows": {
-            "stage05_realistic_cinematic_amazing_z_photo_original": {
-                "file": "workflows/comfyui/fake_reference.workflow_api.json",
+            "stage05_realistic_cinematic_qwen_edit_nextscene_local": {
+                "file": "workflows/comfyui/fake_qwen_nextscene.workflow.json",
                 "nodes": {
                     "positive_prompt": {"node_id": "1", "input_name": "text"},
                     "reference_image_path": {"node_id": "2", "input_name": "image"},
                 },
                 "capabilities": {
                     "supports_reference_images": True,
-                    "supported_control_modes": ["prompt_only", "reference_guided"],
+                    "supported_control_modes": ["reference_guided"],
                 },
             }
         }
@@ -3509,6 +3510,7 @@ def test_new_keyframe_image_jobs_activates_reference_guided_mode_when_mapping_su
         "--allow-beyond-requested-scope",
     ]) == 0
     data = json.loads(manifest_json.read_text(encoding="utf-8"))
+    assert data["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_qwen_edit_nextscene_local"
     assert data["comfyui_control_mode"] == "reference_guided"
     assert data["reference_guidance_requested"] is True
     assert data["reference_guidance_ready"] is True
@@ -3688,15 +3690,15 @@ def test_new_keyframe_image_jobs_promotes_interaction_handoff_to_dual_reference_
     fake_mapping_path = tmp_path / "workflow_node_mapping.yaml"
     fake_mapping = {
         "workflows": {
-            "stage05_realistic_cinematic_amazing_z_photo_original": {
-                "file": "workflows/comfyui/fake_reference.workflow_api.json",
+            "stage05_realistic_cinematic_qwen_edit_nextscene_local": {
+                "file": "workflows/comfyui/fake_qwen_nextscene.workflow.json",
                 "nodes": {
                     "positive_prompt": {"node_id": "1", "input_name": "text"},
                     "reference_image_path": {"node_id": "2", "input_name": "image"},
                 },
                 "capabilities": {
                     "supports_reference_images": True,
-                    "supported_control_modes": ["prompt_only", "reference_guided"],
+                    "supported_control_modes": ["reference_guided"],
                 },
             },
         }
@@ -3720,8 +3722,8 @@ def test_new_keyframe_image_jobs_promotes_interaction_handoff_to_dual_reference_
     data = json.loads(manifest_json.read_text(encoding="utf-8"))
     mid_job = next(job for job in data["jobs"] if job["image_id"] == "IMG_S001_MID")
     assert mid_job["stage06_route_hint"] == "interaction_handoff"
-    assert mid_job["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_amazing_z_photo_original"
-    assert mid_job["comfyui_workflow_name"] == "amazing_z_photo_safetensors"
+    assert mid_job["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_qwen_edit_nextscene_local"
+    assert mid_job["comfyui_workflow_name"] == "qwen_edit_nextscene_local"
     assert mid_job["reference_bundle_mode"] == "primary_plus_context_frame"
     assert mid_job["reference_images"] == [
         "03_characters/reference_images/CHAR_001_primary.png",
@@ -3802,7 +3804,7 @@ def test_resolve_stage05_route_switches_realistic_cinematic_to_reference_guided_
     assert resolved["reference_bootstrap_workflow_name"] == "amazing_z_photo_safetensors"
 
 
-def test_new_keyframe_jobs_keep_wide_establishing_realistic_shot_on_prompt_only_route_even_with_refs_ready(tmp_path: Path) -> None:
+def test_new_keyframe_jobs_keep_wide_establishing_realistic_shot_on_qwen_mainline_even_with_refs_ready(tmp_path: Path) -> None:
     project_dir = tmp_path / "video_projects" / "video_20260601_223000_establishing_guardrail"
     intake_dir = project_dir / "00_intake"
     keyframe_dir = project_dir / "04_keyframes"
@@ -3851,25 +3853,23 @@ def test_new_keyframe_jobs_keep_wide_establishing_realistic_shot_on_prompt_only_
 
     data = json.loads(manifest_json.read_text(encoding="utf-8"))
     start_job = next(job for job in data["jobs"] if job["image_id"] == "IMG_S001_START")
-    assert data["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_amazing_z_photo_original"
-    assert start_job["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_amazing_z_photo_original"
-    assert start_job["comfyui_workflow_name"] == "amazing_z_photo_safetensors"
+    assert data["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_qwen_edit_nextscene_local"
+    assert start_job["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_qwen_edit_nextscene_local"
+    assert start_job["comfyui_workflow_name"] == "qwen_edit_nextscene_local"
     assert start_job["comfyui_style_preset_key"] == "environmental_establishing_film"
     assert start_job["comfyui_style_selector"] == "classic_film_photo"
-    assert start_job["comfyui_control_mode"] == "prompt_only"
-    assert start_job["prompt_composition_mode"] == "zimage_skill_aligned"
-    assert "cinematic keyframe" not in start_job["prompt"]
-    assert "realistic cinematic short film" not in start_job["prompt"]
-    assert start_job["reference_guidance_active"] is False
+    assert start_job["comfyui_control_mode"] == "reference_guided"
+    assert start_job["prompt_composition_mode"] == "legacy_stage04_full_prompt"
+    assert start_job["reference_guidance_active"] is True
 
     end_job = next(job for job in data["jobs"] if job["image_id"] == "IMG_S001_END")
-    assert end_job["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_amazing_z_photo_original"
-    assert end_job["comfyui_workflow_name"] == "amazing_z_photo_safetensors"
+    assert end_job["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_qwen_edit_nextscene_local"
+    assert end_job["comfyui_workflow_name"] == "qwen_edit_nextscene_local"
     assert end_job["comfyui_style_preset_key"] == "environmental_establishing_film"
     assert end_job["comfyui_style_selector"] == "classic_film_photo"
-    assert end_job["comfyui_control_mode"] == "prompt_only"
-    assert end_job["prompt_composition_mode"] == "zimage_skill_aligned"
-    assert end_job["reference_guidance_active"] is False
+    assert end_job["comfyui_control_mode"] == "reference_guided"
+    assert end_job["prompt_composition_mode"] == "legacy_stage04_full_prompt"
+    assert end_job["reference_guidance_active"] is True
 
 
 def test_new_keyframe_jobs_upgrade_guofeng_scenic_umbrella_shot_to_scenic_preset(tmp_path: Path) -> None:

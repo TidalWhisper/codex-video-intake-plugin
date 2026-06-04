@@ -131,8 +131,8 @@ Current execution semantics:
 - Provider priority is fixed: `ComfyUI txt2img -> manual`
 - `stage05_route_key` is the primary routing field recorded in `keyframe_image_manifest.json`
 - `comfyui_workflow_mapping_key` is the primary execution key used to resolve `config/workflow_node_mapping.yaml`
-- `style_family` remains a compatibility field for existing Stage 05 validation and runner logic
-- `style_family` only decides the internal ComfyUI route family, not provider order
+- `style_family` records the Stage05-A bootstrap route family and shared review context
+- `style_family` only decides the Stage05-A internal route family, not provider order
 
 Current default route families now map onto the three locked local Zimage UI workflows, but only for `Stage05-A`:
 
@@ -155,7 +155,7 @@ Stage 05 default mainline rules:
 
 The generated `keyframe_image_manifest.json` now records `stage05_mode`, `primary_reference_image_path`, `reference_bootstrap`, `stage05_route_key`, `style_family`, `comfyui_workflow_mapping_key`, `comfyui_workflow_name`, `comfyui_model_id`, and `route_resolution`.
 
-Do not treat deleted bridge or fallback routes as candidates to keep "just in case". Route changes should go through the real Stage 05 registry and the three active Zimage workflows only.
+Do not treat deleted bridge or fallback routes as candidates to keep "just in case". Route changes should go through the real Stage 05 registry for Stage05-A and the fixed Qwen NextScene mainline for Stage05-B.
 
 If you must force a single workflow for all jobs, pass it explicitly:
 

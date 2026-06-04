@@ -81,13 +81,13 @@ RISK_TAG_HINTS: dict[str, tuple[str, ...]] = {
 
 RISK_TAG_REASONS: dict[str, str] = {
     "missing_character_reference": "Character-locked continuity is required, but no Stage 03 reference image is available for this shot. Start/end keyframes can drift into different people before Stage 06.",
-    "umbrella_prop_contact": "Umbrella prop-contact scenes remain prompt-only on the current Stage 05 route. Review anatomy, handle contact, and duplicate umbrella artifacts before Stage 06.",
-    "weapon_hand_contact": "Weapon-hand contact scenes remain prompt-only on the current Stage 05 route. Review grip realism, limb count, and blade-hand alignment before Stage 06.",
-    "fan_hand_contact": "Hand-fan scenes remain prompt-only on the current Stage 05 route. Review finger count, wrist articulation, and fan-handle contact before Stage 06.",
-    "instrument_hand_contact": "Instrument-contact scenes remain prompt-only on the current Stage 05 route. Review hand placement, mouth alignment, and duplicate prop artifacts before Stage 06.",
-    "cup_hand_contact": "Cup or goblet hand-contact scenes remain prompt-only on the current Stage 05 route. Review finger articulation, cup orientation, and liquid-container contact before Stage 06.",
-    "two_subject_contact": "Two-subject contact scenes remain prompt-only on the current Stage 05 route. Review hand joins, overlapping limbs, and duplicated body parts before Stage 06.",
-    "riding_pose_contact": "Riding scenes remain prompt-only on the current Stage 05 route. Review seat contact, limb orientation, and vehicle or mount alignment before Stage 06.",
+    "umbrella_prop_contact": "Umbrella prop-contact scenes generated without structure guidance are still prone to anatomy drift, handle-contact errors, and duplicate umbrella artifacts. Review carefully before Stage 06.",
+    "weapon_hand_contact": "Weapon-hand contact scenes generated without structure guidance are still prone to grip realism issues, limb-count errors, and blade-hand alignment drift. Review carefully before Stage 06.",
+    "fan_hand_contact": "Hand-fan scenes generated without structure guidance are still prone to finger-count errors, wrist articulation drift, and fan-handle contact failures. Review carefully before Stage 06.",
+    "instrument_hand_contact": "Instrument-contact scenes generated without structure guidance are still prone to incorrect hand placement, mouth alignment drift, and duplicate prop artifacts. Review carefully before Stage 06.",
+    "cup_hand_contact": "Cup or goblet hand-contact scenes generated without structure guidance are still prone to finger articulation drift, cup orientation errors, and liquid-container contact failures. Review carefully before Stage 06.",
+    "two_subject_contact": "Two-subject contact scenes generated without structure guidance are still prone to hand-join drift, overlapping-limb errors, and duplicated body parts. Review carefully before Stage 06.",
+    "riding_pose_contact": "Riding scenes generated without structure guidance are still prone to seat-contact drift, limb-orientation errors, and vehicle or mount alignment failures. Review carefully before Stage 06.",
 }
 
 RISK_TAG_CREATOR_SUMMARY: dict[str, str] = {

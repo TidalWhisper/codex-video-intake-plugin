@@ -28,6 +28,7 @@ def load_module(name: str, path: Path) -> ModuleType:
 
 
 new_keyframe_image_jobs = load_module("new_keyframe_image_jobs_comfy_test", IMAGES / "new_keyframe_image_jobs.py")
+sync_keyframe_image_manifest = load_module("sync_keyframe_image_manifest_comfy_test", IMAGES / "sync_keyframe_image_manifest.py")
 validate_keyframe_image_manifest = load_module("validate_keyframe_image_manifest_comfy_test", IMAGES / "validate_keyframe_image_manifest.py")
 run_comfyui_txt2img = load_module("run_comfyui_txt2img_test", PROVIDERS / "run_comfyui_txt2img.py")
 workflow_mapping = load_module("workflow_mapping_test", PROVIDERS / "workflow_mapping.py")
@@ -692,7 +693,7 @@ def test_resolve_stage05_route_falls_back_for_unknown_custom_style() -> None:
     prompts = {"shot_prompts": [{"style_prompt": "stylized concept art, bold shape design"}]}
     resolved = new_keyframe_image_jobs.resolve_stage05_route(brief, prompts)
     assert resolved["used_registry"] is False
-    assert resolved["resolution_mode"] == "legacy_style_family_bootstrap_fallback_plus_stage05b_mainline"
+    assert resolved["resolution_mode"] == "heuristic_style_family_bootstrap_fallback_plus_stage05b_mainline"
     assert resolved["route_key"] == "stylized"
     assert resolved["style_family"] == "stylized"
     assert resolved["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_qwen_edit_nextscene_local"
@@ -868,7 +869,6 @@ def test_build_provider_prompt_keeps_original_zimage_prompt_clean() -> None:
         "performance_prompt": "慢、轻、克制，以真实呼吸带动作",
         "negative_prompt": "film set, tripod",
         "stage05_route_key": "realistic_cinematic",
-        "reference_guidance_override_reason": "prompt_only_establishing_shot_guardrail",
         "comfyui_style_positive_anchor": "environment-first cinematic still",
         "preferred_comfyui_workflow_source_ref": "F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-photo_SAFETENSORS.json",
     })
@@ -894,7 +894,6 @@ def test_build_provider_prompt_adds_realistic_establishing_guardrails() -> None:
         "comfyui_style_positive_anchor": "keep this inside the story world, not an on-set production image",
         "comfyui_style_negative_anchor": "camera rig, monitor, crew equipment",
         "stage05_route_key": "realistic_cinematic",
-        "reference_guidance_override_reason": "prompt_only_establishing_shot_guardrail",
     })
     assert "Route intent: keep this inside the story world" in prompt
     assert "Lighting: warm sunset light" in prompt
@@ -1419,7 +1418,7 @@ def test_run_comfyui_txt2img_runs_auto_repair_second_pass_for_risky_prompt(monke
         "control_mode": "prompt_only",
         "requires_manual_review": True,
         "manual_review_status": "pending",
-        "reason": "Umbrella prop-contact scenes remain prompt-only on the current Stage 05 route.",
+        "reason": "Umbrella prop-contact scenes generated without structure guidance are still prone to anatomy drift, handle-contact errors, and duplicate umbrella artifacts. Review carefully before Stage 06.",
     }
     manifest["jobs"] = [risky_job]
     manifest["summary"]["expected_image_count"] = 1
@@ -1562,6 +1561,51 @@ def test_validator_accepts_mixed_job_style_presets_when_top_level_style_metadata
                 job["comfyui_style_preset_label"] = "Environmental Establishing Film"
                 job["comfyui_style_positive_anchor"] = "environment-first cinematic still"
                 job["comfyui_style_negative_anchor"] = "film set contamination"
+        ok, errors, warnings = validate_keyframe_image_manifest.validate(data, manifest_json, mode="final")
+        assert ok, errors
+        assert warnings == []
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
+
+
+def test_sync_normalizes_mixed_job_style_presets_back_to_top_level_null(monkeypatch, tmp_path: Path) -> None:
+    manifest_json = _prepare_manifest(tmp_path)
+    mapping_path, _ = _write_mapping_and_workflow(tmp_path)
+    output_root = tmp_path / "comfy_output"
+    _patch_ui_graph_conversion(monkeypatch)
+    server, thread = _start_server("success", output_root=output_root)
+    try:
+        config_path = _write_config(tmp_path, base_url=f"http://127.0.0.1:{server.server_port}", output_root=output_root)
+        assert run_comfyui_txt2img.main([
+            str(manifest_json),
+            "--config", str(config_path),
+            "--mapping", str(mapping_path),
+            "--poll-interval", "0.01",
+            "--max-wait-seconds", "2",
+        ]) == 0
+        data = json.loads(manifest_json.read_text(encoding="utf-8"))
+        data["comfyui_style_preset_key"] = "environmental_establishing_film"
+        data["comfyui_style_preset_label"] = "Environmental Establishing Film"
+        data["comfyui_style_positive_anchor"] = "environment-first cinematic still"
+        data["comfyui_style_negative_anchor"] = "film set contamination"
+        for idx, job in enumerate(data["jobs"]):
+            if idx % 2 == 0:
+                job["comfyui_style_preset_key"] = "environmental_establishing_film"
+                job["comfyui_style_preset_label"] = "Environmental Establishing Film"
+                job["comfyui_style_positive_anchor"] = "environment-first cinematic still"
+                job["comfyui_style_negative_anchor"] = "film set contamination"
+            else:
+                job["comfyui_style_preset_key"] = None
+                job["comfyui_style_preset_label"] = None
+                job["comfyui_style_positive_anchor"] = None
+                job["comfyui_style_negative_anchor"] = None
+        sync_keyframe_image_manifest.normalize_stage05_route_fields(data)
+        assert data["comfyui_style_preset_key"] is None
+        assert data["comfyui_style_preset_label"] is None
+        assert data["comfyui_style_positive_anchor"] is None
+        assert data["comfyui_style_negative_anchor"] is None
         ok, errors, warnings = validate_keyframe_image_manifest.validate(data, manifest_json, mode="final")
         assert ok, errors
         assert warnings == []

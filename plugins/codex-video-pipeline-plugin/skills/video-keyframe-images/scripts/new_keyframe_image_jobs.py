@@ -38,13 +38,6 @@ from stage05_image_utils import write_stage05_manual_review_files, write_stage05
 from workflow_mapping import get_workflow_mapping, load_workflow_mapping, resolve_workflow_capabilities  # noqa: E402
 
 
-STYLE_FAMILY_TO_WORKFLOW = {
-    "realistic": "txt2img_keyframe_realistic",
-    "anime": "txt2img_keyframe_anime",
-    "guofeng": "txt2img_keyframe_guofeng",
-    "stylized": "txt2img_keyframe_stylized",
-}
-
 STYLE_FAMILY_TO_REFERENCE_BOOTSTRAP_MAPPING = {
     "realistic": "stage05_realistic_cinematic_amazing_z_photo_original",
     "anime": "stage05_anime_jp",
@@ -533,7 +526,7 @@ def resolve_stage05_route(brief: dict, prompts: dict) -> dict:
         "stage00_style": style,
         "registry_path": None,
         "used_registry": False,
-        "resolution_mode": "legacy_style_family_bootstrap_fallback_plus_stage05b_mainline",
+        "resolution_mode": "heuristic_style_family_bootstrap_fallback_plus_stage05b_mainline",
         "workflow_mapping_resolution": "stage05b_qwen_nextscene_mainline",
         "reference_guided_route_selected": True,
         "reference_bootstrap_workflow_mapping_key": fallback_bootstrap_mapping_key,
@@ -606,7 +599,7 @@ def provider_strategy_from_brief(brief: dict) -> dict:
         "primary": primary,
         "fallback": fallback,
         "execution_mode": "provider_or_manual",
-        "notes": "Use the local ComfyUI Zimage workflows for Stage 05; if generation cannot run, manually place generated images under 05_images/keyframes/."
+        "notes": "Stage05-A uses the locked local Zimage bootstrap workflows, and Stage05-B uses the local Qwen NextScene reference-guided mainline; if generation cannot run, manually place generated images under 05_images/keyframes/."
     }
 
 

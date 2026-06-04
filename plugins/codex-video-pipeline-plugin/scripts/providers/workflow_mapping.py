@@ -140,12 +140,17 @@ def resolve_workflow_capabilities(entry: dict[str, Any]) -> dict[str, Any]:
         if supports_reference_images:
             supported_control_modes.append("reference_guided")
     else:
-        supported_control_modes = [str(item).strip() for item in supported_control_modes if str(item).strip()]
-
-    if "prompt_only" not in supported_control_modes:
-        supported_control_modes.insert(0, "prompt_only")
-    if supports_reference_images and "reference_guided" not in supported_control_modes:
-        supported_control_modes.append("reference_guided")
+        seen: set[str] = set()
+        normalized_modes: list[str] = []
+        for item in supported_control_modes:
+            mode = str(item).strip()
+            if not mode or mode in seen:
+                continue
+            normalized_modes.append(mode)
+            seen.add(mode)
+        supported_control_modes = normalized_modes or (
+            ["prompt_only", "reference_guided"] if supports_reference_images else ["prompt_only"]
+        )
 
     return {
         "supports_reference_images": bool(supports_reference_images),

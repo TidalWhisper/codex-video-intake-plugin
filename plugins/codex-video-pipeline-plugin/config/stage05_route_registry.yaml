@@ -7,9 +7,9 @@ stage05_policy:
   provider_routing_mode: availability_first
   comfyui_route_resolution: route_family_first
   notes:
-    - Stage 05 mainline is pinned to the three verified local Zimage UI workflows.
-    - Do not route Stage 05 back through OpenAI image generation, bridge workflows, or Qwen compatibility fallbacks.
-    - Route-level style selection must happen through the real Zimage UI style selector, not by preserving alternate legacy branches.
+    - This registry now governs Stage05-A reference bootstrap only; Stage05-B mainline is fixed to the local Qwen NextScene reference-guided workflow.
+    - Do not route Stage 05 back through OpenAI image generation, bridge workflows, or any alternate Stage05-B fallback branch.
+    - Route-level style selection for Stage05-A must happen through the real Zimage UI style selector, not by preserving alternate legacy branches.
 
 stage00_style_to_route:
   写实电影感:
@@ -112,10 +112,10 @@ routes:
       community_preference_policy: prefer_community_optimized_when_available
       preferred_workflow_candidate: amazing_z_photo_safetensors
       preferred_model_candidate: Tongyi-MAI/Z-Image
-      migration_state: repo_transitional
+      migration_state: stage05a_reference_bootstrap_locked
       notes:
         - Realistic Stage 05 now runs directly on the local Amazing Z-Photo UI workflow.
-        - Do not keep or reintroduce Stage 05 prompt-only Qwen or reference-guided Qwen detours as compatibility branches.
+        - Do not keep or reintroduce any alternate Stage05-B Qwen detour or side path.
     workflow_candidates:
       - workflow_name: amazing_z_photo_safetensors
         source_type: community_workflow
@@ -174,9 +174,9 @@ routes:
       community_preference_policy: prefer_community_optimized_when_available
       preferred_workflow_candidate: amazing_z_photo_safetensors
       preferred_model_candidate: Tongyi-MAI/Z-Image
-      migration_state: repo_transitional
+      migration_state: stage05a_reference_bootstrap_locked
       notes:
-        - Short-drama realism stays on the same local Zimage photo workflow, with route-specific style selectors instead of alternate compatibility branches.
+        - Short-drama realism stays on the same local Zimage photo workflow, with route-specific style selectors instead of alternate side paths.
     workflow_candidates:
       - workflow_name: amazing_z_photo_safetensors
         source_type: community_workflow
@@ -222,7 +222,7 @@ routes:
       community_preference_policy: prefer_community_optimized_when_available
       preferred_workflow_candidate: amazing_z_image_a_safetensors
       preferred_model_candidate: Tongyi-MAI/Z-Image
-      migration_state: repo_transitional
+      migration_state: stage05a_reference_bootstrap_locked
       notes:
         - JP anime Stage 05 runs directly on the local Amazing Z-Image-A UI workflow.
     workflow_candidates:
@@ -271,7 +271,7 @@ routes:
       community_preference_policy: prefer_community_optimized_when_available
       preferred_workflow_candidate: amazing_z_image_a_safetensors
       preferred_model_candidate: Tongyi-MAI/Z-Image
-      migration_state: repo_transitional
+      migration_state: stage05a_reference_bootstrap_locked
       notes:
         - CN anime/new-guofeng is intentionally collapsed onto the local Image-A workflow instead of keeping separate bridge or Lumina detours in the Stage 05 mainline.
     workflow_candidates:
@@ -319,7 +319,7 @@ routes:
       community_preference_policy: prefer_community_optimized_when_available
       preferred_workflow_candidate: amazing_z_comics_safetensors
       preferred_model_candidate: Tongyi-MAI/Z-Image
-      migration_state: repo_transitional
+      migration_state: stage05a_reference_bootstrap_locked
       notes:
         - Western cartoon Stage 05 runs directly on the local Amazing Z-Comics UI workflow.
     workflow_candidates:
@@ -373,7 +373,7 @@ routes:
       community_preference_policy: prefer_community_optimized_when_available
       preferred_workflow_candidate: amazing_z_image_a_safetensors
       preferred_model_candidate: Tongyi-MAI/Z-Image
-      migration_state: repo_transitional
+      migration_state: stage05a_reference_bootstrap_locked
       notes:
         - Guofeng Stage 05 now stays on the local Image-A workflow with preset-controlled selector choices instead of separate bridge workflows.
     workflow_candidates:
@@ -433,7 +433,7 @@ routes:
       community_preference_policy: prefer_community_optimized_when_available
       preferred_workflow_candidate: amazing_z_comics_safetensors
       preferred_model_candidate: Tongyi-MAI/Z-Image
-      migration_state: repo_transitional
+      migration_state: stage05a_reference_bootstrap_locked
       notes:
         - Stylized Stage 05 is intentionally collapsed onto the local Zimage comics workflow instead of preserving image-b bridge artifacts.
     workflow_candidates:
@@ -481,7 +481,7 @@ routes:
       community_preference_policy: prefer_community_optimized_when_available
       preferred_workflow_candidate: amazing_z_comics_safetensors
       preferred_model_candidate: Tongyi-MAI/Z-Image
-      migration_state: repo_transitional
+      migration_state: stage05a_reference_bootstrap_locked
       notes:
         - Game CG Stage 05 now uses the local Zimage comics workflow directly instead of preserving separate bridge artifacts.
     workflow_candidates:

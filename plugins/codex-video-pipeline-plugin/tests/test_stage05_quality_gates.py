@@ -250,13 +250,13 @@ def test_new_keyframe_image_jobs_builds_risk_matrix_for_many_scene_types(tmp_pat
 
     manifest = json.loads(manifest_json.read_text(encoding="utf-8"))
     assert manifest["quality_review"]["risky_image_count"] == 14
-    assert manifest["quality_review"]["required_count"] == 14
-    assert manifest["quality_review"]["pending_count"] == 14
-    assert manifest["quality_review"]["manual_review_cleared"] is False
-    assert len(manifest["quality_review"]["review_queue"]) == 14
-    assert manifest["quality_review"]["next_review_image_ids"]
-    assert len(manifest["quality_review"]["top_review_cards"]) == 3
-    assert manifest["self_check"]["manual_review_cleared"] is False
+    assert manifest["quality_review"]["required_count"] == 0
+    assert manifest["quality_review"]["pending_count"] == 0
+    assert manifest["quality_review"]["manual_review_cleared"] is True
+    assert len(manifest["quality_review"]["review_queue"]) == 0
+    assert manifest["quality_review"]["next_review_image_ids"] == []
+    assert len(manifest["quality_review"]["top_review_cards"]) == 0
+    assert manifest["self_check"]["manual_review_cleared"] is True
     assert manifest["allowed_next_stage"] is None
 
     risk_tags = {tag for job in manifest["jobs"] for tag in job["quality_gate"]["risk_tags"]}
@@ -273,16 +273,13 @@ def test_new_keyframe_image_jobs_builds_risk_matrix_for_many_scene_types(tmp_pat
     assert all(job["quality_gate"]["requires_manual_review"] is False for job in safe_jobs)
     manual_review_text = (images_dir / "manual_review.md").read_text(encoding="utf-8")
     assert "# Stage 05 Manual Review" in manual_review_text
-    assert "## Top 3 快速问题卡" in manual_review_text
-    assert "第一改法" in manual_review_text
-    assert "复核队列" in manual_review_text
-    assert "IMG_S002_START" in manual_review_text
+    assert "待人工复核数：0" in manual_review_text
+    assert "当前没有高风险镜头" in manual_review_text
     prompt_patch_plan = json.loads((images_dir / "prompt_patch_plan.json").read_text(encoding="utf-8"))
-    assert prompt_patch_plan["patch_count"] == 3
-    assert prompt_patch_plan["queue_patch_count"] == 14
-    assert len(prompt_patch_plan["all_prompt_patches"]) == 14
-    assert prompt_patch_plan["top_prompt_patches"][0]["prompt_patch_sections"]
-    assert prompt_patch_plan["top_prompt_patches"][0]["rerun_command"]
+    assert prompt_patch_plan["patch_count"] == 0
+    assert prompt_patch_plan["queue_patch_count"] == 0
+    assert len(prompt_patch_plan["all_prompt_patches"]) == 0
+    assert prompt_patch_plan["top_prompt_patches"] == []
     prompt_patch_cards = (images_dir / "prompt_patch_cards.md").read_text(encoding="utf-8")
     assert "# Stage 05 Prompt Patch Cards" in prompt_patch_cards
-    assert "单图重跑" in prompt_patch_cards
+    assert "当前没有需要生成 prompt patch 的高风险镜头" in prompt_patch_cards

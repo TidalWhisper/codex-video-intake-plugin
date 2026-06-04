@@ -26,7 +26,7 @@
   "comfyui_model_id": "string (optional, current model candidate id selected for this Stage 05 route)",
   "preferred_comfyui_workflow_candidate": "string (optional, preferred community or official workflow candidate recorded by the route registry)",
   "preferred_comfyui_model_candidate": "string (optional, preferred model candidate recorded by the route registry)",
-  "route_migration_state": "string (optional, indicates whether the current route is transitional, ready_to_import, or still a research gap)",
+  "route_migration_state": "string (optional, records whether the current route is the Stage05-B reference-guided mainline or a locked Stage05-A bootstrap route)",
   "preferred_comfyui_workflow_source_ref": "string (optional, source URL or path for the preferred workflow candidate)",
   "preferred_comfyui_workflow_format": "string (optional, for example api_workflow or ui_graph)",
   "comfyui_style_preset_key": "string (optional, route-internal style preset key selected from the Stage 05 route registry)",
@@ -83,7 +83,7 @@
     "stage00_style": "string",
     "registry_path": "path|null",
     "used_registry": true,
-    "resolution_mode": "stage00_style_registry_plus_stage05b_mainline|legacy_style_family_bootstrap_fallback_plus_stage05b_mainline",
+    "resolution_mode": "stage00_style_registry_plus_stage05b_mainline|heuristic_style_family_bootstrap_fallback_plus_stage05b_mainline",
     "workflow_mapping_resolution": "stage05b_qwen_nextscene_mainline"
   },
   "shot_frame_requirements": {

@@ -84,7 +84,6 @@ def request_record(
         "comfyui_style_preset_key": job.get("comfyui_style_preset_key"),
         "comfyui_style_preset_label": job.get("comfyui_style_preset_label"),
         "comfyui_control_mode": job.get("comfyui_control_mode"),
-        "reference_guidance_override_reason": job.get("reference_guidance_override_reason"),
         "comfyui_optimization_profile": optimization_profile,
         "comfyui_optimization_profile_label": optimization_profile_label,
         "prompt": job["prompt"],
