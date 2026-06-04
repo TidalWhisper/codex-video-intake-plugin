@@ -6,7 +6,7 @@ from typing import Any
 import yaml
 
 
-EXPECTED_PROVIDER_ORDER = ["openai_gpt_image2", "comfyui_txt2img", "manual"]
+EXPECTED_PROVIDER_ORDER = ["comfyui_txt2img", "manual"]
 ROUTE_STATUSES = {"candidate", "approved", "provisional", "blocked", "deprecated", "backlog"}
 SUITABILITY_CLASSES = {"native-fit", "adapted-fit", "prompt-only", "unsupported", "under_review"}
 SPECIAL_DASIWA_OUTCOMES = {"approved_for_stage05", "provisional_for_stage05", "better_fit_for_stage06"}
@@ -59,7 +59,7 @@ def resolve_stage05_route_registry_path(
     registry_path: str | Path | None = None,
     root: str | Path | None = None,
     *,
-    allow_example_fallback: bool = True,
+    allow_example_fallback: bool = False,
 ) -> Path:
     base = Path(root) if root else root_dir()
     if registry_path is not None:
@@ -86,7 +86,7 @@ def load_stage05_route_registry(
     registry_path: str | Path | None = None,
     root: str | Path | None = None,
     *,
-    allow_example_fallback: bool = True,
+    allow_example_fallback: bool = False,
     validate: bool = True,
 ) -> tuple[dict[str, Any], Path]:
     path = resolve_stage05_route_registry_path(
@@ -97,7 +97,7 @@ def load_stage05_route_registry(
     if not path.exists():
         raise RouteRegistryError(
             f"stage05 route registry not found: {path}. "
-            "Copy config/stage05_route_registry.example.yaml to config/stage05_route_registry.yaml when you want local overrides."
+            "config/stage05_route_registry.yaml is required for Stage 05 routing."
         )
     try:
         data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
@@ -220,6 +220,7 @@ def resolve_named_style_preset(route_entry: dict[str, Any], preset_key: str | No
             "preset_label": None,
             "positive_anchor": None,
             "negative_anchor": None,
+            "style_selector": None,
         }
     preset = style_presets.get(preset_key)
     if not isinstance(preset, dict):
@@ -228,12 +229,14 @@ def resolve_named_style_preset(route_entry: dict[str, Any], preset_key: str | No
             "preset_label": None,
             "positive_anchor": None,
             "negative_anchor": None,
+            "style_selector": None,
         }
     return {
         "preset_key": preset_key,
         "preset_label": str(preset.get("display_name") or "").strip() or None,
         "positive_anchor": str(preset.get("positive_anchor") or "").strip() or None,
         "negative_anchor": str(preset.get("negative_anchor") or "").strip() or None,
+        "style_selector": str(preset.get("style_selector") or "").strip() or None,
     }
 
 

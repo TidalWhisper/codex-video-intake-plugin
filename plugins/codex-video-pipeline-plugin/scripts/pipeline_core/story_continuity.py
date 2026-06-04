@@ -78,6 +78,7 @@ def pick_story_anchors(brief: dict[str, Any], beat_count: int, *sources: dict[st
         "action_beats": _usable_list(raw.get("action_beats")) or _clean_list(fallback.get("action_beats")),
         "emotion_beats": _usable_list(raw.get("emotion_beats")) or _clean_list(fallback.get("emotion_beats")),
         "composition_beats": _usable_list(raw.get("composition_beats")) or _clean_list(fallback.get("composition_beats")),
+        "composition_focus_beats": _usable_list(raw.get("composition_focus_beats")) or _clean_list(fallback.get("composition_focus_beats")),
     }
 
 
@@ -94,7 +95,7 @@ def shot_anchor_bundle(
     props = _clean_list(prompt_bundle.get("key_props")) or _clean_list(shot.get("key_props")) or _clean_list(anchors.get("key_props"))
     key_prop = _clean_text(prompt_bundle.get("key_prop") or shot.get("key_prop") or (props[0] if props else ""))
     emotions = _clean_list(anchors.get("emotion_beats"))
-    compositions = _clean_list(anchors.get("composition_beats"))
+    compositions = _clean_list(anchors.get("composition_focus_beats")) or _clean_list(anchors.get("composition_beats"))
     actions = _clean_list(anchors.get("action_beats"))
     return {
         "location": _clean_text(prompt_bundle.get("location") or shot.get("location") or anchors.get("location") or anchors.get("scene_label")),

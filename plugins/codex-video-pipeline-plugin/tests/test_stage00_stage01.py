@@ -45,6 +45,7 @@ build_stage01_prompt_packet = load_module("build_stage01_prompt_packet_for_test"
 write_stage01_outputs = load_module("write_stage01_outputs_for_test", SCRIPT / "write_stage01_outputs.py")
 build_stage01_repair_packet = load_module("build_stage01_repair_packet_for_test", SCRIPT / "build_stage01_repair_packet.py")
 run_stage01_codex_flow = load_module("run_stage01_codex_flow_for_test", SCRIPT / "run_stage01_codex_flow.py")
+stage01_local_semantics = load_module("stage01_local_semantics_for_test", SCRIPT / "stage01_local_semantics.py")
 build_stage02_prompt_packet = load_module("build_stage02_prompt_packet_for_test", STORYBOARD / "build_stage02_prompt_packet.py")
 write_stage02_outputs = load_module("write_stage02_outputs_for_test", STORYBOARD / "write_stage02_outputs.py")
 new_storyboard_template = load_module("new_storyboard_template_for_test", STORYBOARD / "new_storyboard_template.py")
@@ -1240,7 +1241,7 @@ def test_new_script_template_writes_repair_packet_when_llm_output_fails_validati
     assert (script_dir / "stage01_repair_packet.json").exists()
 
 
-def test_run_stage01_codex_flow_generates_stage01_package_without_manual_llm_fill(tmp_path: Path, monkeypatch) -> None:
+def test_run_stage01_codex_flow_generates_stage01_package_without_manual_llm_fill(tmp_path: Path) -> None:
     project_dir = tmp_path / "video_projects" / "video_20260528_103000_sunset_beach_girl"
     intake_dir = project_dir / "00_intake"
     script_dir = project_dir / "01_script"
@@ -1259,20 +1260,17 @@ def test_run_stage01_codex_flow_generates_stage01_package_without_manual_llm_fil
     locked_brief = intake_dir / "project_brief.locked.json"
     locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    fake_codex = _FakeCodexExec([make_stage01_llm_output_for_example_brief()])
-    monkeypatch.setattr(run_stage01_codex_flow.subprocess, "run", fake_codex)
-
     script_json = script_dir / "script.json"
     assert run_stage01_codex_flow.main([str(locked_brief), str(script_json)]) == 0
 
-    assert len(fake_codex.calls) == 1
-    assert Path(str(fake_codex.calls[0]["cmd"][0])).suffix.lower() != ".ps1"
-    assert fake_codex.calls[0]["cmd"][1:4] == ["--ask-for-approval", "never", "exec"]
-    assert "--output-schema" in fake_codex.calls[0]["cmd"]
     assert (script_dir / "stage01_prompt_packet.json").exists()
     assert (script_dir / "stage01_llm_output.json").exists()
     assert (script_dir / "stage01_codex_generation_request.txt").exists()
-    assert json.loads(script_json.read_text(encoding="utf-8"))["title"] == "落日之后"
+    assert "STAGE01_LOCAL_EXECUTION_MODE" in (script_dir / "stage01_codex_last_message.txt").read_text(encoding="utf-8")
+    script_data = json.loads(script_json.read_text(encoding="utf-8"))
+    llm_output = json.loads((script_dir / "stage01_llm_output.json").read_text(encoding="utf-8"))
+    assert script_data["title"] == llm_output["selected_title"]
+    assert script_data["title"]
 
 
 def test_run_stage01_codex_flow_auto_repairs_failed_first_attempt(tmp_path: Path, monkeypatch) -> None:
@@ -1286,59 +1284,32 @@ def test_run_stage01_codex_flow_auto_repairs_failed_first_attempt(tmp_path: Path
     locked_brief = intake_dir / "project_brief.locked.json"
     locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    bad_first_output = {
-        "title_candidates": ["风穿过川西"],
-        "selected_title": "风穿过川西",
-        "logline": "她离开城市，在高原重新呼吸。",
-        "theme": "逃离内耗，重新找回呼吸",
-        "protagonist_state": "她处在失衡边缘",
-        "narrative_movement": "从逃离到释怀",
-        "ending_direction": "在高原放下情绪",
-        "avoid": ["不要额外生成旁白或对白"],
-        "characters": [
-            {
-                "name": "城市景观规划师",
-                "age": "30岁",
-                "role": "main",
-                "identity_anchor": "长期被工作消耗的女性景观规划师",
-            }
-        ],
-        "settings": ["川西高原旷野", "藏式民宿"],
-        "beats": [
-            {
-                "beat_id": "B01",
-                "start": "00:00",
-                "end": "00:30",
-                "summary": "她离开城市。",
-                "emotion": "压抑",
-                "visual": "她在城市边缘上车。",
-                "voiceover": "",
-                "dialogue": "",
-                "music_cue": "underscore: 背景配乐托住环境氛围",
-            }
-        ],
-        "self_check": {
-            "matches_locked_brief": True,
-            "duration_fits": True,
-            "genre_style_fits": True,
-            "aspect_ratio_fits": True,
-            "character_requirement_fits": True,
-            "voice_fits": True,
-            "music_fits": True,
-            "final_output_scope_fits": True,
-            "ready_for_storyboard": True,
-            "notes": [],
-        },
-    }
+    original_builder = run_stage01_codex_flow.build_stage01_llm_output
+    calls = {"count": 0}
 
-    fake_codex = _FakeCodexExec([bad_first_output, make_stage01_llm_output_for_music_video()])
-    monkeypatch.setattr(run_stage01_codex_flow.subprocess, "run", fake_codex)
+    def flaky_local_builder(local_brief, prompt_packet=None, repair_packet=None):  # noqa: ANN001
+        calls["count"] += 1
+        if calls["count"] == 1:
+            bad_first_output = stage01_local_semantics.build_stage01_llm_output(
+                local_brief,
+                prompt_packet=prompt_packet,
+                repair_packet=repair_packet,
+            )
+            bad_first_output["characters"][0]["name"] = "城市景观规划师"
+            bad_first_output["characters"][0]["identity_anchor"] = "长期被工作消耗的女性景观规划师"
+            bad_first_output["settings"] = ["城市边缘"]
+            bad_first_output["beats"] = bad_first_output["beats"][:1]
+            return bad_first_output
+        return original_builder(local_brief, prompt_packet=prompt_packet, repair_packet=repair_packet)
+
+    monkeypatch.setattr(run_stage01_codex_flow, "build_stage01_llm_output", flaky_local_builder)
 
     script_json = script_dir / "script.json"
     assert run_stage01_codex_flow.main([str(locked_brief), str(script_json), "--max-repair-attempts", "1"]) == 0
 
-    assert len(fake_codex.calls) == 2
+    assert calls["count"] == 2
     assert (script_dir / "stage01_codex_repair_request_attempt_1.txt").exists()
+    assert "STAGE01_LOCAL_REPAIR_MODE" in (script_dir / "stage01_codex_repair_last_message_attempt_1.txt").read_text(encoding="utf-8")
     assert not (script_dir / "stage01_validation_errors.json").exists()
     assert not (script_dir / "stage01_repair_packet.json").exists()
     script_data = json.loads(script_json.read_text(encoding="utf-8"))
@@ -1346,7 +1317,7 @@ def test_run_stage01_codex_flow_auto_repairs_failed_first_attempt(tmp_path: Path
     assert all(str(section.get("music_cue") or "").startswith("song:") for section in script_data["script"]["sections"])
 
 
-def test_run_stage02_codex_flow_generates_storyboard_package_without_manual_llm_fill(tmp_path: Path, monkeypatch) -> None:
+def test_run_stage02_codex_flow_generates_storyboard_package_without_manual_llm_fill(tmp_path: Path) -> None:
     project_dir = tmp_path / "video_projects" / "video_20260528_103000_sunset_beach_girl"
     intake_dir = project_dir / "00_intake"
     script_dir = project_dir / "01_script"
@@ -1372,21 +1343,71 @@ def test_run_stage02_codex_flow_generates_storyboard_package_without_manual_llm_
     script_json = script_dir / "script.json"
     script_json.write_text(json.dumps(script, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    payloads = [make_stage02_llm_output_from_example()]
-
-    def fake_run_codex_exec(request_text, schema_path, output_message_path, *, codex_bin, cwd):  # noqa: ANN001
-        output_message_path.write_text(json.dumps(payloads.pop(0), ensure_ascii=False, indent=2), encoding="utf-8")
-
-    monkeypatch.setattr(run_stage02_codex_flow, "run_codex_exec", fake_run_codex_exec)
-
     storyboard_json = storyboard_dir / "storyboard.json"
     assert run_stage02_codex_flow.main([str(locked_brief), str(script_json), str(storyboard_json)]) == 0
     assert (storyboard_dir / "stage02_prompt_packet.json").exists()
     assert (storyboard_dir / "stage02_llm_output.json").exists()
-    assert json.loads(storyboard_json.read_text(encoding="utf-8"))["shot_count"] > 0
+    assert "STAGE02_LOCAL_EXECUTION_MODE" in (storyboard_dir / "stage02_codex_last_message.txt").read_text(encoding="utf-8")
+    storyboard_data = json.loads(storyboard_json.read_text(encoding="utf-8"))
+    llm_output = json.loads((storyboard_dir / "stage02_llm_output.json").read_text(encoding="utf-8"))
+    assert storyboard_data["shot_count"] > 0
+    assert storyboard_data["shot_count"] == len(llm_output["shots"])
+    assert all(str(shot.get("production_note") or "").strip() for shot in storyboard_data["shots"])
 
 
-def test_run_stage03_codex_flow_generates_character_bible_without_manual_llm_fill(tmp_path: Path, monkeypatch) -> None:
+def test_run_stage02_codex_flow_auto_repairs_failed_first_attempt(tmp_path: Path, monkeypatch) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260528_103000_sunset_beach_girl"
+    intake_dir = project_dir / "00_intake"
+    script_dir = project_dir / "01_script"
+    storyboard_dir = project_dir / "02_storyboard"
+    intake_dir.mkdir(parents=True)
+    script_dir.mkdir(parents=True)
+    storyboard_dir.mkdir(parents=True)
+
+    brief = load_example_brief()
+    brief.update({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "status": "locked",
+        "confirmed_by_user": True,
+        "allowed_next_stage": "STAGE_01_SCRIPT_GENERATION",
+    })
+    locked_brief = intake_dir / "project_brief.locked.json"
+    locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    script = json.loads((TEMPLATES / "script.example.json").read_text(encoding="utf-8"))
+    script["project_id"] = project_dir.name
+    script["source_brief"] = str(locked_brief).replace("\\", "/")
+    script_json = script_dir / "script.json"
+    script_json.write_text(json.dumps(script, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    original_builder = run_stage02_codex_flow.build_stage02_llm_output
+    calls = {"count": 0}
+
+    def flaky_local_builder(local_brief, local_script, prompt_packet=None, repair_packet=None):  # noqa: ANN001
+        calls["count"] += 1
+        if calls["count"] == 1:
+            bad_output = original_builder(local_brief, local_script, prompt_packet=prompt_packet, repair_packet=repair_packet)
+            bad_output["shots"] = bad_output["shots"][:1]
+            bad_output["target_duration_sec"] = 30
+            return bad_output
+        return original_builder(local_brief, local_script, prompt_packet=prompt_packet, repair_packet=repair_packet)
+
+    monkeypatch.setattr(run_stage02_codex_flow, "build_stage02_llm_output", flaky_local_builder)
+
+    storyboard_json = storyboard_dir / "storyboard.json"
+    assert run_stage02_codex_flow.main([str(locked_brief), str(script_json), str(storyboard_json), "--max-repair-attempts", "1"]) == 0
+
+    assert calls["count"] == 2
+    assert (storyboard_dir / "stage02_codex_repair_request_attempt_1.txt").exists()
+    assert "STAGE02_LOCAL_REPAIR_MODE" in (storyboard_dir / "stage02_codex_repair_last_message_attempt_1.txt").read_text(encoding="utf-8")
+    assert not (storyboard_dir / "stage02_validation_errors.json").exists()
+    assert not (storyboard_dir / "stage02_repair_packet.json").exists()
+    storyboard_data = json.loads(storyboard_json.read_text(encoding="utf-8"))
+    assert storyboard_data["shot_count"] > 1
+
+
+def test_run_stage03_codex_flow_generates_character_bible_without_manual_llm_fill(tmp_path: Path) -> None:
     project_dir = tmp_path / "video_projects" / "video_20260528_103000_sunset_beach_girl"
     intake_dir = project_dir / "00_intake"
     script_dir = project_dir / "01_script"
@@ -1419,21 +1440,94 @@ def test_run_stage03_codex_flow_generates_character_bible_without_manual_llm_fil
     storyboard_json = storyboard_dir / "storyboard.json"
     storyboard_json.write_text(json.dumps(storyboard, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    payloads = [make_stage03_llm_output_from_example()]
-
-    def fake_run_codex_exec(request_text, schema_path, output_message_path, *, codex_bin, cwd):  # noqa: ANN001
-        output_message_path.write_text(json.dumps(payloads.pop(0), ensure_ascii=False, indent=2), encoding="utf-8")
-
-    monkeypatch.setattr(run_stage03_codex_flow, "run_codex_exec", fake_run_codex_exec)
-
     character_json = character_dir / "character_bible.json"
     assert run_stage03_codex_flow.main([str(locked_brief), str(script_json), str(storyboard_json), str(character_json)]) == 0
     assert (character_dir / "stage03_prompt_packet.json").exists()
     assert (character_dir / "stage03_llm_output.json").exists()
-    assert json.loads(character_json.read_text(encoding="utf-8"))["characters"]
+    assert "STAGE03_LOCAL_EXECUTION_MODE" in (character_dir / "stage03_codex_last_message.txt").read_text(encoding="utf-8")
+    character_data = json.loads(character_json.read_text(encoding="utf-8"))
+    llm_output = json.loads((character_dir / "stage03_llm_output.json").read_text(encoding="utf-8"))
+    assert character_data["characters"]
+    assert len(character_data["characters"]) == len(llm_output["characters"])
+    assert all(str(item.get("visual_consistency_prompt") or "").strip() for item in character_data["characters"])
+    first_character = character_data["characters"][0]
+    assert "同一人物设定：" in first_character["visual_consistency_prompt"]
+    assert "保持同一张脸" in first_character["visual_consistency_prompt"]
+    assert first_character["performance_profile"]["baseline_expression"] != "观察"
+    assert "避免脸型变化" in first_character["negative_consistency_prompt"]
 
 
-def test_run_stage04_codex_flow_generates_keyframe_prompts_without_manual_llm_fill(tmp_path: Path, monkeypatch) -> None:
+def test_run_stage03_codex_flow_auto_repairs_failed_first_attempt(tmp_path: Path, monkeypatch) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260528_103000_sunset_beach_girl"
+    intake_dir = project_dir / "00_intake"
+    script_dir = project_dir / "01_script"
+    storyboard_dir = project_dir / "02_storyboard"
+    character_dir = project_dir / "03_characters"
+    for path in [intake_dir, script_dir, storyboard_dir, character_dir]:
+        path.mkdir(parents=True)
+
+    brief = load_example_brief()
+    brief.update({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "status": "locked",
+        "confirmed_by_user": True,
+        "allowed_next_stage": "STAGE_01_SCRIPT_GENERATION",
+    })
+    locked_brief = intake_dir / "project_brief.locked.json"
+    locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    script = json.loads((TEMPLATES / "script.example.json").read_text(encoding="utf-8"))
+    script["project_id"] = project_dir.name
+    script["source_brief"] = str(locked_brief).replace("\\", "/")
+    script_json = script_dir / "script.json"
+    script_json.write_text(json.dumps(script, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    storyboard = json.loads((TEMPLATES / "storyboard.example.json").read_text(encoding="utf-8"))
+    storyboard["project_id"] = project_dir.name
+    storyboard["source_brief"] = str(locked_brief).replace("\\", "/")
+    storyboard["source_script"] = str(script_json).replace("\\", "/")
+    storyboard_json = storyboard_dir / "storyboard.json"
+    storyboard_json.write_text(json.dumps(storyboard, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    original_builder = run_stage03_codex_flow.build_stage03_llm_output
+    calls = {"count": 0}
+
+    def flaky_local_builder(local_brief, local_script, local_storyboard, prompt_packet=None, repair_packet=None):  # noqa: ANN001
+        calls["count"] += 1
+        if calls["count"] == 1:
+            bad_output = original_builder(
+                local_brief,
+                local_script,
+                local_storyboard,
+                prompt_packet=prompt_packet,
+                repair_packet=repair_packet,
+            )
+            bad_output["characters"][0]["appearance"]["clothing"] = ""
+            return bad_output
+        return original_builder(
+            local_brief,
+            local_script,
+            local_storyboard,
+            prompt_packet=prompt_packet,
+            repair_packet=repair_packet,
+        )
+
+    monkeypatch.setattr(run_stage03_codex_flow, "build_stage03_llm_output", flaky_local_builder)
+
+    character_json = character_dir / "character_bible.json"
+    assert run_stage03_codex_flow.main([str(locked_brief), str(script_json), str(storyboard_json), str(character_json), "--max-repair-attempts", "1"]) == 0
+
+    assert calls["count"] == 2
+    assert (character_dir / "stage03_codex_repair_request_attempt_1.txt").exists()
+    assert "STAGE03_LOCAL_REPAIR_MODE" in (character_dir / "stage03_codex_repair_last_message_attempt_1.txt").read_text(encoding="utf-8")
+    assert not (character_dir / "stage03_validation_errors.json").exists()
+    assert not (character_dir / "stage03_repair_packet.json").exists()
+    character_data = json.loads(character_json.read_text(encoding="utf-8"))
+    assert character_data["characters"][0]["appearance"]["clothing"]
+
+
+def test_run_stage04_codex_flow_generates_keyframe_prompts_without_manual_llm_fill(tmp_path: Path) -> None:
     project_dir = tmp_path / "video_projects" / "video_20260528_103000_sunset_beach_girl"
     intake_dir = project_dir / "00_intake"
     script_dir = project_dir / "01_script"
@@ -1475,18 +1569,106 @@ def test_run_stage04_codex_flow_generates_keyframe_prompts_without_manual_llm_fi
     character_json = character_dir / "character_bible.json"
     character_json.write_text(json.dumps(character, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    payloads = [make_stage04_llm_output_from_example()]
-
-    def fake_run_codex_exec(request_text, schema_path, output_message_path, *, codex_bin, cwd):  # noqa: ANN001
-        output_message_path.write_text(json.dumps(payloads.pop(0), ensure_ascii=False, indent=2), encoding="utf-8")
-
-    monkeypatch.setattr(run_stage04_codex_flow, "run_codex_exec", fake_run_codex_exec)
-
     keyframe_json = keyframe_dir / "keyframe_prompts.json"
     assert run_stage04_codex_flow.main([str(locked_brief), str(script_json), str(storyboard_json), str(character_json), str(keyframe_json)]) == 0
     assert (keyframe_dir / "stage04_prompt_packet.json").exists()
     assert (keyframe_dir / "stage04_llm_output.json").exists()
-    assert json.loads(keyframe_json.read_text(encoding="utf-8"))["shot_prompts"]
+    assert "STAGE04_LOCAL_EXECUTION_MODE" in (keyframe_dir / "stage04_codex_last_message.txt").read_text(encoding="utf-8")
+    keyframe_data = json.loads(keyframe_json.read_text(encoding="utf-8"))
+    llm_output = json.loads((keyframe_dir / "stage04_llm_output.json").read_text(encoding="utf-8"))
+    assert keyframe_data["shot_prompts"]
+    assert len(keyframe_data["shot_prompts"]) == len(llm_output["shot_prompts"])
+    assert all(str(item.get("consistency_prompt") or "").startswith("Character identity anchor:") for item in keyframe_data["shot_prompts"])
+    assert keyframe_data["transition_prompts"]
+
+
+def test_run_stage04_codex_flow_auto_repairs_failed_first_attempt(tmp_path: Path, monkeypatch) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260528_103000_sunset_beach_girl"
+    intake_dir = project_dir / "00_intake"
+    script_dir = project_dir / "01_script"
+    storyboard_dir = project_dir / "02_storyboard"
+    character_dir = project_dir / "03_characters"
+    keyframe_dir = project_dir / "04_keyframes"
+    for path in [intake_dir, script_dir, storyboard_dir, character_dir, keyframe_dir]:
+        path.mkdir(parents=True)
+
+    brief = load_example_brief()
+    brief.update({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "status": "locked",
+        "confirmed_by_user": True,
+        "allowed_next_stage": "STAGE_01_SCRIPT_GENERATION",
+    })
+    locked_brief = intake_dir / "project_brief.locked.json"
+    locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    script = json.loads((TEMPLATES / "script.example.json").read_text(encoding="utf-8"))
+    script["project_id"] = project_dir.name
+    script["source_brief"] = str(locked_brief).replace("\\", "/")
+    script_json = script_dir / "script.json"
+    script_json.write_text(json.dumps(script, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    storyboard = json.loads((TEMPLATES / "storyboard.example.json").read_text(encoding="utf-8"))
+    storyboard["project_id"] = project_dir.name
+    storyboard["source_brief"] = str(locked_brief).replace("\\", "/")
+    storyboard["source_script"] = str(script_json).replace("\\", "/")
+    storyboard_json = storyboard_dir / "storyboard.json"
+    storyboard_json.write_text(json.dumps(storyboard, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    character = json.loads((TEMPLATES / "character_bible.example.json").read_text(encoding="utf-8"))
+    character["project_id"] = project_dir.name
+    character["source_brief"] = str(locked_brief).replace("\\", "/")
+    character["source_script"] = str(script_json).replace("\\", "/")
+    character["source_storyboard"] = str(storyboard_json).replace("\\", "/")
+    character_json = character_dir / "character_bible.json"
+    character_json.write_text(json.dumps(character, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    original_builder = run_stage04_codex_flow.build_stage04_llm_output
+    calls = {"count": 0}
+
+    def flaky_local_builder(local_brief, local_script, local_storyboard, local_character_bible, prompt_packet=None, repair_packet=None):  # noqa: ANN001
+        calls["count"] += 1
+        if calls["count"] == 1:
+            bad_output = original_builder(
+                local_brief,
+                local_script,
+                local_storyboard,
+                local_character_bible,
+                prompt_packet=prompt_packet,
+                repair_packet=repair_packet,
+            )
+            bad_output["shot_prompts"][0]["start_keyframe_prompt"] = ""
+            return bad_output
+        return original_builder(
+            local_brief,
+            local_script,
+            local_storyboard,
+            local_character_bible,
+            prompt_packet=prompt_packet,
+            repair_packet=repair_packet,
+        )
+
+    monkeypatch.setattr(run_stage04_codex_flow, "build_stage04_llm_output", flaky_local_builder)
+
+    keyframe_json = keyframe_dir / "keyframe_prompts.json"
+    assert run_stage04_codex_flow.main([
+        str(locked_brief),
+        str(script_json),
+        str(storyboard_json),
+        str(character_json),
+        str(keyframe_json),
+        "--max-repair-attempts",
+        "1",
+    ]) == 0
+
+    assert calls["count"] == 2
+    assert (keyframe_dir / "stage04_codex_repair_request_attempt_1.txt").exists()
+    assert "STAGE04_LOCAL_REPAIR_MODE" in (keyframe_dir / "stage04_codex_repair_last_message_attempt_1.txt").read_text(encoding="utf-8")
+    assert not (keyframe_dir / "stage04_validation_errors.json").exists()
+    assert not (keyframe_dir / "stage04_repair_packet.json").exists()
+    keyframe_data = json.loads(keyframe_json.read_text(encoding="utf-8"))
+    assert keyframe_data["shot_prompts"][0]["start_keyframe_prompt"]
 
 
 def test_resolve_codex_bin_prefers_windows_cmd_over_powershell_shim(monkeypatch) -> None:
@@ -1542,6 +1724,84 @@ def test_stage01_opening_composition_tracks_locked_aspect_ratio() -> None:
         script_data = pipeline_blueprints.build_stage01_script(brief)
         opening = script_data["story_anchors"]["composition_beats"][0]
         assert expected in opening
+
+
+def test_stage01_beach_music_video_text_quality_avoids_template_tone() -> None:
+    brief = load_example_brief()
+    brief["normalized"].update({
+        "idea": "一名年轻的亚洲女性，穿着裙子在黄昏的海滩边散步、放空自己。",
+        "genre": "音乐MV",
+        "style": "写实电影感",
+        "aspect_ratio": "16:9",
+        "aspect_ratio_label": "16:9 横屏",
+        "voice_mode": "不确定，先由模型建议",
+        "voice_required": "recommend",
+        "music_mode": "需要，背景配乐（underscore）",
+        "music_profile": "underscore",
+        "final_output": "合成粗剪成片",
+    })
+
+    script_data = pipeline_blueprints.build_stage01_script(brief)
+
+    assert script_data["title"] == "黄昏潮线"
+    assert script_data["characters"][0]["name"] == "年轻的亚洲女性"
+    assert "既定题材与风格" not in script_data["logline"]
+    assert script_data["theme"] == "把没说出口的情绪留给海风和晚霞"
+    assert script_data["narrative_movement"] == "从独自沉浸到在海风与脚步里慢慢把情绪放下"
+    assert script_data["ending_direction"] == "年轻的亚洲女性沿着潮线继续往前走，背影和呼吸都慢慢轻下来。"
+    assert script_data["settings"] == ["黄昏海滩"]
+    assert script_data["duration_plan"]["beats"][0]["summary"] == "黄昏海滩上，年轻的亚洲女性沿着潮线慢慢往前走，像是在等海风把心事吹散。"
+    assert script_data["duration_plan"]["beats"][2]["summary"] == "海风裹着晚霞从她身边过去，那点没说出口的情绪终于开始松开。"
+    assert all(not str(section.get("voiceover") or "").strip() for section in script_data["script"]["sections"])
+    assert all("推进“" not in str(beat.get("summary") or "") for beat in script_data["duration_plan"]["beats"])
+    assert all("一名" not in str(beat.get("summary") or "") for beat in script_data["duration_plan"]["beats"])
+    assert "推进“" not in script_data["script"]["sections"][0]["visual"]
+    assert "一名" not in script_data["script"]["sections"][0]["visual"]
+    assert all("构图重点：" not in str(section.get("visual") or "") for section in script_data["script"]["sections"])
+    assert all(str(section.get("composition_focus") or "").strip() for section in script_data["script"]["sections"])
+
+
+def test_write_stage01_outputs_syncs_story_anchors_with_generated_beats(tmp_path: Path) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260603_180000_beach_anchor_sync"
+    intake_dir = project_dir / "00_intake"
+    script_dir = project_dir / "01_script"
+    intake_dir.mkdir(parents=True, exist_ok=True)
+    script_dir.mkdir(parents=True, exist_ok=True)
+
+    brief = load_example_brief()
+    brief.update({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "status": "locked",
+        "confirmed_by_user": True,
+        "allowed_next_stage": "STAGE_01_SCRIPT_GENERATION",
+    })
+    brief["normalized"].update({
+        "idea": "一名年轻的亚洲女性，穿着裙子在黄昏的海滩边散步、放空自己。",
+        "genre": "音乐MV",
+        "style": "写实电影感",
+        "aspect_ratio": "16:9",
+        "aspect_ratio_label": "16:9 横屏",
+        "voice_mode": "不确定，先由模型建议",
+        "voice_required": "recommend",
+        "music_mode": "需要，背景配乐（underscore）",
+        "music_profile": "underscore",
+        "final_output": "合成粗剪成片",
+    })
+    locked_brief = intake_dir / "project_brief.locked.json"
+    locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    script_json = script_dir / "script.json"
+    assert run_stage01_codex_flow.main([str(locked_brief), str(script_json)]) == 0
+    script_data = json.loads(script_json.read_text(encoding="utf-8"))
+
+    assert script_data["settings"] == ["黄昏海滩"]
+    assert script_data["story_anchors"]["subject"] == "年轻的亚洲女性"
+    assert script_data["story_anchors"]["scene_label"] == "黄昏海滩"
+    assert script_data["story_anchors"]["action_beats"] == [beat["summary"] for beat in script_data["duration_plan"]["beats"]]
+    assert script_data["story_anchors"]["composition_beats"] == [section["visual"] for section in script_data["script"]["sections"]]
+    assert script_data["story_anchors"]["composition_focus_beats"] == [section["composition_focus"] for section in script_data["script"]["sections"]]
+    assert script_data["characters"][0]["identity_anchor"] == "20岁出头，在黄昏海边独自散步、想把心事慢慢放下的亚洲年轻女性"
 
 
 def test_stage03_and_stage04_preserve_gender_and_aspect_ratio_for_beach_girl(tmp_path: Path) -> None:
@@ -1823,8 +2083,13 @@ def test_new_character_bible_template_generates_final_ready_draft(tmp_path: Path
     assert (character_dir / "character_review.md").exists()
     assert (character_dir / "reference_image_plan.json").exists()
     assert (character_dir / "reference_image_start_here.md").exists()
+    bible_text = (character_dir / "character_bible.md").read_text(encoding="utf-8")
     review_text = (character_dir / "character_review.md").read_text(encoding="utf-8")
     reference_start_here = (character_dir / "reference_image_start_here.md").read_text(encoding="utf-8")
+    assert "定位：" in bible_text
+    assert "表演基线：" in bible_text
+    assert "连续性锚点：" in bible_text
+    assert "角色：main" not in bible_text
     assert "角色参考图就绪：否" in review_text
     assert "CHAR_001_primary.png" in review_text
     assert "角色参考图补齐入口" in reference_start_here
@@ -2807,7 +3072,7 @@ def test_continue_pipeline_dispatches_character_confirmed_project_to_stage04_run
     ]
 
 
-def test_stage05_compiler_keeps_openai_first_for_anime_projects(tmp_path: Path) -> None:
+def test_stage05_compiler_keeps_comfyui_first_for_anime_projects(tmp_path: Path) -> None:
     project_dir = tmp_path / "video_projects" / "video_20260528_103000_anime_demo"
     intake_dir = project_dir / "00_intake"
     keyframe_dir = project_dir / "04_keyframes"
@@ -2842,8 +3107,8 @@ def test_stage05_compiler_keeps_openai_first_for_anime_projects(tmp_path: Path) 
     assert new_keyframe_image_jobs.main(["new_keyframe_image_jobs.py", str(locked_brief), str(keyframe_json), str(image_manifest_json)]) == 0
     data = json.loads(image_manifest_json.read_text(encoding="utf-8"))
     assert data["compiled_requirements"]["visual_family_hint"] == "anime"
-    assert data["image_provider_strategy"]["primary"] == "openai_gpt_image2"
-    assert data["jobs"][0]["provider_priority"][0] == "openai_gpt_image2"
+    assert data["image_provider_strategy"]["primary"] == "comfyui_txt2img"
+    assert data["jobs"][0]["provider_priority"][0] == "comfyui_txt2img"
     assert data["stage05_route_key"] == "anime_jp"
     assert data["comfyui_workflow_mapping_key"] == "stage05_anime_jp"
     assert data["comfyui_model_id"] == "Tongyi-MAI/Z-Image"
@@ -2901,36 +3166,36 @@ def test_stage05_route_registry_maps_cn_animation_style_to_new_route_key(tmp_pat
     data = json.loads(image_manifest_json.read_text(encoding="utf-8"))
     assert data["stage05_route_key"] == "anime_cn_newguofeng"
     assert data["style_family"] == "anime"
-    assert data["comfyui_workflow_mapping_key"] == "stage05_anime_cn_newguofeng"
-    assert data["comfyui_model_id"] == "neta-art/Neta-Lumina"
-    assert data["preferred_comfyui_workflow_candidate"] == "neta_lumina_official"
-    assert data["preferred_comfyui_model_candidate"] == "neta-art/Neta-Lumina"
-    assert data["route_migration_state"] == "needs_api_conversion"
-    assert data["jobs"][0]["comfyui_workflow_name"] == "txt2img_keyframe_anime_cn_newguofeng"
-    assert data["jobs"][0]["comfyui_workflow_mapping_key"] == "stage05_anime_cn_newguofeng"
+    assert data["comfyui_workflow_mapping_key"] == "stage05_anime_jp"
+    assert data["comfyui_model_id"] == "Tongyi-MAI/Z-Image"
+    assert data["preferred_comfyui_workflow_candidate"] == "amazing_z_image_a_safetensors"
+    assert data["preferred_comfyui_model_candidate"] == "Tongyi-MAI/Z-Image"
+    assert data["route_migration_state"] == "repo_transitional"
+    assert data["jobs"][0]["comfyui_workflow_name"] == "amazing_z_image_a_safetensors"
+    assert data["jobs"][0]["comfyui_workflow_mapping_key"] == "stage05_anime_jp"
     assert data["route_resolution"]["used_registry"] is True
 
 
 def test_validate_keyframe_image_manifest_example_final() -> None:
     data = json.loads((TEMPLATES / "keyframe_image_manifest.example.json").read_text(encoding="utf-8"))
     assert data["stage05_route_key"] == "realistic_cinematic"
-    assert data["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_qwen2512_prompt_only"
-    assert data["comfyui_model_id"] == "Qwen/Qwen-Image-2512"
-    assert data["preferred_comfyui_workflow_candidate"] == "txt2img_keyframe_realistic"
-    assert data["preferred_comfyui_model_candidate"] == "Qwen/Qwen-Image-2512"
-    assert data["route_migration_state"] == "official_fallback_for_semantic_alignment"
-    assert data["preferred_comfyui_workflow_source_ref"] == "workflows/comfyui/txt2img_keyframe_realistic.workflow_api.json"
-    assert data["preferred_comfyui_workflow_format"] == "api_workflow"
-    assert data["preferred_comfyui_workflow_custom_node_dependencies"] == []
+    assert data["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_amazing_z_photo_original"
+    assert data["comfyui_model_id"] == "Tongyi-MAI/Z-Image"
+    assert data["preferred_comfyui_workflow_candidate"] == "amazing_z_photo_safetensors"
+    assert data["preferred_comfyui_model_candidate"] == "Tongyi-MAI/Z-Image"
+    assert data["route_migration_state"] == "repo_transitional"
+    assert data["preferred_comfyui_workflow_source_ref"] == "F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-photo_SAFETENSORS.json"
+    assert data["preferred_comfyui_workflow_format"] == "ui_graph"
+    assert data["preferred_comfyui_workflow_custom_node_dependencies"] == ["rgthree-comfy"]
     assert data["preferred_comfyui_workflow_import_blockers"] == []
     assert data["route_resolution"]["resolution_mode"] == "stage00_style_registry"
     assert all(job["stage05_route_key"] == "realistic_cinematic" for job in data["jobs"])
-    assert all(job["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_qwen2512_prompt_only" for job in data["jobs"])
-    assert all(job["comfyui_workflow_name"] == "txt2img_keyframe_realistic" for job in data["jobs"])
-    assert all(job["preferred_comfyui_workflow_candidate"] == "txt2img_keyframe_realistic" for job in data["jobs"])
-    assert all(job["preferred_comfyui_model_candidate"] == "Qwen/Qwen-Image-2512" for job in data["jobs"])
-    assert all(job["route_migration_state"] == "official_fallback_for_semantic_alignment" for job in data["jobs"])
-    assert all(job["preferred_comfyui_workflow_format"] == "api_workflow" for job in data["jobs"])
+    assert all(job["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_amazing_z_photo_original" for job in data["jobs"])
+    assert all(job["comfyui_workflow_name"] == "amazing_z_photo_safetensors" for job in data["jobs"])
+    assert all(job["preferred_comfyui_workflow_candidate"] == "amazing_z_photo_safetensors" for job in data["jobs"])
+    assert all(job["preferred_comfyui_model_candidate"] == "Tongyi-MAI/Z-Image" for job in data["jobs"])
+    assert all(job["route_migration_state"] == "repo_transitional" for job in data["jobs"])
+    assert all(job["preferred_comfyui_workflow_format"] == "ui_graph" for job in data["jobs"])
     ok, errors, warnings = validate_keyframe_image_manifest.validate(data, TEMPLATES / "keyframe_image_manifest.example.json", mode="final")
     assert ok, errors
 
@@ -2987,21 +3252,21 @@ def test_new_keyframe_image_jobs_passes_draft_then_placeholder_passes_final(tmp_
     assert data["comfyui_workflow_capabilities"]["supports_reference_images"] is False
     assert len(data["jobs"]) == 2 * len(keyframe["shot_prompts"])
     assert data["style_family"] == "realistic"
-    assert data["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_qwen2512_prompt_only"
-    assert data["comfyui_model_id"] == "Qwen/Qwen-Image-2512"
-    assert data["preferred_comfyui_workflow_candidate"] == "txt2img_keyframe_realistic"
-    assert data["preferred_comfyui_model_candidate"] == "Qwen/Qwen-Image-2512"
-    assert data["route_migration_state"] == "official_fallback_for_semantic_alignment"
-    assert data["preferred_comfyui_workflow_source_ref"] == "workflows/comfyui/txt2img_keyframe_realistic.workflow_api.json"
-    assert data["preferred_comfyui_workflow_format"] == "api_workflow"
+    assert data["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_amazing_z_photo_original"
+    assert data["comfyui_model_id"] == "Tongyi-MAI/Z-Image"
+    assert data["preferred_comfyui_workflow_candidate"] == "amazing_z_photo_safetensors"
+    assert data["preferred_comfyui_model_candidate"] == "Tongyi-MAI/Z-Image"
+    assert data["route_migration_state"] == "repo_transitional"
+    assert data["preferred_comfyui_workflow_source_ref"] == "F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-photo_SAFETENSORS.json"
+    assert data["preferred_comfyui_workflow_format"] == "ui_graph"
     assert data["comfyui_workflow_router"]["realistic"] == "txt2img_keyframe_realistic"
     assert all(job["style_family"] == "realistic" for job in data["jobs"])
-    assert all(job["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_qwen2512_prompt_only" for job in data["jobs"])
-    assert all(job["comfyui_workflow_name"] == "txt2img_keyframe_realistic" for job in data["jobs"])
-    assert all(job["preferred_comfyui_workflow_candidate"] == "txt2img_keyframe_realistic" for job in data["jobs"])
-    assert all(job["preferred_comfyui_model_candidate"] == "Qwen/Qwen-Image-2512" for job in data["jobs"])
-    assert all(job["route_migration_state"] == "official_fallback_for_semantic_alignment" for job in data["jobs"])
-    assert all(job["preferred_comfyui_workflow_format"] == "api_workflow" for job in data["jobs"])
+    assert all(job["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_amazing_z_photo_original" for job in data["jobs"])
+    assert all(job["comfyui_workflow_name"] == "amazing_z_photo_safetensors" for job in data["jobs"])
+    assert all(job["preferred_comfyui_workflow_candidate"] == "amazing_z_photo_safetensors" for job in data["jobs"])
+    assert all(job["preferred_comfyui_model_candidate"] == "Tongyi-MAI/Z-Image" for job in data["jobs"])
+    assert all(job["route_migration_state"] == "repo_transitional" for job in data["jobs"])
+    assert all(job["preferred_comfyui_workflow_format"] == "ui_graph" for job in data["jobs"])
     assert all(job["reference_guidance_requested"] is True for job in data["jobs"])
     assert all(job["reference_guidance_active"] is False for job in data["jobs"])
 
@@ -3159,7 +3424,7 @@ def test_new_keyframe_image_jobs_activates_reference_guided_mode_when_mapping_su
     fake_mapping_path = tmp_path / "workflow_node_mapping.yaml"
     fake_mapping = {
         "workflows": {
-            "stage05_realistic_cinematic_qwen_edit_reference": {
+            "stage05_realistic_cinematic_amazing_z_photo_original": {
                 "file": "workflows/comfyui/fake_reference.workflow_api.json",
                 "nodes": {
                     "positive_prompt": {"node_id": "1", "input_name": "text"},
@@ -3190,6 +3455,130 @@ def test_new_keyframe_image_jobs_activates_reference_guided_mode_when_mapping_su
     assert data["reference_guidance_active"] is True
     assert data["workflow_capability_gaps"] == []
     assert data["comfyui_workflow_capabilities"]["supports_reference_images"] is True
+    assert all(job["comfyui_control_mode"] == "reference_guided" for job in data["jobs"])
+    assert all(job["reference_guidance_active"] is True for job in data["jobs"])
+
+
+def test_new_keyframe_image_jobs_keeps_qwen_nextscene_route_in_reference_guided_mode(tmp_path: Path, monkeypatch) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260604_180000_qwen_nextscene_reference_ready"
+    intake_dir = project_dir / "00_intake"
+    keyframe_dir = project_dir / "04_keyframes"
+    images_dir = project_dir / "05_images"
+    reference_dir = project_dir / "03_characters" / "reference_images"
+    intake_dir.mkdir(parents=True, exist_ok=True)
+    keyframe_dir.mkdir(parents=True, exist_ok=True)
+    images_dir.mkdir(parents=True, exist_ok=True)
+    reference_dir.mkdir(parents=True, exist_ok=True)
+
+    brief = load_example_brief()
+    brief.update({
+        "schema_version": "0.5.0",
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "status": "locked",
+        "confirmed_by_user": True,
+        "allowed_next_stage": "STAGE_01_SCRIPT_GENERATION",
+        "locked_at": "2026-06-04T18:00:00+08:00",
+    })
+    locked_brief = intake_dir / "project_brief.locked.json"
+    locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    keyframe = json.loads((TEMPLATES / "keyframe_prompts.example.json").read_text(encoding="utf-8"))
+    keyframe["project_id"] = project_dir.name
+    keyframe["source_brief"] = str(locked_brief).replace("\\", "/")
+    keyframe["reference_image_status"] = {
+        "required": True,
+        "target_paths": ["03_characters/reference_images/CHAR_001_primary.png"],
+        "existing_paths": ["03_characters/reference_images/CHAR_001_primary.png"],
+        "missing_paths": [],
+        "all_present": True,
+        "item_count": 1,
+        "missing_count": 0,
+        "items": [{"character_id": "CHAR_001", "target_path": "03_characters/reference_images/CHAR_001_primary.png", "file_exists": True}],
+    }
+    keyframe["stage05_execution_readiness"] = {
+        "continuity_mode": "character_locked",
+        "reference_image_required": True,
+        "safe_to_auto_generate": True,
+        "blocker_reasons": [],
+        "missing_reference_images": [],
+    }
+    keyframe["self_check"]["character_reference_images_ready"] = True
+    keyframe["self_check"]["safe_for_auto_image_generation"] = True
+    keyframe["shot_prompts"] = keyframe["shot_prompts"][:1]
+    for shot in keyframe["shot_prompts"]:
+        shot["camera_prompt"] = "medium shot"
+        shot["start_keyframe_prompt"] = "Next Scene：同一位年轻亚洲女性站在黄昏海边，望向海平线。"
+        shot["end_keyframe_prompt"] = "Next Scene：同一位年轻亚洲女性仍然站在黄昏海边，情绪更安静。"
+    keyframe_json = keyframe_dir / "keyframe_prompts.json"
+    keyframe_json.write_text(json.dumps(keyframe, ensure_ascii=False, indent=2), encoding="utf-8")
+    (reference_dir / "CHAR_001_primary.png").write_bytes(b"PNGDATA")
+
+    fake_route_resolution = {
+        "route_key": "realistic_cinematic",
+        "style_family": "realistic",
+        "comfyui_workflow_mapping_key": "stage05_realistic_cinematic_qwen_edit_nextscene_local",
+        "comfyui_workflow_name": "stage05_realistic_cinematic_qwen_edit_nextscene_local",
+        "comfyui_model_id": None,
+        "comfyui_style_selector": None,
+        "prompt_only_workflow_mapping_key": "stage05_realistic_cinematic_qwen_edit_nextscene_local",
+        "prompt_only_workflow_name": "stage05_realistic_cinematic_qwen_edit_nextscene_local",
+        "prompt_only_comfyui_model_id": None,
+        "prompt_only_preferred_comfyui_workflow_candidate": "qwen_edit_nextscene_local",
+        "prompt_only_preferred_comfyui_workflow_source_ref": "F:/ComfyUI/ComfyUI/user/default/workflows/AI漫剧制作/AI漫剧-16宫格分镜图生成-QwenEdit+NextScene（自动分镜）-V1版.json",
+        "preferred_comfyui_workflow_candidate": "qwen_edit_nextscene_local",
+        "preferred_comfyui_model_candidate": "Qwen/Qwen-Edit",
+        "route_migration_state": "reference_guided_local_override",
+        "preferred_comfyui_workflow_source_ref": "F:/ComfyUI/ComfyUI/user/default/workflows/AI漫剧制作/AI漫剧-16宫格分镜图生成-QwenEdit+NextScene（自动分镜）-V1版.json",
+        "preferred_comfyui_workflow_format": "ui_graph",
+        "preferred_comfyui_workflow_custom_node_dependencies": ["rgthree-comfy"],
+        "preferred_comfyui_workflow_import_blockers": [],
+        "comfyui_style_preset_key": None,
+        "comfyui_style_preset_label": None,
+        "comfyui_style_positive_anchor": None,
+        "comfyui_style_negative_anchor": None,
+        "comfyui_control_mode": "reference_guided",
+        "stage00_style": "写实电影感",
+        "registry_path": None,
+        "used_registry": False,
+        "resolution_mode": "manual_qwen_nextscene_override",
+        "workflow_mapping_resolution": "manual_qwen_nextscene_override",
+        "reference_guided_route_selected": True,
+    }
+    fake_mapping_path = tmp_path / "workflow_node_mapping.yaml"
+    fake_mapping = {
+        "workflows": {
+            "stage05_realistic_cinematic_qwen_edit_nextscene_local": {
+                "file": "workflows/comfyui/fake_qwen_nextscene.workflow.json",
+                "nodes": {
+                    "positive_prompt": {"node_id": "1", "input_name": "text"},
+                    "reference_image_path": {"node_id": "2", "input_name": "image"},
+                },
+                "capabilities": {
+                    "supports_reference_images": True,
+                    "supported_control_modes": ["reference_guided"],
+                },
+            }
+        }
+    }
+    monkeypatch.setattr(new_keyframe_image_jobs, "resolve_stage05_route", lambda brief_obj, prompts_obj: fake_route_resolution)
+    monkeypatch.setattr(new_keyframe_image_jobs, "load_workflow_mapping", lambda root=None: (fake_mapping, fake_mapping_path))
+    monkeypatch.setattr(new_keyframe_image_jobs, "get_workflow_mapping", lambda data, workflow_name: data["workflows"][workflow_name])
+
+    manifest_json = images_dir / "keyframe_image_manifest.json"
+    assert new_keyframe_image_jobs.main([
+        "new_keyframe_image_jobs.py",
+        str(locked_brief),
+        str(keyframe_json),
+        str(manifest_json),
+        "--allow-beyond-requested-scope",
+    ]) == 0
+    data = json.loads(manifest_json.read_text(encoding="utf-8"))
+    assert data["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_qwen_edit_nextscene_local"
+    assert data["preferred_comfyui_workflow_source_ref"].endswith("QwenEdit+NextScene（自动分镜）-V1版.json")
+    assert data["comfyui_control_mode"] == "reference_guided"
+    assert data["reference_guidance_active"] is True
+    assert all(job["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_qwen_edit_nextscene_local" for job in data["jobs"])
     assert all(job["comfyui_control_mode"] == "reference_guided" for job in data["jobs"])
     assert all(job["reference_guidance_active"] is True for job in data["jobs"])
 
@@ -3232,23 +3621,11 @@ def test_new_keyframe_image_jobs_promotes_interaction_handoff_to_dual_reference_
     fake_mapping_path = tmp_path / "workflow_node_mapping.yaml"
     fake_mapping = {
         "workflows": {
-            "stage05_realistic_cinematic_qwen_edit_reference": {
+            "stage05_realistic_cinematic_amazing_z_photo_original": {
                 "file": "workflows/comfyui/fake_reference.workflow_api.json",
                 "nodes": {
                     "positive_prompt": {"node_id": "1", "input_name": "text"},
                     "reference_image_path": {"node_id": "2", "input_name": "image"},
-                },
-                "capabilities": {
-                    "supports_reference_images": True,
-                    "supported_control_modes": ["prompt_only", "reference_guided"],
-                },
-            },
-            "stage05_realistic_cinematic_qwen_edit_dual_reference": {
-                "file": "workflows/comfyui/fake_dual_reference.workflow_api.json",
-                "nodes": {
-                    "positive_prompt": {"node_id": "1", "input_name": "text"},
-                    "reference_image_path": {"node_id": "2", "input_name": "image"},
-                    "reference_image_path_2": {"node_id": "3", "input_name": "image"},
                 },
                 "capabilities": {
                     "supports_reference_images": True,
@@ -3276,8 +3653,8 @@ def test_new_keyframe_image_jobs_promotes_interaction_handoff_to_dual_reference_
     data = json.loads(manifest_json.read_text(encoding="utf-8"))
     mid_job = next(job for job in data["jobs"] if job["image_id"] == "IMG_S001_MID")
     assert mid_job["stage06_route_hint"] == "interaction_handoff"
-    assert mid_job["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_qwen_edit_dual_reference"
-    assert mid_job["comfyui_workflow_name"] == "fake_dual_reference"
+    assert mid_job["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_amazing_z_photo_original"
+    assert mid_job["comfyui_workflow_name"] == "amazing_z_photo_safetensors"
     assert mid_job["reference_bundle_mode"] == "primary_plus_context_frame"
     assert mid_job["reference_images"] == [
         "03_characters/reference_images/CHAR_001_primary.png",
@@ -3311,13 +3688,13 @@ def test_resolve_stage05_route_switches_shortdrama_realistic_to_reference_guided
     resolved = new_keyframe_image_jobs.resolve_stage05_route(brief, prompts)
     assert resolved["used_registry"] is True
     assert resolved["route_key"] == "shortdrama_realistic"
-    assert resolved["reference_guided_route_selected"] is True
-    assert resolved["comfyui_workflow_mapping_key"] == "stage05_shortdrama_realistic_qwen_edit_reference"
-    assert resolved["comfyui_workflow_name"] == "txt2img_keyframe_shortdrama_qwen_edit_reference"
-    assert resolved["comfyui_model_id"] == "Qwen/Qwen-Image-Edit-2511"
-    assert resolved["preferred_comfyui_workflow_candidate"] == "txt2img_keyframe_shortdrama_qwen_edit_reference"
-    assert resolved["preferred_comfyui_model_candidate"] == "Qwen/Qwen-Image-Edit-2511"
-    assert resolved["comfyui_control_mode"] == "reference_guided"
+    assert resolved["reference_guided_route_selected"] is False
+    assert resolved["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_amazing_z_photo_original"
+    assert resolved["comfyui_workflow_name"] == "amazing_z_photo_safetensors"
+    assert resolved["comfyui_model_id"] == "Tongyi-MAI/Z-Image"
+    assert resolved["preferred_comfyui_workflow_candidate"] == "amazing_z_photo_safetensors"
+    assert resolved["preferred_comfyui_model_candidate"] == "Tongyi-MAI/Z-Image"
+    assert resolved["comfyui_control_mode"] == "prompt_only"
 
 
 def test_resolve_stage05_route_switches_realistic_cinematic_to_reference_guided_target_when_refs_ready() -> None:
@@ -3343,15 +3720,15 @@ def test_resolve_stage05_route_switches_realistic_cinematic_to_reference_guided_
     resolved = new_keyframe_image_jobs.resolve_stage05_route(brief, prompts)
     assert resolved["used_registry"] is True
     assert resolved["route_key"] == "realistic_cinematic"
-    assert resolved["reference_guided_route_selected"] is True
-    assert resolved["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_qwen_edit_reference"
-    assert resolved["comfyui_workflow_name"] == "txt2img_keyframe_shortdrama_qwen_edit_reference"
-    assert resolved["comfyui_model_id"] == "Qwen/Qwen-Image-Edit-2511"
-    assert resolved["preferred_comfyui_workflow_candidate"] == "txt2img_keyframe_shortdrama_qwen_edit_reference"
-    assert resolved["preferred_comfyui_model_candidate"] == "Qwen/Qwen-Image-Edit-2511"
-    assert resolved["comfyui_control_mode"] == "reference_guided"
-    assert resolved["prompt_only_workflow_mapping_key"] == "stage05_realistic_cinematic_qwen2512_prompt_only"
-    assert resolved["prompt_only_workflow_name"] == "txt2img_keyframe_realistic"
+    assert resolved["reference_guided_route_selected"] is False
+    assert resolved["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_amazing_z_photo_original"
+    assert resolved["comfyui_workflow_name"] == "amazing_z_photo_safetensors"
+    assert resolved["comfyui_model_id"] == "Tongyi-MAI/Z-Image"
+    assert resolved["preferred_comfyui_workflow_candidate"] == "amazing_z_photo_safetensors"
+    assert resolved["preferred_comfyui_model_candidate"] == "Tongyi-MAI/Z-Image"
+    assert resolved["comfyui_control_mode"] == "prompt_only"
+    assert resolved["prompt_only_workflow_mapping_key"] == "stage05_realistic_cinematic_amazing_z_photo_original"
+    assert resolved["prompt_only_workflow_name"] == "amazing_z_photo_safetensors"
 
 
 def test_new_keyframe_jobs_keep_wide_establishing_realistic_shot_on_prompt_only_route_even_with_refs_ready(tmp_path: Path) -> None:
@@ -3403,19 +3780,25 @@ def test_new_keyframe_jobs_keep_wide_establishing_realistic_shot_on_prompt_only_
 
     data = json.loads(manifest_json.read_text(encoding="utf-8"))
     start_job = next(job for job in data["jobs"] if job["image_id"] == "IMG_S001_START")
-    assert data["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_qwen_edit_reference"
-    assert start_job["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_qwen2512_prompt_only"
-    assert start_job["comfyui_workflow_name"] == "txt2img_keyframe_realistic"
+    assert data["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_amazing_z_photo_original"
+    assert start_job["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_amazing_z_photo_original"
+    assert start_job["comfyui_workflow_name"] == "amazing_z_photo_safetensors"
+    assert start_job["comfyui_style_preset_key"] == "environmental_establishing_film"
+    assert start_job["comfyui_style_selector"] == "classic_film_photo"
     assert start_job["comfyui_control_mode"] == "prompt_only"
+    assert start_job["prompt_composition_mode"] == "zimage_skill_aligned"
+    assert "cinematic keyframe" not in start_job["prompt"]
+    assert "realistic cinematic short film" not in start_job["prompt"]
     assert start_job["reference_guidance_active"] is False
-    assert start_job["reference_guidance_override_reason"] == "prompt_only_establishing_shot_guardrail"
 
     end_job = next(job for job in data["jobs"] if job["image_id"] == "IMG_S001_END")
-    assert end_job["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_qwen2512_prompt_only"
-    assert end_job["comfyui_workflow_name"] == "txt2img_keyframe_realistic"
+    assert end_job["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_amazing_z_photo_original"
+    assert end_job["comfyui_workflow_name"] == "amazing_z_photo_safetensors"
+    assert end_job["comfyui_style_preset_key"] == "environmental_establishing_film"
+    assert end_job["comfyui_style_selector"] == "classic_film_photo"
     assert end_job["comfyui_control_mode"] == "prompt_only"
+    assert end_job["prompt_composition_mode"] == "zimage_skill_aligned"
     assert end_job["reference_guidance_active"] is False
-    assert end_job["reference_guidance_override_reason"] == "prompt_only_establishing_shot_guardrail"
 
 
 def test_new_keyframe_jobs_upgrade_guofeng_scenic_umbrella_shot_to_scenic_preset(tmp_path: Path) -> None:

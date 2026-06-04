@@ -3,10 +3,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
+import re
 import shutil
 import sys
 from pathlib import Path
 from typing import Any
+
+from PIL import Image, ImageFilter
 
 THIS_DIR = Path(__file__).resolve().parent
 if str(THIS_DIR) not in sys.path:
@@ -43,6 +47,8 @@ from workflow_mapping import apply_node_inputs, load_mapped_workflow, load_workf
 
 
 AUTO_ROUTED_WORKFLOW_NAMES = {"", "auto", "txt2img_keyframe"}
+QWEN_NEXTSCENE_WORKFLOW_MAPPING_KEYS = {"stage05_realistic_cinematic_qwen_edit_nextscene_local"}
+QWEN_REFERENCE_TARGET_SIZES = (512, 768, 1024, 1344, 1536, 2048)
 
 
 def request_record(
@@ -155,6 +161,78 @@ def optimized_dimensions_for_job(job: dict[str, Any], optimization: dict[str, An
     )
 
 
+def _aspect_ratio_value(value: Any) -> float | None:
+    text = str(value or "").strip()
+    if ":" not in text:
+        return None
+    left, right = text.split(":", 1)
+    try:
+        numerator = float(left)
+        denominator = float(right)
+    except ValueError:
+        return None
+    if numerator <= 0 or denominator <= 0:
+        return None
+    return numerator / denominator
+
+
+def _qwen_target_size_for_dimensions(width: int, height: int) -> int:
+    target_area_side = math.sqrt(max(1, width) * max(1, height))
+    return min(QWEN_REFERENCE_TARGET_SIZES, key=lambda candidate: abs(candidate - target_area_side))
+
+
+def _qwen_reference_canvas_size(width: int, height: int, target_ratio: float) -> tuple[int, int]:
+    if width <= 0 or height <= 0 or target_ratio <= 0:
+        return width, height
+    current_ratio = width / height
+    if abs(current_ratio - target_ratio) < 0.01:
+        return width, height
+    if current_ratio < target_ratio:
+        return int(round(height * target_ratio)), height
+    return width, int(round(width / target_ratio))
+
+
+def _adapt_reference_image_to_aspect_ratio(
+    source_path: Path,
+    *,
+    target_ratio: float,
+    output_path: Path,
+) -> tuple[Path, dict[str, Any]]:
+    with Image.open(source_path) as image:
+        base = image.convert("RGB")
+        source_width, source_height = base.size
+        canvas_width, canvas_height = _qwen_reference_canvas_size(source_width, source_height, target_ratio)
+        if canvas_width == source_width and canvas_height == source_height:
+            return source_path, {
+                "adapted": False,
+                "source_width": source_width,
+                "source_height": source_height,
+                "canvas_width": canvas_width,
+                "canvas_height": canvas_height,
+            }
+        blurred_background = base.resize((canvas_width, canvas_height), Image.Resampling.LANCZOS)
+        blur_radius = max(12, int(max(canvas_width, canvas_height) / 48))
+        blurred_background = blurred_background.filter(ImageFilter.GaussianBlur(radius=blur_radius))
+        foreground_scale = min(canvas_width / source_width, canvas_height / source_height)
+        foreground_width = max(1, int(round(source_width * foreground_scale)))
+        foreground_height = max(1, int(round(source_height * foreground_scale)))
+        foreground = base.resize((foreground_width, foreground_height), Image.Resampling.LANCZOS)
+        offset_x = (canvas_width - foreground_width) // 2
+        offset_y = (canvas_height - foreground_height) // 2
+        blurred_background.paste(foreground, (offset_x, offset_y))
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        blurred_background.save(output_path, format="PNG")
+        return output_path, {
+            "adapted": True,
+            "source_width": source_width,
+            "source_height": source_height,
+            "canvas_width": canvas_width,
+            "canvas_height": canvas_height,
+            "offset_x": offset_x,
+            "offset_y": offset_y,
+        }
+
+
 def copy_selected_output(selected_output: dict[str, Any], target_path: Path) -> None:
     resolved_path = selected_output.get("resolved_path")
     if not isinstance(resolved_path, str) or not resolved_path.strip():
@@ -193,6 +271,77 @@ def resolve_workflow_display_name_for_job(job: dict[str, Any], selected_workflow
     return routed_name or selected_workflow_mapping_key or "txt2img_keyframe"
 
 
+def _is_qwen_nextscene_workflow(job: dict[str, Any], workflow_mapping_key: str) -> bool:
+    if workflow_mapping_key in QWEN_NEXTSCENE_WORKFLOW_MAPPING_KEYS:
+        return True
+    source_ref = str(job.get("preferred_comfyui_workflow_source_ref") or "").replace("\\", "/").lower()
+    return "qwenedit+nextscene" in source_ref
+
+
+def _non_empty_prompt_lines(value: Any) -> list[str]:
+    return [line.strip() for line in str(value or "").splitlines() if line.strip()]
+
+
+def _nextscene_marker_count(value: Any) -> int:
+    return len(re.findall(r"(?i)next\s*scene\s*[:：]", str(value or "")))
+
+
+def _qwen_nextscene_preflight_block(job: dict[str, Any], workflow_mapping_key: str) -> dict[str, Any] | None:
+    if not _is_qwen_nextscene_workflow(job, workflow_mapping_key):
+        return None
+    image_id = str(job.get("image_id") or "").strip() or None
+    reference_images = [
+        str(item).replace("\\", "/")
+        for item in (job.get("reference_images") or [])
+        if isinstance(item, str) and str(item).strip()
+    ]
+    secondary_reference_images = [
+        str(item).replace("\\", "/")
+        for item in (job.get("secondary_reference_images") or [])
+        if isinstance(item, str) and str(item).strip()
+    ]
+    prompt_lines = _non_empty_prompt_lines(job.get("prompt"))
+    nextscene_marker_count = _nextscene_marker_count(job.get("prompt"))
+    route_hint = str(job.get("stage06_route_hint") or "").strip().lower()
+    frame_role = str(job.get("frame_role") or "").strip().lower()
+
+    if str(job.get("comfyui_control_mode") or "").strip() != "reference_guided" or job.get("reference_guidance_active") is not True:
+        return {
+            "image_id": image_id,
+            "reason": "Blocked before generation: the local QwenEdit+NextScene workflow must run in reference_guided mode with an active primary character reference.",
+            "creator_summary": "当前 Qwen NextScene 路线必须带主角参考图并按 reference_guided 模式执行，不能按 prompt-only 调。",
+            "guardrail": "qwen_nextscene_reference_guided_required",
+        }
+    if len(reference_images) != 1:
+        return {
+            "image_id": image_id,
+            "reason": "Blocked before generation: the local QwenEdit+NextScene workflow only supports one primary reference image in Stage 05 single-shot mode.",
+            "creator_summary": "当前 Qwen NextScene 主流程只允许一张主角参考图，不支持零参考图，也不支持双参考图。",
+            "guardrail": "qwen_nextscene_single_primary_reference_only",
+            "reference_images": reference_images,
+        }
+    if secondary_reference_images or route_hint == "interaction_handoff" or job.get("stage06_requires_mid_guide") is True or frame_role == "mid":
+        return {
+            "image_id": image_id,
+            "reason": "Blocked before generation: the local QwenEdit+NextScene workflow is restricted to single-subject Stage 06 routes and cannot be used for interaction handoff or mid-guide shots.",
+            "creator_summary": "当前 Qwen NextScene 路线只适合 single_subject_motion，不适合 interaction_handoff 或需要 mid guide 的镜头。",
+            "guardrail": "qwen_nextscene_single_subject_motion_only",
+            "route_hint": route_hint,
+            "frame_role": frame_role,
+            "secondary_reference_images": secondary_reference_images,
+        }
+    if len(prompt_lines) > 1 or nextscene_marker_count > 1:
+        return {
+            "image_id": image_id,
+            "reason": "Blocked before generation: the local QwenEdit+NextScene workflow must receive exactly one single-shot prompt, not multiple Next Scene lines.",
+            "creator_summary": "当前 Qwen NextScene 主流程只能一次执行一个镜头帧，不能把多条 Next Scene 一起塞进去。",
+            "guardrail": "qwen_nextscene_single_shot_prompt_only",
+            "prompt_line_count": len(prompt_lines),
+            "nextscene_marker_count": nextscene_marker_count,
+        }
+    return None
+
+
 def workflow_replacements_for_job(
     job: dict[str, Any],
     nodes: dict[str, Any],
@@ -202,27 +351,28 @@ def workflow_replacements_for_job(
     seed: int,
     optimization: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    style_selector = str(job.get("comfyui_style_selector") or job.get("comfyui_upstream_style_preset") or "").strip()
     candidate_replacements = {
         "positive_prompt": build_provider_prompt(job),
         "negative_prompt": effective_negative_prompt(job),
         "seed": seed,
+        "aspect_ratio": str(job.get("aspect_ratio") or "").strip(),
         "width": width,
         "height": height,
         "short_side": min(width, height),
         "long_side": max(width, height),
         "output_prefix": f"Stage05/{job.get('image_id') or 'image'}",
     }
+    if "target_size" in nodes:
+        candidate_replacements["target_size"] = _qwen_target_size_for_dimensions(width, height)
+    if style_selector:
+        candidate_replacements["style_selector"] = style_selector
+        candidate_replacements["upstream_style_preset"] = style_selector
     replacements = {
         field_name: value
         for field_name, value in candidate_replacements.items()
         if field_name in nodes
     }
-    style_selector = str(job.get("comfyui_style_selector") or job.get("comfyui_upstream_style_preset") or "").strip()
-    if style_selector:
-        if "style_selector" in nodes:
-            replacements["style_selector"] = style_selector
-        if "upstream_style_preset" in nodes:
-            replacements["upstream_style_preset"] = style_selector
     style_anchor = str(job.get("comfyui_style_positive_anchor") or "").strip()
     if style_anchor and "style_anchor" in nodes:
         replacements["style_anchor"] = style_anchor
@@ -232,6 +382,8 @@ def workflow_replacements_for_job(
     workflow_replacements = optimization.get("workflow_replacements") if isinstance(optimization, dict) else None
     if isinstance(workflow_replacements, dict):
         for field_name, value in workflow_replacements.items():
+            if field_name in {"style_selector", "upstream_style_preset"} and style_selector:
+                continue
             if field_name in nodes:
                 replacements[field_name] = value
     return replacements
@@ -241,7 +393,10 @@ def _reference_image_replacements_for_job(
     manifest_path: Path,
     job: dict[str, Any],
     *,
+    width: int,
+    height: int,
     input_dir: str | Path | None,
+    workflow_mapping_key: str,
     nodes: dict[str, Any],
 ) -> tuple[dict[str, Any], list[dict[str, str]]]:
     reference_slots = [
@@ -267,19 +422,34 @@ def _reference_image_replacements_for_job(
     for field_name, index, stem_suffix in reference_slots:
         if field_name not in nodes or index >= len(reference_images):
             continue
+        source_path = resolve_path(manifest_path, reference_images[index])
+        adapted_metadata: dict[str, Any] | None = None
+        if index == 0 and workflow_mapping_key in QWEN_NEXTSCENE_WORKFLOW_MAPPING_KEYS:
+            target_ratio = _aspect_ratio_value(job.get("aspect_ratio"))
+            if target_ratio is None and width > 0 and height > 0:
+                target_ratio = width / height
+            if isinstance(target_ratio, float) and target_ratio > 0:
+                runtime_dir = manifest_path.parent / ".runtime" / "qwen_nextscene_reference_adapt"
+                adapted_source_path, adapted_metadata = _adapt_reference_image_to_aspect_ratio(
+                    source_path,
+                    target_ratio=target_ratio,
+                    output_path=runtime_dir / f"{job.get('image_id')}_{stem_suffix}_canvas.png",
+                )
+                source_path = adapted_source_path
         staged_path = stage_input_file(
-            resolve_path(manifest_path, reference_images[index]),
+            source_path,
             input_dir,
             stem_prefix=f"{job.get('image_id')}_{stem_suffix}",
         )
         replacements[field_name] = staged_path
-        staged_records.append(
-            {
-                "source_path": reference_images[index],
-                "staged_name": staged_path,
-                "slot": field_name,
-            }
-        )
+        record = {
+            "source_path": reference_images[index],
+            "staged_name": staged_path,
+            "slot": field_name,
+        }
+        if adapted_metadata:
+            record["adapted_canvas"] = adapted_metadata
+        staged_records.append(record)
     if not replacements:
         raise ComfyUIError(
             "reference-guided workflow was selected, but the mapped workflow does not expose usable reference image inputs",
@@ -365,11 +535,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.image_id and not selected_jobs:
         print(f"ERROR: image_id not found in manifest: {args.image_id}", file=sys.stderr)
         return 1
-    blocked_jobs_by_image_id: dict[str, dict[str, Any]] = {}
+    missing_reference_blocks_by_image_id: dict[str, dict[str, Any]] = {}
+    preflight_blocks_by_image_id: dict[str, dict[str, Any]] = {}
     for job in selected_jobs:
         block = missing_character_reference_block(job)
         if block:
-            blocked_jobs_by_image_id[str(job.get("image_id") or "")] = block
+            missing_reference_blocks_by_image_id[str(job.get("image_id") or "")] = block
 
     request_records: list[dict[str, Any]] = []
     workflow_paths_used: list[str] = []
@@ -378,6 +549,11 @@ def main(argv: list[str] | None = None) -> int:
     optimization_labels_used: list[str] = []
     for job in selected_jobs:
         workflow_name = resolve_workflow_mapping_key_for_job(job, str(args.workflow_name or ""))
+        image_id = str(job.get("image_id") or "")
+        if image_id not in missing_reference_blocks_by_image_id:
+            preflight_block = _qwen_nextscene_preflight_block(job, workflow_name)
+            if preflight_block:
+                preflight_blocks_by_image_id[image_id] = preflight_block
         try:
             _, _, workflow_path = mapped_workflow_for_name(workflow_name)
         except ComfyUIError as exc:
@@ -405,20 +581,20 @@ def main(argv: list[str] | None = None) -> int:
                 height=height,
             )
         )
-        blocked = blocked_jobs_by_image_id.get(str(job.get("image_id") or ""))
+        blocked = missing_reference_blocks_by_image_id.get(image_id) or preflight_blocks_by_image_id.get(image_id)
         if blocked:
-            message = (
-                f"{blocked['reason']} Missing reference image(s): "
-                + ", ".join(str(item) for item in blocked["missing_reference_images"])
-            )
+            message = str(blocked["reason"])
+            missing_reference_images = [str(item) for item in (blocked.get("missing_reference_images") or []) if str(item).strip()]
+            if missing_reference_images:
+                message = f"{message} Missing reference image(s): " + ", ".join(missing_reference_images)
             append_blocked(job, "comfyui_txt2img", message, details=blocked)
             request_records[-1].update({
                 "status": "blocked",
                 "error_message": message,
                 "completed_at": utc_now(),
                 "blocked_reason": blocked["reason"],
-                "missing_reference_images": blocked["missing_reference_images"],
-                "reference_images": blocked["reference_images"],
+                "missing_reference_images": blocked.get("missing_reference_images") or [],
+                "reference_images": blocked.get("reference_images") or [],
             })
         if workflow_name not in workflow_mapping_keys_used:
             workflow_mapping_keys_used.append(workflow_name)
@@ -475,8 +651,8 @@ def main(argv: list[str] | None = None) -> int:
         for job in selected_jobs
         if isinstance(job, dict) and str(job.get("status") or "").strip().lower() != "blocked"
     ]
-    if blocked_jobs_by_image_id:
-        blocked_payload = list(blocked_jobs_by_image_id.values())
+    if missing_reference_blocks_by_image_id:
+        blocked_payload = list(missing_reference_blocks_by_image_id.values())
         _record_provider_decision(
             data,
             provider="manual",
@@ -499,8 +675,27 @@ def main(argv: list[str] | None = None) -> int:
             "active_provider": "manual",
             "created_at": utc_now(),
         }
+    if preflight_blocks_by_image_id:
+        blocked_payload = list(preflight_blocks_by_image_id.values())
+        _record_provider_decision(
+            data,
+            provider="comfyui_txt2img",
+            decision="preflight_blocked",
+            reason="qwen_nextscene_single_shot_guardrail",
+            details={
+                "blocked_image_ids": [item.get("image_id") for item in blocked_payload],
+                "guardrails": [item.get("guardrail") for item in blocked_payload],
+            },
+        )
+        data["creator_runtime_status"] = {
+            "headline": "已阻断 Qwen NextScene 误调用。",
+            "detail": "当前镜头命中了 Qwen NextScene 单镜头护栏：它只能带一张主参考图、只吃一条单镜头 prompt，并且只适配 single_subject_motion。",
+            "source_provider": "comfyui_txt2img",
+            "active_provider": "comfyui_txt2img",
+            "created_at": utc_now(),
+        }
     if args.dry_run:
-        if blocked_jobs_by_image_id:
+        if missing_reference_blocks_by_image_id or preflight_blocks_by_image_id:
             update_manifest_state(data, manifest_path)
             write_json(manifest_path, data)
             print(f"COMFYUI TXT2IMG DRY RUN BLOCKED: {manifest_path}")
@@ -541,7 +736,10 @@ def main(argv: list[str] | None = None) -> int:
             reference_replacements, staged_reference_images = _reference_image_replacements_for_job(
                 manifest_path,
                 base_job,
+                width=width,
+                height=height,
                 input_dir=settings["input_dir"],
+                workflow_mapping_key=workflow_name,
                 nodes=mapping_entry["nodes"],
             )
             replacements = {
@@ -717,7 +915,7 @@ def main(argv: list[str] | None = None) -> int:
     request_manifest["generated_at"] = utc_now()
     write_json(requests_path, request_manifest)
 
-    if failed or blocked_jobs_by_image_id:
+    if failed or missing_reference_blocks_by_image_id or preflight_blocks_by_image_id:
         print(f"COMFYUI TXT2IMG COMPLETED WITH FAILURES: {manifest_path}")
         return 1
     print(f"COMFYUI TXT2IMG COMPLETED: {manifest_path}")

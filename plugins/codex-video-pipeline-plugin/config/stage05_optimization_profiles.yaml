@@ -1,0 +1,66 @@
+schema_version: "0.1.0"
+
+default_profile: balanced
+
+profile_catalog:
+  preview:
+    display_name: Preview
+    description: Fast local iteration profile for checking composition and selector routing on the locked Zimage mainline.
+  balanced:
+    display_name: Balanced
+    description: Default Stage 05 local profile for the three active Zimage UI workflows.
+  quality:
+    display_name: Quality
+    description: Higher-resolution Stage 05 local profile for final still generation on the three active Zimage UI workflows.
+
+workflow_profiles:
+  stage05_realistic_cinematic_amazing_z_photo_original:
+    default_profile: balanced
+    profiles:
+      preview:
+        dimension_scale: 0.75
+        round_to_multiple: 64
+        workflow_replacements:
+          style_selector: production_photo
+      balanced:
+        dimension_scale: 0.875
+        round_to_multiple: 64
+        workflow_replacements:
+          style_selector: production_photo
+      quality:
+        dimension_scale: 1.0
+        round_to_multiple: 64
+        workflow_replacements:
+          style_selector: production_photo
+
+  stage05_realistic_cinematic_qwen_edit_character_anchor_local:
+    inherits: stage05_realistic_cinematic_amazing_z_photo_original
+
+  stage05_realistic_cinematic_qwen_edit_nextscene_local:
+    inherits: stage05_realistic_cinematic_amazing_z_photo_original
+
+  stage05_anime_jp:
+    inherits: stage05_realistic_cinematic_amazing_z_photo_original
+    profiles:
+      preview:
+        workflow_replacements:
+          style_selector: anime
+      balanced:
+        workflow_replacements:
+          style_selector: anime
+      quality:
+        workflow_replacements:
+          style_selector: anime
+
+  stage05_western_cartoon:
+    inherits: stage05_realistic_cinematic_amazing_z_photo_original
+    profiles:
+      preview:
+        workflow_replacements:
+          style_selector: comic_1
+      balanced:
+        workflow_replacements:
+          style_selector: comic_1
+      quality:
+        workflow_replacements:
+          style_selector: comic_1

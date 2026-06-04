@@ -118,10 +118,9 @@ def _continuity_mode(shape: str, characters_required: Any) -> str:
 
 
 def _stage05_provider_priority(shape: str, visual_hint: str) -> list[str]:
-    # Stage 05 provider routing is availability-first, not style-first:
-    # use GPT Image 2 whenever it is available, otherwise fall back to local
-    # ComfyUI, and finally manual placement as the last recovery path.
-    return ["openai_gpt_image2", "comfyui_txt2img", "manual"]
+    # Stage 05 mainline is hard-pinned to the local Zimage workflows via
+    # ComfyUI. Manual placement remains the only recovery path.
+    return ["comfyui_txt2img", "manual"]
 
 
 def _stage07_music_priority(shape: str, music_required: Any) -> list[str]:

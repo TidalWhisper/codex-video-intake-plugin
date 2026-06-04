@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
-"""Create a blank Stage 00 project brief draft template.
+"""LEGACY/DEBUG ONLY: create a blank Stage 00 project brief draft template.
 
 Usage:
   python new_project_brief_template.py .video_project/intake/project_brief.draft.json
+
+This script is no longer part of the official Stage 00 codex-first path.
+Normal intake must go through:
+  python skills/video-production-pipeline/scripts/run_stage00_controller.py
 """
 from __future__ import annotations
 
@@ -23,6 +27,11 @@ def infer_project_context(output: Path) -> tuple[str, str]:
 
 def main(argv: list[str]) -> int:
     output = Path(argv[1]) if len(argv) > 1 else Path(".video_project/intake/project_brief.draft.json")
+    print(
+        "LEGACY_DEBUG_ONLY: new_project_brief_template.py is not the official Stage 00 entry. "
+        "Use skills/video-production-pipeline/scripts/run_stage00_controller.py for normal intake flow.",
+        file=sys.stderr,
+    )
     now = datetime.now(timezone.utc).isoformat()
     project_id, project_dir = infer_project_context(output)
     data = {
@@ -44,7 +53,7 @@ def main(argv: list[str]) -> int:
             "music",
             "final_output",
         ],
-        "source": "Blank template created by video-project-intake skill.",
+        "source": "Legacy/debug blank template created outside the official Stage 00 codex-first flow.",
         "user_answers": {},
         "normalized": {
             "idea": "",
@@ -70,7 +79,7 @@ def main(argv: list[str]) -> int:
     }
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"CREATED: {output}")
+    print(f"LEGACY_TEMPLATE_CREATED: {output}")
     return 0
 
 

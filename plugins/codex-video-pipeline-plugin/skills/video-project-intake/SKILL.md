@@ -15,8 +15,27 @@ Current scope:
 
 - Stage 00-A: collect the 9 first-layer required fields, one question at a time.
 - Stage 00-B: summarize the answers, create an independent project folder, write `project_brief.draft.json`, validate it, ask the user to confirm, then write `project_brief.locked.json`.
+- Final confirmation loop: route `A. 确认 / B. 修改某一项 / C. 重新填写` through one pipeline-owned controller.
 
 After the brief is locked, Stage 01 is allowed. In the normal user flow, `$video-production-pipeline` must automatically continue to Stage 01 in the same conversation. This individual skill is now a recovery/debug entry point and must not tell the user to manually invoke the next stage during normal pipeline mode.
+
+## Official runtime entry
+
+Normal Stage 00 execution must go through:
+
+```bash
+python skills/video-production-pipeline/scripts/run_stage00_controller.py
+```
+
+This controller is the only official Stage 00 entry for normal pipeline usage.
+It internally orchestrates:
+
+- `run_stage00_intake_turn.py` for Stage 00-A one-question intake
+- `run_stage00_brief_from_intake.py` for Stage 00-B draft brief generation
+- `run_stage00_lock_and_continue.py` for `A. 确认` lock-and-continue handoff
+
+Do not describe `lock_project_brief.py` or `new_project_brief_template.py` as the normal user path.
+`new_project_brief_template.py` is legacy/debug-only.
 
 ## Absolute Rules
 
@@ -130,7 +149,7 @@ Rules:
 - If the user chooses `自定义`, ask one short follow-up to collect the custom value.
 - If the answer is unclear, ask the same question again with a short explanation.
 - After a valid answer, move to the next question.
-- After question 9 is answered, create the project folder and draft brief, then show a final summary and ask for confirmation.
+- After question 9 is answered, create the project folder and draft brief, then show a final summary and ask for confirmation through the official Stage 00 controller.
 
 ## Required opening behavior
 
@@ -261,11 +280,15 @@ C. 重新填写
 The option letters in the confirmation gate must also stay aligned with
 `references/stage00_question_blocks.md`.
 
-8. Only after explicit user confirmation, lock the brief:
+8. Only after explicit user confirmation, lock the brief.
+
+In normal pipeline usage, this step must be triggered via the pipeline-owned wrapper:
 
 ```bash
-python skills/video-project-intake/scripts/lock_project_brief.py <project_dir>/00_intake/project_brief.draft.json <project_dir>/00_intake/project_brief.locked.json
+python skills/video-production-pipeline/scripts/run_stage00_lock_and_continue.py <project_dir>
 ```
+
+`lock_project_brief.py` remains an internal low-level script, not the official user-facing confirmation entry.
 
 9. Update `<project_dir>/project_manifest.json` to:
 
@@ -319,12 +342,13 @@ If the user chooses `B. 修改某一项` in the final confirmation:
 
 1. Ask which item to modify, using item number 1-9.
 2. Ask only that single question again.
-3. Update the draft brief.
-4. Re-run validation.
-5. Show the confirmation summary again.
+3. Rewind `intake_state.json` to that question and clear downstream Stage 00 brief artifacts.
+4. Re-collect from that point onward.
+5. Re-run Stage 00-B draft generation and validation.
+6. Show the confirmation summary again.
 
-If the user chooses `C. 重新填写`, restart from Question 1 and create a new project folder after all 9 answers are collected again.
+If the user chooses `C. 重新填写`, reset `intake_state.json` to Question 1, clear downstream Stage 00 draft/locked artifacts, and restart from Question 1 through the same controller.
 
 ## Important boundary
 
-Even when the user confirms, this skill must not itself perform Stage 01. In normal usage, `$video-production-pipeline` will continue Stage 01 automatically. Do not force the user to manually call `$video-script-generation` unless this skill was invoked as a standalone recovery action.
+Even when the user confirms, this skill must not itself perform Stage 01. In normal usage, `$video-production-pipeline` and `run_stage00_lock_and_continue.py` will continue Stage 01 automatically. Do not force the user to manually call `$video-script-generation` unless this skill was invoked as a standalone recovery action.

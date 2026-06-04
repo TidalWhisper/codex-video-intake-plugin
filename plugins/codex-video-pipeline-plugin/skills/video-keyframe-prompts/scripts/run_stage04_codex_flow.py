@@ -9,7 +9,6 @@ from typing import Any
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PLUGIN_ROOT = Path(__file__).resolve().parents[3]
-REPO_ROOT = Path(__file__).resolve().parents[5]
 sys.path.insert(0, str(SCRIPT_DIR))
 sys.path.insert(0, str(PLUGIN_ROOT / "scripts"))
 
@@ -19,11 +18,9 @@ from pipeline_core.codex_flow import (  # noqa: E402
     build_generation_request,
     build_repair_request,
     cleanup_failure_artifacts,
-    resolve_codex_bin,
-    run_codex_exec,
-    write_codex_output_json,
 )
 from pipeline_core.project_state import load_json_file  # noqa: E402
+from stage04_local_semantics import build_stage04_llm_output  # noqa: E402
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -38,6 +35,10 @@ def load_json(path: Path) -> dict[str, Any]:
 def write_json(path: Path, data: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def write_local_execution_marker(path: Path, header: str) -> None:
+    path.write_text(header.rstrip() + "\n", encoding="utf-8")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -66,8 +67,8 @@ def main(argv: list[str] | None = None) -> int:
     ensure_locked_brief(brief)
 
     prompt_packet_path = out_dir / "stage04_prompt_packet.json"
-    write_json(prompt_packet_path, build_packet(brief, script, storyboard, character_bible, brief_path, script_path, storyboard_path, character_path))
-    resolved_codex_bin = resolve_codex_bin(args.codex_bin)
+    prompt_packet = build_packet(brief, script, storyboard, character_bible, brief_path, script_path, storyboard_path, character_path)
+    write_json(prompt_packet_path, prompt_packet)
 
     references_dir = SCRIPT_DIR.parent / "references"
     schema_path = references_dir / "stage04_llm_output.schema.json"
@@ -84,8 +85,21 @@ def main(argv: list[str] | None = None) -> int:
         prompt_packet_path=prompt_packet_path,
     )
     generation_request_path.write_text(generation_request, encoding="utf-8")
-    run_codex_exec(generation_request, schema_path, generation_last_message_path, codex_bin=resolved_codex_bin, cwd=REPO_ROOT)
-    write_codex_output_json(generation_last_message_path, llm_output_path)
+    write_local_execution_marker(
+        generation_last_message_path,
+        "STAGE04_LOCAL_EXECUTION_MODE\n"
+        "Structured output generated locally from the locked brief, approved Stage 01 script, approved Stage 02 storyboard, and approved Stage 03 character bible to avoid recursive Codex CLI deadlocks.",
+    )
+    write_json(
+        llm_output_path,
+        build_stage04_llm_output(
+            brief,
+            script,
+            storyboard,
+            character_bible,
+            prompt_packet=prompt_packet,
+        ),
+    )
 
     total_attempts = max(0, int(args.max_repair_attempts))
     for attempt_index in range(total_attempts + 1):
@@ -117,8 +131,23 @@ def main(argv: list[str] | None = None) -> int:
             current_llm_output_path=llm_output_path,
         )
         repair_request_path.write_text(repair_request, encoding="utf-8")
-        run_codex_exec(repair_request, schema_path, repair_last_message_path, codex_bin=resolved_codex_bin, cwd=REPO_ROOT)
-        write_codex_output_json(repair_last_message_path, llm_output_path)
+        write_local_execution_marker(
+            repair_last_message_path,
+            "STAGE04_LOCAL_REPAIR_MODE\n"
+            "Validation failed, so Stage 04 was deterministically regenerated from the same approved storyboard and character bible.",
+        )
+        repair_packet = load_json(repair_packet_path)
+        write_json(
+            llm_output_path,
+            build_stage04_llm_output(
+                brief,
+                script,
+                storyboard,
+                character_bible,
+                prompt_packet=prompt_packet,
+                repair_packet=repair_packet,
+            ),
+        )
 
     print(f"STAGE04_CODEX_FLOW_FAILED: {out_path}", file=sys.stderr)
     return 1

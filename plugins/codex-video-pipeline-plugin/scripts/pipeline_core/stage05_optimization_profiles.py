@@ -23,7 +23,7 @@ def resolve_stage05_optimization_profiles_path(
     config_path: str | Path | None = None,
     root: str | Path | None = None,
     *,
-    allow_example_fallback: bool = True,
+    allow_example_fallback: bool = False,
 ) -> Path:
     base = Path(root) if root else root_dir()
     if config_path is not None:
@@ -155,7 +155,7 @@ def load_stage05_optimization_profiles(
     config_path: str | Path | None = None,
     root: str | Path | None = None,
     *,
-    allow_example_fallback: bool = True,
+    allow_example_fallback: bool = False,
     validate: bool = True,
 ) -> tuple[dict[str, Any], Path]:
     path = resolve_stage05_optimization_profiles_path(
@@ -166,7 +166,7 @@ def load_stage05_optimization_profiles(
     if not path.exists():
         raise Stage05OptimizationError(
             f"stage05 optimization profiles not found: {path}. "
-            "Copy config/stage05_optimization_profiles.example.yaml to config/stage05_optimization_profiles.yaml when you want local overrides."
+            "config/stage05_optimization_profiles.yaml is required for Stage 05 optimization."
         )
     try:
         data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}

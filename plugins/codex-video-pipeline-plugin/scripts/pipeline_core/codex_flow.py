@@ -5,6 +5,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -123,6 +124,7 @@ def run_codex_exec(
     *,
     codex_bin: str,
     cwd: Path,
+    timeout_seconds: int = 180,
 ) -> None:
     cmd = [
         codex_bin,
@@ -143,14 +145,27 @@ def run_codex_exec(
         str(output_message_path),
         "-",
     ]
-    result = subprocess.run(
-        cmd,
-        input=request_text,
-        text=True,
-        capture_output=True,
-        cwd=str(cwd),
-        encoding="utf-8",
-    )
+    start = time.time()
+    try:
+        result = subprocess.run(
+            cmd,
+            input=request_text,
+            text=True,
+            capture_output=True,
+            cwd=str(cwd),
+            encoding="utf-8",
+            timeout=max(1, int(timeout_seconds)),
+        )
+    except subprocess.TimeoutExpired as exc:
+        elapsed = time.time() - start
+        stderr = ((exc.stderr or "") if isinstance(exc.stderr, str) else "").strip()
+        stdout = ((exc.stdout or "") if isinstance(exc.stdout, str) else "").strip()
+        details = stderr or stdout or "codex exec timed out without producing stderr/stdout"
+        raise SystemExit(
+            "ERROR: codex exec timed out after "
+            f"{int(elapsed)}s. This usually means the nested Codex CLI is unhealthy or its provider endpoint "
+            f"is unreachable. details={details}"
+        ) from exc
     if result.returncode != 0:
         stderr = (result.stderr or "").strip()
         stdout = (result.stdout or "").strip()

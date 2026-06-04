@@ -25,7 +25,6 @@ comfyui:
 
 stage05_keyframe_images:
   provider_priority:
-    - "openai_gpt_image2"
     - "comfyui_txt2img"
   fallback_on_failure: true
 

@@ -1,0 +1,510 @@
+schema_version: "0.1.0"
+
+stage05_policy:
+  provider_order:
+    - comfyui_txt2img
+    - manual
+  provider_routing_mode: availability_first
+  comfyui_route_resolution: route_family_first
+  notes:
+    - Stage 05 mainline is pinned to the three verified local Zimage UI workflows.
+    - Do not route Stage 05 back through OpenAI image generation, bridge workflows, or Qwen compatibility fallbacks.
+    - Route-level style selection must happen through the real Zimage UI style selector, not by preserving alternate legacy branches.
+
+stage00_style_to_route:
+  写实电影感:
+    primary_route: realistic_cinematic
+    route_preset: classic_film_realism
+    alternates: []
+  短剧爽感:
+    primary_route: shortdrama_realistic
+    route_preset: classic_film
+    alternates: []
+  日系动画风（日本动漫感）:
+    primary_route: anime_jp
+    route_preset: anime_default
+    alternates: []
+  国漫动画风（中国动画/新国风）:
+    primary_route: anime_cn_newguofeng
+    route_preset: cn_illustration
+    alternates: []
+  美式动画/卡通风（欧美动画感）:
+    primary_route: western_cartoon
+    route_preset: comic_default
+    alternates: []
+  国风水墨/古风:
+    primary_route: guofeng_ink
+    route_preset: elegant_single_subject_umbrella
+    alternates: []
+  赛博朋克:
+    primary_route: stylized_concept
+    route_preset: cyberpunk_neon
+    alternates: []
+  暗黑惊悚:
+    primary_route: stylized_concept
+    route_preset: dark_fantasy_noir
+    alternates: []
+  温暖治愈:
+    primary_route: realistic_cinematic
+    route_preset: light_and_airy
+    alternates: []
+  纪录片质感:
+    primary_route: shortdrama_realistic
+    route_preset: street_documentary
+    alternates: []
+  广告高级感:
+    primary_route: realistic_cinematic
+    route_preset: high_key_fashion
+    alternates: []
+  游戏CG感:
+    primary_route: game_cg
+    route_preset: heroic_splash_art
+    alternates: []
+  低饱和现实主义:
+    primary_route: shortdrama_realistic
+    route_preset: orthochromatic_realism
+    alternates: []
+  高饱和潮流感:
+    primary_route: stylized_concept
+    route_preset: chromatic_editorial
+    alternates: []
+
+routes:
+  realistic_cinematic:
+    display_name: Realistic Cinematic
+    status: approved
+    style_family: realistic
+    maturity: mainline_locked
+    suitable_stage00_styles:
+      - 写实电影感
+      - 广告高级感
+      - 温暖治愈
+    current_workflow_mapping_key: stage05_realistic_cinematic_amazing_z_photo_original
+    current_workflow_target: amazing_z_photo_safetensors
+    current_model_candidate: Tongyi-MAI/Z-Image
+    style_presets:
+      classic_film_realism:
+        display_name: Classic Film Realism
+        style_selector: classic_film_photo
+        positive_anchor: Keep the frame grounded inside the story world, cinematic but natural, with believable human proportions, stable environment continuity, and no behind-the-scenes production cues.
+        negative_anchor: behind-the-scenes film set, crew equipment, camera operator, camera rig, monitor, tripod, boom mic, staged studio shoot, glam fashion set, duplicate subject, warped coastline
+      production_photo:
+        display_name: Production Photo
+        style_selector: production_photo
+        positive_anchor: Keep the image grounded, cinematic, and readable, with believable human proportions and a stable environment-first composition when the shot asks for it.
+        negative_anchor: behind-the-scenes film set, crew equipment, camera operator, camera rig, monitor, tripod, boom mic, meta filmmaking props, distorted body width, duplicate subject, warped coastline
+      environmental_establishing_film:
+        display_name: Environmental Establishing Film
+        style_selector: classic_film_photo
+        positive_anchor: Keep the frame as a story-world environmental establishing shot, with coastline or surrounding location clearly visible, a smaller in-frame subject, and no editorial or on-set staging cues.
+        negative_anchor: behind-the-scenes film set, crew equipment, camera operator, camera rig, monitor, tripod, boom mic, staged studio shoot, face-dominant crop, glamour beauty portrait
+      high_key_fashion:
+        display_name: High Key Fashion Photo
+        style_selector: high_key_fashion_photo
+        positive_anchor: Keep the composition premium, polished, and editorial, with clean silhouette hierarchy and a luxury campaign feel.
+        negative_anchor: cheap ecommerce framing, muddy lighting, flat stock-photo composition, warped anatomy, duplicated accessories
+      light_and_airy:
+        display_name: Light and Airy Photo
+        style_selector: light_and_airy_photo
+        positive_anchor: Keep the image gentle, breathable, and emotionally warm, with airy light and soft environmental openness around the subject.
+        negative_anchor: gloomy thriller palette, harsh contrast, cramped framing, anatomy stretch, duplicate person
+    adoption_strategy:
+      community_preference_policy: prefer_community_optimized_when_available
+      preferred_workflow_candidate: amazing_z_photo_safetensors
+      preferred_model_candidate: Tongyi-MAI/Z-Image
+      migration_state: repo_transitional
+      notes:
+        - Realistic Stage 05 now runs directly on the local Amazing Z-Photo UI workflow.
+        - Do not keep or reintroduce Stage 05 prompt-only Qwen or reference-guided Qwen detours as compatibility branches.
+    workflow_candidates:
+      - workflow_name: amazing_z_photo_safetensors
+        source_type: community_workflow
+        source_ref: F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-photo_SAFETENSORS.json
+        origin: community
+        stack_profile: zimage_photo_style_switch_ui
+        workflow_format: ui_graph
+        custom_node_dependencies:
+          - rgthree-comfy
+        import_blockers: []
+        adoption_state: current_repo
+        evidence_refs:
+          - F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-photo_SAFETENSORS.json
+          - E:/Codex-Plugin/codex-video-intake-plugin/.tmp-style-compare-20260602-photo-allstyles/contact_sheet_allstyles.png
+        priority: 1
+    model_candidates:
+      - model_id: Tongyi-MAI/Z-Image
+        source: huggingface
+        suitability: native-fit
+        priority: 1
+        notes: Local mainline realistic workflow proven through the original Zimage photo UI graph.
+    smoke_focus:
+      - environment-first realistic frame
+      - single-subject cinematic still
+      - horizontal beach establishing shot
+
+  shortdrama_realistic:
+    display_name: Short Drama Realistic
+    status: approved
+    style_family: realistic
+    maturity: mainline_locked
+    suitable_stage00_styles:
+      - 短剧爽感
+      - 纪录片质感
+      - 低饱和现实主义
+    current_workflow_mapping_key: stage05_realistic_cinematic_amazing_z_photo_original
+    current_workflow_target: amazing_z_photo_safetensors
+    current_model_candidate: Tongyi-MAI/Z-Image
+    style_presets:
+      classic_film:
+        display_name: Classic Film Photo
+        style_selector: classic_film_photo
+        positive_anchor: Keep the dramatic human scene readable with stable proportions, grounded gesture, and a restrained cinematic film still treatment.
+        negative_anchor: over-wide distorted anatomy, generic glamour pose, duplicated subject, meta film-set contamination
+      street_documentary:
+        display_name: Street Documentary Photo
+        style_selector: street_documentary_photo
+        positive_anchor: Preserve a documentary-like observational realism with honest lighting, natural spacing, and believable subject motion.
+        negative_anchor: staged fashion shoot, synthetic polish, warped body proportions, duplicate subject
+      orthochromatic_realism:
+        display_name: Orthochromatic Spirit Photo
+        style_selector: orthochromatic_spirit_photo
+        positive_anchor: Keep the frame low-saturation, grounded, and texturally realistic, with stable silhouette and non-glamorous emotional weight.
+        negative_anchor: loud neon palette, over-retouched skin, body width distortion, duplicate person
+    adoption_strategy:
+      community_preference_policy: prefer_community_optimized_when_available
+      preferred_workflow_candidate: amazing_z_photo_safetensors
+      preferred_model_candidate: Tongyi-MAI/Z-Image
+      migration_state: repo_transitional
+      notes:
+        - Short-drama realism stays on the same local Zimage photo workflow, with route-specific style selectors instead of alternate compatibility branches.
+    workflow_candidates:
+      - workflow_name: amazing_z_photo_safetensors
+        source_type: community_workflow
+        source_ref: F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-photo_SAFETENSORS.json
+        origin: community
+        stack_profile: zimage_photo_style_switch_ui
+        workflow_format: ui_graph
+        custom_node_dependencies:
+          - rgthree-comfy
+        import_blockers: []
+        adoption_state: current_repo
+        evidence_refs:
+          - F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-photo_SAFETENSORS.json
+        priority: 1
+    model_candidates:
+      - model_id: Tongyi-MAI/Z-Image
+        source: huggingface
+        suitability: native-fit
+        priority: 1
+        notes: Same local photo workflow, tuned by selector instead of fallback workflow swapping.
+    smoke_focus:
+      - medium drama close-up
+      - grounded human scene
+      - low-saturation realistic frame
+
+  anime_jp:
+    display_name: Anime JP
+    status: approved
+    style_family: anime
+    maturity: mainline_locked
+    suitable_stage00_styles:
+      - 日系动画风（日本动漫感）
+    current_workflow_mapping_key: stage05_anime_jp
+    current_workflow_target: amazing_z_image_a_safetensors
+    current_model_candidate: Tongyi-MAI/Z-Image
+    style_presets:
+      anime_default:
+        display_name: Anime Default
+        style_selector: anime
+        positive_anchor: Keep the frame as clean anime key art with stable subject identity, readable silhouette, and clear shot intent.
+        negative_anchor: muddy realism, broken anatomy, extra limbs, duplicate character
+    adoption_strategy:
+      community_preference_policy: prefer_community_optimized_when_available
+      preferred_workflow_candidate: amazing_z_image_a_safetensors
+      preferred_model_candidate: Tongyi-MAI/Z-Image
+      migration_state: repo_transitional
+      notes:
+        - JP anime Stage 05 runs directly on the local Amazing Z-Image-A UI workflow.
+    workflow_candidates:
+      - workflow_name: amazing_z_image_a_safetensors
+        source_type: community_workflow
+        source_ref: F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-image-a_SAFETENSORS.json
+        origin: community
+        stack_profile: zimage_image_a_style_switch_ui
+        workflow_format: ui_graph
+        custom_node_dependencies:
+          - rgthree-comfy
+        import_blockers: []
+        adoption_state: current_repo
+        evidence_refs:
+          - F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-image-a_SAFETENSORS.json
+          - E:/Codex-Plugin/codex-video-intake-plugin/.tmp-style-compare-20260602-image-a-allstyles/contact_sheet_allstyles.png
+        priority: 1
+    model_candidates:
+      - model_id: Tongyi-MAI/Z-Image
+        source: huggingface
+        suitability: adapted-fit
+        priority: 1
+        notes: Local mainline anime route through the original Image-A style switch workflow.
+    smoke_focus:
+      - anime portrait key visual
+      - anime scenic still
+      - anime full-body frame
+
+  anime_cn_newguofeng:
+    display_name: Anime CN New Guofeng
+    status: approved
+    style_family: anime
+    maturity: mainline_locked
+    suitable_stage00_styles:
+      - 国漫动画风（中国动画/新国风）
+    current_workflow_mapping_key: stage05_anime_jp
+    current_workflow_target: amazing_z_image_a_safetensors
+    current_model_candidate: Tongyi-MAI/Z-Image
+    style_presets:
+      cn_illustration:
+        display_name: CN Illustration
+        style_selector: vintage_illustration
+        positive_anchor: Keep the frame illustration-first, with stable single-subject identity and a cleaner Chinese-animation mood than generic anime realism.
+        negative_anchor: plain photo realism, broken anatomy, duplicate character, noisy scene clutter
+    adoption_strategy:
+      community_preference_policy: prefer_community_optimized_when_available
+      preferred_workflow_candidate: amazing_z_image_a_safetensors
+      preferred_model_candidate: Tongyi-MAI/Z-Image
+      migration_state: repo_transitional
+      notes:
+        - CN anime/new-guofeng is intentionally collapsed onto the local Image-A workflow instead of keeping separate bridge or Lumina detours in the Stage 05 mainline.
+    workflow_candidates:
+      - workflow_name: amazing_z_image_a_safetensors
+        source_type: community_workflow
+        source_ref: F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-image-a_SAFETENSORS.json
+        origin: community
+        stack_profile: zimage_image_a_style_switch_ui
+        workflow_format: ui_graph
+        custom_node_dependencies:
+          - rgthree-comfy
+        import_blockers: []
+        adoption_state: current_repo
+        evidence_refs:
+          - F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-image-a_SAFETENSORS.json
+        priority: 1
+    model_candidates:
+      - model_id: Tongyi-MAI/Z-Image
+        source: huggingface
+        suitability: adapted-fit
+        priority: 1
+        notes: Direct local workflow route without alternate bridge preservation.
+    smoke_focus:
+      - chinese-animation illustration frame
+      - single-subject scenic illustration
+      - horizontal animation still
+
+  western_cartoon:
+    display_name: Western Cartoon
+    status: approved
+    style_family: anime
+    maturity: mainline_locked
+    suitable_stage00_styles:
+      - 美式动画/卡通风（欧美动画感）
+    current_workflow_mapping_key: stage05_western_cartoon
+    current_workflow_target: amazing_z_comics_safetensors
+    current_model_candidate: Tongyi-MAI/Z-Image
+    style_presets:
+      comic_default:
+        display_name: Comic Default
+        style_selector: comic_1
+        positive_anchor: Keep the frame as bold western comic/cartoon art with clear silhouette separation and stable character count.
+        negative_anchor: muddy realism, duplicate subject, broken anatomy, weak line hierarchy
+    adoption_strategy:
+      community_preference_policy: prefer_community_optimized_when_available
+      preferred_workflow_candidate: amazing_z_comics_safetensors
+      preferred_model_candidate: Tongyi-MAI/Z-Image
+      migration_state: repo_transitional
+      notes:
+        - Western cartoon Stage 05 runs directly on the local Amazing Z-Comics UI workflow.
+    workflow_candidates:
+      - workflow_name: amazing_z_comics_safetensors
+        source_type: community_workflow
+        source_ref: F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-comics_SAFETENSORS.json
+        origin: community
+        stack_profile: zimage_comics_style_switch_ui
+        workflow_format: ui_graph
+        custom_node_dependencies:
+          - rgthree-comfy
+        import_blockers: []
+        adoption_state: current_repo
+        evidence_refs:
+          - F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-comics_SAFETENSORS.json
+          - E:/Codex-Plugin/codex-video-intake-plugin/.tmp-style-compare-20260602-comics-allstyles/contact_sheet_allstyles.png
+        priority: 1
+    model_candidates:
+      - model_id: Tongyi-MAI/Z-Image
+        source: huggingface
+        suitability: adapted-fit
+        priority: 1
+        notes: Local mainline western-cartoon route through the original comics style switch workflow.
+    smoke_focus:
+      - western cartoon still
+      - comic frame layout
+      - bold silhouette shot
+
+  guofeng_ink:
+    display_name: Guofeng Ink
+    status: approved
+    style_family: guofeng
+    maturity: mainline_locked
+    suitable_stage00_styles:
+      - 国风水墨/古风
+    current_workflow_mapping_key: stage05_anime_jp
+    current_workflow_target: amazing_z_image_a_safetensors
+    current_model_candidate: Tongyi-MAI/Z-Image
+    style_presets:
+      elegant_single_subject_umbrella:
+        display_name: Elegant Single Subject Umbrella
+        style_selector: vintage_illustration
+        positive_anchor: Keep one elegant young woman only, preserve clean limb count, and keep the umbrella and costume silhouette readable in a composed classical illustration frame.
+        negative_anchor: beauty close-up portrait, oversized face, duplicated umbrella, extra hands, broken handle contact
+      scenic_single_subject_umbrella:
+        display_name: Scenic Single Subject Umbrella
+        style_selector: whimsical_watercolor
+        positive_anchor: Favor a scenic medium-wide guofeng illustration with one elegant young woman, one umbrella, and meaningful environmental space around the subject.
+        negative_anchor: face-dominant glamour portrait, cropped umbrella, extra limbs, duplicated prop, muddy silhouette
+    adoption_strategy:
+      community_preference_policy: prefer_community_optimized_when_available
+      preferred_workflow_candidate: amazing_z_image_a_safetensors
+      preferred_model_candidate: Tongyi-MAI/Z-Image
+      migration_state: repo_transitional
+      notes:
+        - Guofeng Stage 05 now stays on the local Image-A workflow with preset-controlled selector choices instead of separate bridge workflows.
+    workflow_candidates:
+      - workflow_name: amazing_z_image_a_safetensors
+        source_type: community_workflow
+        source_ref: F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-image-a_SAFETENSORS.json
+        origin: community
+        stack_profile: zimage_image_a_style_switch_ui
+        workflow_format: ui_graph
+        custom_node_dependencies:
+          - rgthree-comfy
+        import_blockers: []
+        adoption_state: current_repo
+        evidence_refs:
+          - F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-image-a_SAFETENSORS.json
+        priority: 1
+    model_candidates:
+      - model_id: Tongyi-MAI/Z-Image
+        source: huggingface
+        suitability: adapted-fit
+        priority: 1
+        notes: Direct local route without retaining separate guofeng bridge artifacts in the mainline.
+    smoke_focus:
+      - guofeng single-subject illustration
+      - umbrella scenic shot
+      - classical full-body composition
+
+  stylized_concept:
+    display_name: Stylized Concept
+    status: approved
+    style_family: stylized
+    maturity: mainline_locked
+    suitable_stage00_styles:
+      - 赛博朋克
+      - 暗黑惊悚
+      - 高饱和潮流感
+    current_workflow_mapping_key: stage05_western_cartoon
+    current_workflow_target: amazing_z_comics_safetensors
+    current_model_candidate: Tongyi-MAI/Z-Image
+    style_presets:
+      cyberpunk_neon:
+        display_name: Cyberpunk Neon
+        style_selector: digital_cyberpunk
+        positive_anchor: Keep the frame bold, neon-driven, and concept-forward, with stable anatomy and a clear high-contrast subject silhouette.
+        negative_anchor: washed-out city realism, broken anatomy, muddy palette, duplicate subject
+      dark_fantasy_noir:
+        display_name: Dark Fantasy Noir
+        style_selector: unsettling
+        positive_anchor: Keep the mood dark, ominous, and theatrical, while preserving a readable subject and believable silhouette.
+        negative_anchor: cheerful daylight realism, broken proportions, duplicate characters, weak atmosphere
+      chromatic_editorial:
+        display_name: Chromatic Editorial
+        style_selector: electric_blue_outline
+        positive_anchor: Keep the frame premium, graphic, and high-energy, with deliberate silhouette hierarchy and aggressive color separation.
+        negative_anchor: flat retail framing, muddy contrast, warped anatomy, duplicate subject
+    adoption_strategy:
+      community_preference_policy: prefer_community_optimized_when_available
+      preferred_workflow_candidate: amazing_z_comics_safetensors
+      preferred_model_candidate: Tongyi-MAI/Z-Image
+      migration_state: repo_transitional
+      notes:
+        - Stylized Stage 05 is intentionally collapsed onto the local Zimage comics workflow instead of preserving image-b bridge artifacts.
+    workflow_candidates:
+      - workflow_name: amazing_z_comics_safetensors
+        source_type: community_workflow
+        source_ref: F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-comics_SAFETENSORS.json
+        origin: community
+        stack_profile: zimage_comics_style_switch_ui
+        workflow_format: ui_graph
+        custom_node_dependencies:
+          - rgthree-comfy
+        import_blockers: []
+        adoption_state: current_repo
+        evidence_refs:
+          - F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-comics_SAFETENSORS.json
+        priority: 1
+    model_candidates:
+      - model_id: Tongyi-MAI/Z-Image
+        source: huggingface
+        suitability: adapted-fit
+        priority: 1
+        notes: Single local stylized mainline without retaining alternate bridge workflows.
+    smoke_focus:
+      - cyberpunk concept frame
+      - dark stylized portrait
+      - high-saturation poster frame
+
+  game_cg:
+    display_name: Game CG
+    status: approved
+    style_family: stylized
+    maturity: mainline_locked
+    suitable_stage00_styles:
+      - 游戏CG感
+    current_workflow_mapping_key: stage05_western_cartoon
+    current_workflow_target: amazing_z_comics_safetensors
+    current_model_candidate: Tongyi-MAI/Z-Image
+    style_presets:
+      heroic_splash_art:
+        display_name: Heroic Splash Art
+        style_selector: comic_book_cover
+        positive_anchor: Keep the frame as a high-impact hero plate with stable anatomy, readable costume shape, and clean poster-grade silhouette.
+        negative_anchor: casual snapshot realism, broken limbs, duplicate subject, weak costume readability
+    adoption_strategy:
+      community_preference_policy: prefer_community_optimized_when_available
+      preferred_workflow_candidate: amazing_z_comics_safetensors
+      preferred_model_candidate: Tongyi-MAI/Z-Image
+      migration_state: repo_transitional
+      notes:
+        - Game CG Stage 05 now uses the local Zimage comics workflow directly instead of preserving separate bridge artifacts.
+    workflow_candidates:
+      - workflow_name: amazing_z_comics_safetensors
+        source_type: community_workflow
+        source_ref: F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-comics_SAFETENSORS.json
+        origin: community
+        stack_profile: zimage_comics_style_switch_ui
+        workflow_format: ui_graph
+        custom_node_dependencies:
+          - rgthree-comfy
+        import_blockers: []
+        adoption_state: current_repo
+        evidence_refs:
+          - F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-comics_SAFETENSORS.json
+        priority: 1
+    model_candidates:
+      - model_id: Tongyi-MAI/Z-Image
+        source: huggingface
+        suitability: adapted-fit
+        priority: 1
+        notes: Uses the same local comics workflow, selected through the real style switch instead of a separate bridge.
+    smoke_focus:
+      - heroic splash art
+      - character promo still
+      - strong costume silhouette frame

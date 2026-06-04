@@ -4,7 +4,7 @@ from typing import Any
 
 
 SCALAR_KEYS = ("subject", "subject_age", "location", "weather", "time_of_day", "scene_label")
-LIST_KEYS = ("key_props", "action_beats", "emotion_beats", "composition_beats")
+LIST_KEYS = ("key_props", "action_beats", "emotion_beats", "composition_beats", "composition_focus_beats")
 
 
 def _clean_text(value: Any) -> str:
@@ -38,6 +38,8 @@ def _derive_from_script(source: dict[str, Any]) -> dict[str, Any]:
     settings = source.get("settings") if isinstance(source.get("settings"), list) else []
     duration_plan = source.get("duration_plan") if isinstance(source.get("duration_plan"), dict) else {}
     beats = duration_plan.get("beats") if isinstance(duration_plan.get("beats"), list) else []
+    script = source.get("script") if isinstance(source.get("script"), dict) else {}
+    sections = script.get("sections") if isinstance(script.get("sections"), list) else []
     primary_character = characters[0] if characters and isinstance(characters[0], dict) else {}
     primary_scene = _clean_text(settings[0]) if settings else _clean_text((source.get("creative_contract") or {}).get("scene"))
     return {
@@ -50,7 +52,10 @@ def _derive_from_script(source: dict[str, Any]) -> dict[str, Any]:
         "key_props": [],
         "action_beats": _clean_list([beat.get("summary") for beat in beats if isinstance(beat, dict)]),
         "emotion_beats": _clean_list([beat.get("emotion") for beat in beats if isinstance(beat, dict)]),
-        "composition_beats": [],
+        "composition_beats": _clean_list([section.get("visual") for section in sections if isinstance(section, dict)]),
+        "composition_focus_beats": _clean_list(
+            [section.get("composition_focus") for section in sections if isinstance(section, dict)]
+        ),
     }
 
 
@@ -68,6 +73,7 @@ def _derive_from_storyboard_like(source: dict[str, Any]) -> dict[str, Any]:
         "action_beats": _clean_list([shot.get("action") for shot in shots if isinstance(shot, dict)]),
         "emotion_beats": _clean_list([shot.get("emotion") for shot in shots if isinstance(shot, dict)]),
         "composition_beats": _clean_list([shot.get("composition") for shot in shots if isinstance(shot, dict)]),
+        "composition_focus_beats": _clean_list([shot.get("composition_focus") for shot in shots if isinstance(shot, dict)]),
     }
 
 

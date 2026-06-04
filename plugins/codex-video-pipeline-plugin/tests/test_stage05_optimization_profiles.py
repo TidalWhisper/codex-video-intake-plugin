@@ -27,44 +27,46 @@ optimization_profiles = load_module(
 )
 
 
-def test_load_stage05_optimization_profiles_example_is_valid() -> None:
-    path = ROOT / "config" / "stage05_optimization_profiles.example.yaml"
+def test_load_stage05_optimization_profiles_is_valid() -> None:
+    path = ROOT / "config" / "stage05_optimization_profiles.yaml"
     data, resolved = optimization_profiles.load_stage05_optimization_profiles(path, validate=True)
     assert resolved == path.resolve()
     assert data["default_profile"] == "balanced"
     resolved_profile = optimization_profiles.resolve_stage05_workflow_optimization(
         data,
-        "stage05_guofeng_ink",
+        "stage05_western_cartoon",
     )
     assert resolved_profile["profile_key"] == "balanced"
     assert resolved_profile["profile_label"] == "Balanced"
     assert resolved_profile["dimension_scale"] == 0.875
-    assert resolved_profile["workflow_replacements"]["steps"] == 14
-    assert resolved_profile["workflow_replacements"]["cfg"] == 2.9
+    assert resolved_profile["workflow_replacements"]["style_selector"] == "comic_1"
 
 
 def test_resolve_stage05_optimization_profiles_supports_inheritance_and_override() -> None:
-    path = ROOT / "config" / "stage05_optimization_profiles.example.yaml"
+    path = ROOT / "config" / "stage05_optimization_profiles.yaml"
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
     resolved_profile = optimization_profiles.resolve_stage05_workflow_optimization(
         data,
-        "stage05_realistic_cinematic",
+        "stage05_anime_jp",
         requested_profile="quality",
     )
     assert resolved_profile["profile_key"] == "quality"
     assert resolved_profile["dimension_scale"] == 1.0
-    assert resolved_profile["workflow_replacements"]["steps"] == 10
-    assert resolved_profile["workflow_replacements"]["sampler_name"] == "euler"
+    assert resolved_profile["workflow_replacements"]["style_selector"] == "anime"
 
 
 def test_validate_stage05_optimization_profiles_rejects_unknown_profile_key() -> None:
-    path = ROOT / "config" / "stage05_optimization_profiles.example.yaml"
+    path = ROOT / "config" / "stage05_optimization_profiles.yaml"
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    data["workflow_profiles"]["stage05_game_cg"]["profiles"] = {
+    data["workflow_profiles"]["stage05_realistic_cinematic_amazing_z_photo_original"]["profiles"] = {
         "ultra": {
             "dimension_scale": 1.0,
-            "workflow_replacements": {"steps": 8},
+            "workflow_replacements": {"style_selector": "production_photo"},
         }
     }
     errors = optimization_profiles.validate_stage05_optimization_profiles(data)
-    assert any("workflow_profiles.stage05_game_cg.profiles.ultra must exist in profile_catalog" in error for error in errors)
+    assert any(
+        "workflow_profiles.stage05_realistic_cinematic_amazing_z_photo_original.profiles.ultra must exist in profile_catalog"
+        in error
+        for error in errors
+    )

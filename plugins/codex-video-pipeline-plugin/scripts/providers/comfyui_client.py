@@ -289,7 +289,7 @@ def load_workflow_json(path: str | Path) -> dict[str, Any]:
     if not workflow_path.exists():
         raise ComfyUIError(f"workflow file not found: {workflow_path}", kind="workflow_missing")
     try:
-        data = json.loads(workflow_path.read_text(encoding="utf-8"))
+        data = json.loads(workflow_path.read_text(encoding="utf-8-sig"))
     except json.JSONDecodeError as exc:
         raise ComfyUIError(f"workflow file is not valid JSON: {workflow_path}", kind="workflow_invalid") from exc
     if not isinstance(data, dict):

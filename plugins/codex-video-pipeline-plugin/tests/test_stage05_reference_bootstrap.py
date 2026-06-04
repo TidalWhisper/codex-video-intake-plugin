@@ -196,8 +196,8 @@ def test_bootstrap_reference_image_from_existing_keyframe_switches_realistic_rou
 
     refreshed_manifest = json.loads(manifest_json.read_text(encoding="utf-8"))
     assert refreshed_manifest["reference_guidance_ready"] is True
-    assert refreshed_manifest["reference_guidance_active"] is True
-    assert refreshed_manifest["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_qwen_edit_reference"
-    assert refreshed_manifest["comfyui_workflow_name"] == "txt2img_keyframe_shortdrama_qwen_edit_reference"
-    assert refreshed_manifest["route_resolution"]["workflow_mapping_resolution"] == "route_registry_reference_guided_target"
+    assert refreshed_manifest["reference_guidance_active"] is False
+    assert refreshed_manifest["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_amazing_z_photo_original"
+    assert refreshed_manifest["comfyui_workflow_name"] == "amazing_z_photo_safetensors"
+    assert refreshed_manifest["route_resolution"]["workflow_mapping_resolution"] == "route_registry_current_mapping"
     assert [args[2] for args in rerun_calls] == ["IMG_S001_START", "IMG_S001_END"]

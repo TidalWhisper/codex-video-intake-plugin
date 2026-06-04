@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Stage 00-A Intake Turn Output",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "answered_question_key",
+    "user_answer_entry",
+    "user_answers_patch",
+    "normalized_patch",
+    "missing_required_fields",
+    "required_fields_complete",
+    "status",
+    "next_question_key",
+    "next_prompt_text",
+    "needs_followup",
+    "followup_reason",
+    "completion_summary"
+  ],
+  "properties": {
+    "answered_question_key": {
+      "type": "string"
+    },
+    "user_answer_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "raw_input",
+        "selected_option",
+        "free_text_notes"
+      ],
+      "properties": {
+        "raw_input": {
+          "type": "string"
+        },
+        "selected_option": {
+          "type": "string"
+        },
+        "free_text_notes": {
+          "type": "string"
+        }
+      }
+    },
+    "user_answers_patch": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "idea": {"type": "string"},
+        "target_duration": {"type": "string"},
+        "genre": {"type": "string"},
+        "style": {"type": "string"},
+        "visual_spec": {"type": "string"},
+        "characters": {"type": "string"},
+        "characters_note": {"type": "string"},
+        "voice": {"type": "string"},
+        "music": {"type": "string"},
+        "final_output": {"type": "string"}
+      }
+    },
+    "normalized_patch": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "idea": {"type": "string"},
+        "target_duration_sec": {"type": ["integer", "string"]},
+        "target_duration_label": {"type": "string"},
+        "genre": {"type": "string"},
+        "style": {"type": "string"},
+        "aspect_ratio": {"type": "string"},
+        "aspect_ratio_label": {"type": "string"},
+        "resolution": {"type": "string"},
+        "resolution_label": {"type": "string"},
+        "characters_mode": {"type": "string"},
+        "characters_required": {"type": ["boolean", "string"]},
+        "voice_mode": {"type": "string"},
+        "voice_required": {"type": ["boolean", "string"]},
+        "music_mode": {"type": "string"},
+        "music_profile": {"type": "string"},
+        "music_required": {"type": ["boolean", "string"]},
+        "final_output": {"type": "string"}
+      }
+    },
+    "missing_required_fields": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "required_fields_complete": {
+      "type": "boolean"
+    },
+    "status": {
+      "enum": [
+        "collecting",
+        "draft_ready"
+      ]
+    },
+    "next_question_key": {
+      "type": "string"
+    },
+    "next_prompt_text": {
+      "type": "string"
+    },
+    "needs_followup": {
+      "type": "boolean"
+    },
+    "followup_reason": {
+      "type": "string"
+    },
+    "completion_summary": {
+      "type": "string"
+    }
+  }
+}

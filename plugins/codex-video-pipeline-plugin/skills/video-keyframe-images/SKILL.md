@@ -16,6 +16,7 @@ If the route touches one of the original local Zimage UI workflows, also read `s
 If the route touches the original local `amazing-z-photo_SAFETENSORS.json` workflow, also load `$video-keyframe-amazing-z-photo-style-switch` before changing mappings, prompts, or style-switch logic.
 If the route touches the original local `amazing-z-comics_SAFETENSORS.json` workflow, also load `$video-keyframe-amazing-z-comics-style-switch` before changing mappings, prompts, or style-switch logic.
 If the route touches the original local `amazing-z-image-a_SAFETENSORS.json` workflow, also load `$video-keyframe-amazing-z-image-a-style-switch` before changing mappings, prompts, or style-switch logic.
+If the task is explicitly about `Qwen-Image-Edit` local reference-guided Stage 05 continuity, first load [references/stage05-qwen-workflow-runtime-map.md](./references/stage05-qwen-workflow-runtime-map.md), then load [references/stage05-qwen-reference-guided-workflow-rules.md](./references/stage05-qwen-reference-guided-workflow-rules.md), [references/stage05-qwen-quality-gate-rules.md](./references/stage05-qwen-quality-gate-rules.md), and [references/stage05-qwen-nextscene-prompt-convergence-rules.md](./references/stage05-qwen-nextscene-prompt-convergence-rules.md) before selecting or calling a local Qwen workflow.
 
 ## Inputs
 
@@ -44,7 +45,6 @@ Required files:
 05_images/image_generation_plan.md
 05_images/image_generation_jobs.json
 05_images/keyframe_image_manifest.json
-05_images/openai_image_requests.json
 05_images/comfyui_image_requests.json
 05_images/image_review.md
 05_images/keyframes/
@@ -77,7 +77,6 @@ python skills/video-keyframe-images/scripts/new_keyframe_image_jobs.py \
 ```text
 05_images/image_generation_plan.md
 05_images/image_generation_jobs.json
-05_images/openai_image_requests.json
 05_images/comfyui_image_requests.json
 ```
 
@@ -86,21 +85,11 @@ python skills/video-keyframe-images/scripts/new_keyframe_image_jobs.py \
 Preferred production provider order:
 
 ```text
-1. OpenAI image generation, when configured and available
-2. Local ComfyUI txt2img/img2img workflow, when configured and available
-3. Manual placement of externally generated images into 05_images/keyframes/
+1. Local ComfyUI txt2img workflow on the locked Zimage UI graphs
+2. Manual placement of externally generated images into `05_images/keyframes/`
 ```
 
-OpenAI production entrypoint:
-
-```bash
-python scripts/providers/run_openai_gpt_image2.py \
-  <project_dir>/05_images/keyframe_image_manifest.json
-```
-
-This runner refreshes `05_images/openai_image_requests.json`, calls the OpenAI Images API with the configured model, writes files into `05_images/keyframes/`, and updates `keyframe_image_manifest.json`.
-
-ComfyUI txt2img fallback entrypoint:
+ComfyUI txt2img mainline entrypoint:
 
 ```bash
 python scripts/providers/run_comfyui_txt2img.py \
@@ -120,45 +109,40 @@ stylized
 
 Current execution semantics:
 
-- Provider priority is fixed: `OpenAI GPT Image 2 -> ComfyUI txt2img -> manual`
+- Provider priority is fixed: `ComfyUI txt2img -> manual`
 - `stage05_route_key` is the primary routing field recorded in `keyframe_image_manifest.json`
 - `comfyui_workflow_mapping_key` is the primary execution key used to resolve `config/workflow_node_mapping.yaml`
 - `style_family` remains a compatibility field for existing Stage 05 validation and runner logic
 - `style_family` only decides the internal ComfyUI route family, not provider order
 
-Current default ComfyUI route families still map to transitional workflow targets through route-specific mapping keys:
+Current default ComfyUI route families now collapse directly onto the three locked local Zimage UI workflows:
 
 - `realistic_cinematic` → `stage05_realistic_cinematic_amazing_z_photo_original` → `amazing_z_photo_safetensors`
+- `shortdrama_realistic` → `stage05_realistic_cinematic_amazing_z_photo_original` → `amazing_z_photo_safetensors`
 - `anime_jp` → `stage05_anime_jp` → `amazing_z_image_a_safetensors`
-- `anime_cn_newguofeng` → `stage05_anime_cn_newguofeng` → `txt2img_keyframe_anime_cn_newguofeng`
+- `anime_cn_newguofeng` → `stage05_anime_jp` → `amazing_z_image_a_safetensors`
+- `guofeng_ink` → `stage05_anime_jp` → `amazing_z_image_a_safetensors`
 - `western_cartoon` → `stage05_western_cartoon` → `amazing_z_comics_safetensors`
-- `guofeng_ink` → `stage05_guofeng_ink` → `txt2img_keyframe_guofeng_ink`
-- `stylized_concept` → `stage05_stylized_concept` → `txt2img_keyframe_stylized_zimage_image_b_bridge`
+- `stylized_concept` → `stage05_western_cartoon` → `amazing_z_comics_safetensors`
+- `game_cg` → `stage05_western_cartoon` → `amazing_z_comics_safetensors`
 
-Current first-batch route-specific stack direction:
+Stage 05 default mainline rules:
 
-- `anime_cn_newguofeng` now uses a Lumina-style route structure instead of reusing the JP anime Zimage graph unchanged
-- `guofeng_ink` keeps the Qwen guofeng LoRA route but is isolated in its own workflow file for later model-stack replacement
-- `stylized_concept` now uses a reduced API bridge derived from `AmazingZImageWorkflow/amazing-z-image-b_SAFETENSORS.json`, while the older HiDream route stays as a comparison candidate
-- `stylized_concept` can now further split internally by Stage 00 style preset, so `赛博朋克` and `暗黑惊悚` no longer have to share the exact same anchor text inside the bridge
-- `game_cg` now lands on its own clean-plate bridge file, so `游戏CG感` is no longer forced through the old generic stylized compatibility workflow artifact
-- direct workflow overrides are now also available for the first route-specific files:
-  - `txt2img_keyframe_anime_cn_newguofeng`
-  - `txt2img_keyframe_guofeng_ink`
-  - `txt2img_keyframe_stylized_concept`
+- The three locked local Zimage UI workflows remain the default Stage 05 execution targets for prompt-only routes.
+- Route variation must happen through `style_selector` and route preset metadata.
+- If the user explicitly needs `single-character reference-guided continuity` and the selected local workflow is Qwen-based, treat that as a separate governed exception and follow [references/stage05-qwen-reference-guided-workflow-rules.md](./references/stage05-qwen-reference-guided-workflow-rules.md) instead of improvising a new route.
+- Do not mix prompt-only Zimage semantics and reference-guided Qwen semantics inside the same shot bundle.
 
 The generated `keyframe_image_manifest.json` records `stage05_route_key`, `style_family`, `comfyui_workflow_mapping_key`, `comfyui_workflow_name`, `comfyui_model_id`, and `route_resolution` for each run.
 
-Do not treat the current 4-route compatibility layer as the final model-stack architecture. Route expansion and model/workflow replacement should be driven by the Stage 05 route registry and the model-selection backlog, not by forcing every style through one base model plus LoRA.
-
-Do not assume these four routes are production-ready only because four workflow files exist. The route is only acceptable when the selected model stack is actually appropriate for that style family and a real smoke render exists.
+Do not treat deleted bridge or fallback routes as candidates to keep "just in case". Route changes should go through the real Stage 05 registry and the three active Zimage workflows only.
 
 If you must force a single workflow for all jobs, pass it explicitly:
 
 ```bash
 python scripts/providers/run_comfyui_txt2img.py \
   <project_dir>/05_images/keyframe_image_manifest.json \
-  --workflow-name txt2img_keyframe_anime
+  --workflow-name stage05_anime_jp
 ```
 
 5. After image files exist, sync evidence:

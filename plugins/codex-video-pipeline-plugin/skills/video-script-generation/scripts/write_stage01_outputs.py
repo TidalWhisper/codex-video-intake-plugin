@@ -58,11 +58,36 @@ def normalize_music_cue(cue: Any, music_profile: str) -> str:
     return f"{profile}: {text}"
 
 
+def build_story_anchors_from_output(brief: dict[str, Any], llm_output: dict[str, Any]) -> dict[str, Any]:
+    beats = [beat for beat in list(llm_output.get("beats") or []) if isinstance(beat, dict)]
+    base = extract_story_anchors(brief, max(1, len(beats))).to_dict()
+    characters = [item for item in list(llm_output.get("characters") or []) if isinstance(item, dict)]
+    settings = [str(item).strip() for item in list(llm_output.get("settings") or []) if str(item or "").strip()]
+    if characters:
+        base["subject"] = str(characters[0].get("name") or base.get("subject") or "").strip()
+        base["subject_age"] = str(characters[0].get("age") or base.get("subject_age") or "").strip()
+    if settings:
+        base["scene_label"] = settings[0]
+        if len(settings) > 1:
+            base["location"] = settings[1]
+        else:
+            base["location"] = settings[0]
+    if beats:
+        base["action_beats"] = [str(beat.get("summary") or "").strip() for beat in beats]
+        base["emotion_beats"] = [str(beat.get("emotion") or "").strip() for beat in beats]
+        base["composition_beats"] = [str(beat.get("visual") or "").strip() for beat in beats]
+        base["composition_focus_beats"] = [
+            str(beat.get("composition_focus") or beat.get("visual") or "").strip()
+            for beat in beats
+        ]
+    return base
+
+
 def build_script_payload(brief: dict[str, Any], llm_output: dict[str, Any], source_brief_path: Path) -> dict[str, Any]:
     normalized = brief.get("normalized") if isinstance(brief.get("normalized"), dict) else brief
     compiled, quality_contract, quality_targets = strategy_bundle(brief, "STAGE_01")
     beats = list(llm_output.get("beats") or [])
-    story_anchors = extract_story_anchors(brief, max(1, len(beats))).to_dict()
+    story_anchors = build_story_anchors_from_output(brief, llm_output)
     music_profile = str(normalized.get("music_profile") or "")
     script_sections = []
     duration_plan_beats = []
@@ -79,6 +104,7 @@ def build_script_payload(brief: dict[str, Any], llm_output: dict[str, Any], sour
         script_sections.append({
             "time": f"{beat.get('start')}-{beat.get('end')}",
             "visual": beat.get("visual"),
+            "composition_focus": beat.get("composition_focus"),
             "voiceover": beat.get("voiceover"),
             "dialogue": beat.get("dialogue"),
             "music_cue": normalize_music_cue(beat.get("music_cue"), music_profile),

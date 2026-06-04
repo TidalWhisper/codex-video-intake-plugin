@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Stage 00-B Brief LLM Output",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "source",
+    "user_answers",
+    "normalized",
+    "required_fields_complete",
+    "missing_required_fields",
+    "brief_confirmation_summary"
+  ],
+  "properties": {
+    "source": {
+      "type": "string"
+    },
+    "user_answers": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "idea": {"type": "string"},
+        "target_duration": {"type": "string"},
+        "genre": {"type": "string"},
+        "style": {"type": "string"},
+        "visual_spec": {"type": "string"},
+        "characters": {"type": "string"},
+        "characters_note": {"type": "string"},
+        "voice": {"type": "string"},
+        "music": {"type": "string"},
+        "final_output": {"type": "string"}
+      }
+    },
+    "normalized": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "idea",
+        "target_duration_sec",
+        "target_duration_label",
+        "genre",
+        "style",
+        "aspect_ratio",
+        "aspect_ratio_label",
+        "resolution",
+        "resolution_label",
+        "characters_mode",
+        "characters_required",
+        "voice_mode",
+        "voice_required",
+        "music_mode",
+        "music_profile",
+        "music_required",
+        "final_output"
+      ],
+      "properties": {
+        "idea": {"type": "string"},
+        "target_duration_sec": {"type": ["integer", "string"]},
+        "target_duration_label": {"type": "string"},
+        "genre": {"type": "string"},
+        "style": {"type": "string"},
+        "aspect_ratio": {"type": "string"},
+        "aspect_ratio_label": {"type": "string"},
+        "resolution": {"type": "string"},
+        "resolution_label": {"type": "string"},
+        "characters_mode": {"type": "string"},
+        "characters_required": {"type": ["boolean", "string"]},
+        "voice_mode": {"type": "string"},
+        "voice_required": {"type": ["boolean", "string"]},
+        "music_mode": {"type": "string"},
+        "music_profile": {"type": "string"},
+        "music_required": {"type": ["boolean", "string"]},
+        "final_output": {"type": "string"}
+      }
+    },
+    "required_fields_complete": {
+      "type": "boolean"
+    },
+    "missing_required_fields": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "brief_confirmation_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "idea",
+        "target_duration",
+        "genre",
+        "style",
+        "visual_spec",
+        "characters",
+        "voice",
+        "music",
+        "final_output"
+      ],
+      "properties": {
+        "idea": {"type": "string"},
+        "target_duration": {"type": "string"},
+        "genre": {"type": "string"},
+        "style": {"type": "string"},
+        "visual_spec": {"type": "string"},
+        "characters": {"type": "string"},
+        "voice": {"type": "string"},
+        "music": {"type": "string"},
+        "final_output": {"type": "string"}
+      }
+    }
+  }
+}

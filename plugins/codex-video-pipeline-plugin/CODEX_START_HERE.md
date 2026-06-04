@@ -133,6 +133,7 @@ Codex 后续修改时必须遵守：
 16. 如果任务涉及 `F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-image-a_SAFETENSORS.json`，必须先读取 `$video-keyframe-amazing-z-image-a-style-switch`；其中 `#57` 是唯一主 prompt 输入，`#88 STYLE SELECTOR` 才是真实 style 开关，不能用内部 style 文本节点伪装成已理解。
 17. 如果任务涉及上述三套本地 Zimage UI workflow 之一，必须先读取统一总规范 `skills/video-keyframe-style-selection/references/zimage-style-switch-unified-spec.md`，再读取对应的单独 skill。
 18. 如果任务涉及 Stage 00 立项提问，必须先读取 `skills/video-project-intake/references/first_layer_options.md` 和 `skills/video-project-intake/references/stage00_question_blocks.md`；对用户展示的字母选项必须与 canonical 映射完全一致，禁止自创、改写或重排选项菜单。
+19. 进行修改或重构时，不允许保留兼容桥、过渡双轨、临时 fallback、干扰性的旧文件/旧脚本/旧分支等“保留项”；如果主线方案已经确定，必须把这些干扰项删除干净，并同步清理引用、路由和文档。除非用户明确要求保留，否则不允许用“兼容”名义继续挂着旧实现。
 ```
 
 ## 6. 本地开发前先跑自检

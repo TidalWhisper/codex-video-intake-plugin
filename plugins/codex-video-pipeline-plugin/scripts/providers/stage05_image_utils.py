@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import html
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -178,7 +179,7 @@ def _route_guardrail_sections(job: dict[str, Any]) -> list[str]:
         return [
             "Composition: true environmental establishing shot with coastline, sky, or surrounding location clearly visible; keep the subject smaller in frame instead of turning it into a portrait close-up",
             "Scene intent: this is part of the story world itself, not a behind-the-scenes production still, not a fashion editorial set, and not a staged studio shoot",
-            "Avoid: film set, camera rig, monitor, lighting stand, crew equipment, indoor soundstage, interview chair setup, glamour beauty pose, face-dominant crop",
+            "Avoid: film set, camera rig, monitor, tripod, lighting stand, boom mic, crew equipment, camera operator, indoor soundstage, interview chair setup, glamour beauty pose, face-dominant crop",
         ]
     if route_key == "guofeng_ink" and ("medium scenic shot" in camera_text or "wide scenic shot" in camera_text or "scenic shot" in camera_text):
         return [
@@ -196,6 +197,29 @@ def _route_guardrail_sections(job: dict[str, Any]) -> list[str]:
     return []
 
 
+def _realistic_establishing_negative_hints(job: dict[str, Any]) -> list[str]:
+    route_key = str(job.get("stage05_route_key") or "").strip()
+    if route_key != "realistic_cinematic":
+        return []
+    camera_text = " ".join(
+        str(job.get(key) or "")
+        for key in ["camera_prompt", "prompt", "style_prompt", "consistency_prompt"]
+    ).lower()
+    if not (
+        "establishing shot" in camera_text
+        or ("wide shot" in camera_text and any(hint in camera_text for hint in ("shoreline", "beach", "sea", "street", "skyline")))
+    ):
+        return []
+    return [
+        "centered full-body portrait",
+        "centered beauty pose",
+        "hero poster framing",
+        "face-dominant composition",
+        "fashion portrait framing",
+        "subject filling frame",
+    ]
+
+
 def effective_negative_prompt(job: dict[str, Any]) -> str:
     existing = [item.strip() for item in str(job.get("negative_prompt") or "").split(",") if item.strip()]
     existing.extend(
@@ -203,6 +227,12 @@ def effective_negative_prompt(job: dict[str, Any]) -> str:
         for item in (job.get("repair_negative_prompt_additions") or [])
         if isinstance(item, str) and item.strip()
     )
+    existing.extend(
+        item.strip()
+        for item in str(job.get("comfyui_style_negative_anchor") or "").split(",")
+        if item.strip()
+    )
+    existing.extend(_realistic_establishing_negative_hints(job))
     seen = {item.lower() for item in existing}
     merged = list(existing)
     for hint in DEFAULT_STAGE05_NEGATIVE_HINTS:
@@ -217,17 +247,352 @@ def effective_negative_prompt(job: dict[str, Any]) -> str:
     return ", ".join(merged)
 
 
+def _is_original_zimage_ui_workflow(job: dict[str, Any]) -> bool:
+    source_ref = str(job.get("preferred_comfyui_workflow_source_ref") or "").replace("\\", "/").lower()
+    return "/workflows/zimage/amazing-z-" in source_ref
+
+
+def _is_reference_guided_qwen_edit_workflow(job: dict[str, Any]) -> bool:
+    source_ref = str(job.get("preferred_comfyui_workflow_source_ref") or "").replace("\\", "/").lower()
+    return (
+        "qwen-edit-2511-shortdrama-character-anchor-base.json" in source_ref
+        or "qwenedit+nextscene" in source_ref
+    )
+
+
+def _contains_cjk(text: str) -> bool:
+    return bool(re.search(r"[\u4e00-\u9fff]", text))
+
+
+def _clean_prompt_fragment(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    text = re.sub(r"\s+", " ", text.replace("\r", " ").replace("\n", " "))
+    text = re.sub(r"(?i)^character identity anchor\s*:\s*", "", text)
+    text = re.sub(r"(?i)^identity anchor\s*:\s*", "", text)
+    text = re.sub(r"^同一人物设定[:：]\s*", "", text)
+    text = re.sub(r"(?i)\bemotion remains\b", "emotion stays", text)
+    text = re.sub(r"(?i)^emotion[:：]\s*", "", text)
+    return text.strip(" ,，。;；")
+
+
+def _clean_prompt_sentence(value: Any) -> str:
+    text = _clean_prompt_fragment(value)
+    if not text:
+        return ""
+    if _contains_cjk(text):
+        pieces = [item.strip(" ，。;；") for item in re.split(r"\s*,\s*", text) if item.strip(" ，。;；")]
+        if len(pieces) >= 2 and pieces[1].startswith(pieces[0]):
+            pieces = pieces[1:]
+        text = "，".join(pieces)
+        text = re.sub(r"[。！？][，,]", "，", text)
+        text = re.sub(r"([，。！？])\1+", r"\1", text)
+    else:
+        text = re.sub(r"\s*,\s*", ", ", text)
+    return text
+
+
+def _split_identity_anchor(value: Any) -> tuple[str, str]:
+    identity = _clean_prompt_fragment(value)
+    if not identity:
+        return "", ""
+    for sep in ("；", ";"):
+        if sep in identity:
+            description, continuity = identity.split(sep, 1)
+            return description.strip(" ,，。;；"), continuity.strip(" ,，。;；")
+    return identity, ""
+
+
+def _append_unique_sentence(sentences: list[str], candidate: str) -> None:
+    text = candidate.strip()
+    if not text:
+        return
+    lowered = text.lower()
+    if any(existing.lower() == lowered for existing in sentences):
+        return
+    sentences.append(text)
+
+
+def _finish_sentence(text: str, *, cjk: bool) -> str:
+    stripped = text.strip()
+    if not stripped:
+        return ""
+    if stripped[-1] in ".!?。！？":
+        return stripped
+    return stripped + ("。" if cjk else ".")
+
+
+def _is_qwen_nextscene_workflow(job: dict[str, Any]) -> bool:
+    source_ref = str(job.get("preferred_comfyui_workflow_source_ref") or "").replace("\\", "/").lower()
+    return "qwenedit+nextscene" in source_ref
+
+
+def _qwen_prompt_is_already_composed(job: dict[str, Any], base_prompt: str) -> bool:
+    if not _is_qwen_nextscene_workflow(job):
+        return False
+    if str(job.get("prompt_composition_mode") or "").strip().lower() != "zimage_skill_aligned":
+        return False
+    lowered = base_prompt.lower()
+    return (
+        "next scene" in lowered
+        and ("镜头采用" in base_prompt or "full-frame" in lowered or "no black bars" in lowered)
+    )
+
+
+def _sanitize_qwen_nextscene_base_prompt(base_prompt: str) -> str:
+    text = base_prompt.strip()
+    if not text:
+        return ""
+    text = re.sub(
+        r"(?i)([，, ]*)realistic cinematic short film([。.]*)",
+        "",
+        text,
+    )
+    text = re.sub(r"[，,]\s*[，,]", "，", text)
+    text = re.sub(r"\s{2,}", " ", text)
+    text = re.sub(r"[。！？]\s*[。！？]+", "。", text)
+    return text.strip(" ,，。;；")
+
+
+def _qwen_camera_reinforcement_sentences(camera: str, *, cjk: bool) -> list[str]:
+    lowered = camera.lower()
+    sentences: list[str] = []
+    if "back view" in lowered:
+        if cjk:
+            sentences.append("人物不要正面看向镜头，镜头以后背或侧后方轮廓为主")
+        else:
+            sentences.append("Do not show the subject facing the camera; keep the view on the back or rear three-quarter silhouette")
+    if "wide" in lowered or "establishing" in lowered:
+        if cjk:
+            sentences.append("人物在画面中保持较小比例，环境空间要比人物更突出")
+            sentences.append("不要把画面拍成人像照或大半身构图，人物高度不要超过画面高度的三分之一，海岸线、天空和海面应占据主要画面")
+        else:
+            sentences.append("Keep the subject relatively small in frame so the environment reads more strongly than the portrait")
+            sentences.append("Do not turn the frame into a portrait or medium-close composition; keep the subject under one third of the frame height and let the coastline, sky, and sea dominate the image")
+    if "establishing" in lowered:
+        if cjk:
+            sentences.append("人物不要站在画面正中央成为主视觉，面部不能比环境更抢眼，应先读到海岸线、海面和天光，再读到人物")
+        else:
+            sentences.append("Do not place the subject as the central visual focus; the coastline, sea, and sky should read before the face or body")
+    return sentences
+
+
+def _original_zimage_scene_guardrails(job: dict[str, Any], *, cjk: bool) -> list[str]:
+    route_key = str(job.get("stage05_route_key") or "").strip()
+    camera_text = " ".join(
+        str(job.get(key) or "")
+        for key in ["camera_prompt", "prompt", "style_prompt", "consistency_prompt"]
+    ).lower()
+    override_reason = str(job.get("reference_guidance_override_reason") or "").strip()
+    sentences: list[str] = []
+    if route_key == "realistic_cinematic" and (
+        override_reason.startswith("prompt_only_")
+        or "establishing shot" in camera_text
+        or ("wide shot" in camera_text and any(hint in camera_text for hint in ("shoreline", "beach", "sea", "street", "skyline")))
+    ):
+        if cjk:
+            sentences.append("把它当成故事世界里的真实场景，不要拍成幕后花絮、摄影棚测试照或时尚棚拍，海岸线、天空和周围环境要清晰可见，人物在画面中不要过大")
+        else:
+            sentences.append("Treat this as an in-world story scene, not a behind-the-scenes still, studio setup, or fashion set; keep the coastline, sky, and surrounding environment clearly visible with the subject not oversized in frame")
+    if cjk:
+        sentences.append("不要出现摄影机、镜头、三脚架、监视器、灯架、boom 麦、剧组人员或任何片场设备，也不要有幕后拍摄感")
+    else:
+        sentences.append("Do not show cameras, lenses, tripods, monitors, lighting stands, boom mics, crew members, or any on-set equipment, and avoid any behind-the-scenes feeling")
+    return sentences
+
+
+def _build_original_zimage_prompt(job: dict[str, Any]) -> str:
+    base_prompt = _clean_prompt_sentence(job.get("prompt"))
+    identity_description, continuity = _split_identity_anchor(job.get("identity_anchor_prompt") or job.get("consistency_prompt"))
+    camera = _clean_prompt_fragment(job.get("camera_prompt"))
+    lighting = _clean_prompt_fragment(job.get("lighting_prompt"))
+    style = _clean_prompt_fragment(job.get("style_prompt"))
+    performance = _clean_prompt_fragment(job.get("performance_prompt"))
+    story_anchor_bundle = job.get("story_anchor_bundle") if isinstance(job.get("story_anchor_bundle"), dict) else {}
+    composition_focus = _clean_prompt_sentence(story_anchor_bundle.get("composition_focus"))
+    emotion = _clean_prompt_fragment(story_anchor_bundle.get("emotion"))
+    cjk = _contains_cjk(" ".join([
+        base_prompt,
+        identity_description,
+        continuity,
+        composition_focus,
+        performance,
+        emotion,
+    ]))
+
+    sentences: list[str] = []
+    _append_unique_sentence(sentences, base_prompt)
+
+    if identity_description:
+        if cjk:
+            _append_unique_sentence(sentences, f"画面主角始终是{identity_description}")
+        else:
+            _append_unique_sentence(sentences, f"The protagonist is always {identity_description}")
+
+    if camera and composition_focus and composition_focus not in base_prompt:
+        if cjk:
+            _append_unique_sentence(sentences, f"镜头采用{camera}，{composition_focus}")
+        else:
+            _append_unique_sentence(sentences, f"Use a {camera} with framing that keeps {composition_focus}")
+    elif camera:
+        if cjk:
+            _append_unique_sentence(sentences, f"镜头采用{camera}")
+        else:
+            _append_unique_sentence(sentences, f"Use a {camera}")
+    elif composition_focus and composition_focus not in base_prompt:
+        _append_unique_sentence(sentences, composition_focus)
+
+    if trust_base_prompt:
+        pass
+    elif performance:
+        normalized_performance = performance.replace(" / ", "，" if cjk else ", ")
+        if cjk:
+            _append_unique_sentence(sentences, f"人物状态与动作保持{normalized_performance}")
+        else:
+            _append_unique_sentence(sentences, f"Keep the body language and performance {normalized_performance}")
+    elif emotion:
+        if cjk:
+            _append_unique_sentence(sentences, f"人物情绪保持{emotion}")
+        else:
+            _append_unique_sentence(sentences, f"Keep the emotional tone {emotion}")
+
+    if continuity:
+        _append_unique_sentence(sentences, continuity)
+    if lighting:
+        if cjk:
+            _append_unique_sentence(sentences, f"光线与环境氛围为{lighting}")
+        else:
+            _append_unique_sentence(sentences, f"Lighting and atmosphere: {lighting}")
+    if style:
+        if cjk:
+            _append_unique_sentence(sentences, f"整体画面质感保持{style}")
+        else:
+            _append_unique_sentence(sentences, f"Keep the overall visual treatment {style}")
+
+    for sentence in _original_zimage_scene_guardrails(job, cjk=cjk):
+        _append_unique_sentence(sentences, sentence)
+
+    return " ".join(_finish_sentence(sentence, cjk=cjk) for sentence in sentences if sentence).strip()
+
+
+def _build_reference_guided_qwen_edit_prompt(job: dict[str, Any]) -> str:
+    base_prompt = _clean_prompt_sentence(job.get("prompt"))
+    identity_description, continuity = _split_identity_anchor(job.get("identity_anchor_prompt") or job.get("consistency_prompt"))
+    camera = _clean_prompt_fragment(job.get("camera_prompt"))
+    lighting = _clean_prompt_fragment(job.get("lighting_prompt"))
+    style = _clean_prompt_fragment(job.get("style_prompt"))
+    performance = _clean_prompt_fragment(job.get("performance_prompt"))
+    story_anchor_bundle = job.get("story_anchor_bundle") if isinstance(job.get("story_anchor_bundle"), dict) else {}
+    composition_focus = _clean_prompt_sentence(story_anchor_bundle.get("composition_focus"))
+    emotion = _clean_prompt_fragment(story_anchor_bundle.get("emotion"))
+    cjk = _contains_cjk(" ".join([
+        base_prompt,
+        identity_description,
+        continuity,
+        composition_focus,
+        performance,
+        emotion,
+    ]))
+    trust_base_prompt = _qwen_prompt_is_already_composed(job, base_prompt)
+    if trust_base_prompt:
+        base_prompt = _sanitize_qwen_nextscene_base_prompt(base_prompt)
+
+    sentences: list[str] = []
+    if cjk:
+        _append_unique_sentence(sentences, "严格沿用参考图中的同一位主角，保持同一张脸、同一发型、同一条裙子的版型、领口、腰线和整体轮廓，不要换人，不要换衣服")
+    else:
+        _append_unique_sentence(sentences, "Use the exact same protagonist from the reference image, keeping the same face, hairstyle, and the same dress design, neckline, waistline, and silhouette; do not change the person or outfit")
+
+    _append_unique_sentence(sentences, base_prompt)
+
+    if identity_description:
+        if cjk:
+            _append_unique_sentence(sentences, f"主角始终是{identity_description}")
+        else:
+            _append_unique_sentence(sentences, f"The protagonist remains {identity_description}")
+
+    if trust_base_prompt:
+        for reinforcement in _qwen_camera_reinforcement_sentences(camera, cjk=cjk):
+            _append_unique_sentence(sentences, reinforcement)
+
+    if trust_base_prompt:
+        pass
+    elif camera and composition_focus and composition_focus not in base_prompt:
+        if cjk:
+            _append_unique_sentence(sentences, f"镜头采用{camera}，{composition_focus}")
+        else:
+            _append_unique_sentence(sentences, f"Use a {camera} with framing that keeps {composition_focus}")
+    elif camera:
+        if cjk:
+            _append_unique_sentence(sentences, f"镜头采用{camera}")
+        else:
+            _append_unique_sentence(sentences, f"Use a {camera}")
+    elif composition_focus and composition_focus not in base_prompt:
+        _append_unique_sentence(sentences, composition_focus)
+
+    if trust_base_prompt:
+        pass
+    elif performance:
+        normalized_performance = performance.replace(" / ", "，" if cjk else ", ")
+        if cjk:
+            _append_unique_sentence(sentences, f"人物状态与动作保持{normalized_performance}")
+        else:
+            _append_unique_sentence(sentences, f"Keep the body language and performance {normalized_performance}")
+    elif emotion:
+        if cjk:
+            _append_unique_sentence(sentences, f"人物情绪保持{emotion}")
+        else:
+            _append_unique_sentence(sentences, f"Keep the emotional tone {emotion}")
+
+    if continuity:
+        _append_unique_sentence(sentences, continuity)
+    if lighting and not trust_base_prompt:
+        if cjk:
+            _append_unique_sentence(sentences, f"光线与环境氛围为{lighting}")
+        else:
+            _append_unique_sentence(sentences, f"Lighting and atmosphere: {lighting}")
+    if style and not trust_base_prompt:
+        if cjk:
+            _append_unique_sentence(sentences, f"整体画面质感保持{style}")
+        else:
+            _append_unique_sentence(sentences, f"Keep the overall visual treatment {style}")
+
+    if cjk:
+        _append_unique_sentence(sentences, "只改变场景、机位、动作和情绪推进，人物身份、服装主结构和整体气质必须稳定一致")
+        _append_unique_sentence(sentences, "画面里不要出现多人，不要出现文字、水印、片场设备或任何破坏叙事连续性的元素")
+    else:
+        _append_unique_sentence(sentences, "Only change the scene, camera angle, action, and emotional progression while keeping the character identity, outfit structure, and overall presence stable")
+        _append_unique_sentence(sentences, "Do not introduce extra people, text, watermarks, on-set equipment, or anything that breaks scene continuity")
+
+    return " ".join(_finish_sentence(sentence, cjk=cjk) for sentence in sentences if sentence).strip()
+
+
 def build_provider_prompt(job: dict[str, Any]) -> str:
+    if _is_original_zimage_ui_workflow(job):
+        # The original Amazing Zimage UI workflows expect #57 to contain only
+        # the prompt text. Style switching must happen through #88.
+        return _build_original_zimage_prompt(job)
+    if _is_reference_guided_qwen_edit_workflow(job):
+        return _build_reference_guided_qwen_edit_prompt(job)
+
     sections: list[str] = []
     base_prompt = str(job.get("prompt") or "").strip()
     if base_prompt:
         sections.append(base_prompt)
+    route_intent = str(job.get("comfyui_style_positive_anchor") or "").strip()
+    if route_intent:
+        sections.append(f"Route intent: {route_intent}")
+    include_style_section = True
     for label, key in [
         ("Style", "style_prompt"),
+        ("Lighting", "lighting_prompt"),
         ("Consistency", "consistency_prompt"),
         ("Identity", "identity_anchor_prompt"),
         ("Camera", "camera_prompt"),
     ]:
+        if key == "style_prompt" and not include_style_section:
+            continue
         value = str(job.get(key) or "").strip()
         if value:
             sections.append(f"{label}: {value}")

@@ -132,7 +132,7 @@ def provider_priority_for_manifest(data: dict[str, Any]) -> list[str]:
             priority.append(normalized)
     if priority:
         return priority
-    return ["openai_gpt_image2", "comfyui_txt2img", "manual"]
+    return ["comfyui_txt2img", "manual"]
 
 
 def select_stage05_runner(

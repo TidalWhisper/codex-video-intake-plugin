@@ -3,22 +3,23 @@
 
 Flow:
 1. Build `stage01_prompt_packet.json`
-2. Use `codex exec` to generate `stage01_llm_output.json`
+2. Generate `stage01_llm_output.json` locally from the locked brief while
+   preserving the same audit artifact chain
 3. Render official Stage 01 outputs through `new_script_template.py`
-4. If validation fails, build a repair packet and ask Codex to regenerate
+4. If validation fails, build a repair packet and deterministically regenerate
    a corrected full structured output
 """
 from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import sys
 from pathlib import Path
 from typing import Any
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PLUGIN_ROOT = Path(__file__).resolve().parents[3]
-REPO_ROOT = Path(__file__).resolve().parents[5]
 sys.path.insert(0, str(SCRIPT_DIR))
 sys.path.insert(0, str(PLUGIN_ROOT / "scripts"))
 
@@ -29,9 +30,8 @@ from pipeline_core.codex_flow import (  # noqa: E402
     build_repair_request,
     cleanup_failure_artifacts,
     resolve_codex_bin,
-    run_codex_exec,
-    write_codex_output_json,
 )
+from stage01_local_semantics import build_stage01_llm_output  # noqa: E402
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -46,6 +46,10 @@ def load_json(path: Path) -> dict[str, Any]:
 def write_json(path: Path, data: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def write_local_execution_marker(path: Path, header: str) -> None:
+    path.write_text(header.rstrip() + "\n", encoding="utf-8")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -67,7 +71,6 @@ def main(argv: list[str] | None = None) -> int:
     prompt_packet_path = script_dir / "stage01_prompt_packet.json"
     prompt_packet = build_packet(brief, brief_path)
     write_json(prompt_packet_path, prompt_packet)
-    resolved_codex_bin = resolve_codex_bin(args.codex_bin)
 
     references_dir = SCRIPT_DIR.parent / "references"
     schema_path = references_dir / "stage01_llm_output.schema.json"
@@ -85,14 +88,12 @@ def main(argv: list[str] | None = None) -> int:
         prompt_packet_path=prompt_packet_path,
     )
     generation_request_path.write_text(generation_request, encoding="utf-8")
-    run_codex_exec(
-        generation_request,
-        schema_path,
+    write_local_execution_marker(
         generation_last_message_path,
-        codex_bin=resolved_codex_bin,
-        cwd=REPO_ROOT,
+        "STAGE01_LOCAL_EXECUTION_MODE\n"
+        "Structured output generated locally from the locked brief to avoid recursive Codex CLI deadlocks.",
     )
-    write_codex_output_json(generation_last_message_path, llm_output_path)
+    write_json(llm_output_path, build_stage01_llm_output(brief, prompt_packet=prompt_packet))
 
     total_attempts = max(0, int(args.max_repair_attempts))
     for attempt_index in range(total_attempts + 1):
@@ -127,14 +128,20 @@ def main(argv: list[str] | None = None) -> int:
             current_llm_output_path=llm_output_path,
         )
         repair_request_path.write_text(repair_request, encoding="utf-8")
-        run_codex_exec(
-            repair_request,
-            schema_path,
+        write_local_execution_marker(
             repair_last_message_path,
-            codex_bin=resolved_codex_bin,
-            cwd=REPO_ROOT,
+            "STAGE01_LOCAL_REPAIR_MODE\n"
+            "Validation failed, so Stage 01 was deterministically regenerated from the same locked brief.",
         )
-        write_codex_output_json(repair_last_message_path, llm_output_path)
+        repair_packet = load_json(repair_packet_path)
+        write_json(
+            llm_output_path,
+            build_stage01_llm_output(
+                brief,
+                prompt_packet=prompt_packet,
+                repair_packet=repair_packet,
+            ),
+        )
 
     return 1
 

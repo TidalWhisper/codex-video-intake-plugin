@@ -91,6 +91,22 @@ def _stage01_script_json_path(project_dir: Path) -> Path:
     return project_dir / "01_script" / "script.json"
 
 
+def _stage00_state_json_path(project_dir: Path) -> Path:
+    return project_dir / "00_intake" / "intake_state.json"
+
+
+def _stage00_draft_json_path(project_dir: Path) -> Path:
+    return project_dir / "00_intake" / "project_brief.draft.json"
+
+
+def _stage00_controller_command(project_dir: Path) -> str:
+    state_json = _stage00_state_json_path(project_dir)
+    return (
+        "python skills/video-production-pipeline/scripts/run_stage00_controller.py "
+        f"--state-json {as_posix(state_json)} --project-dir {as_posix(project_dir)}"
+    )
+
+
 def _stage01_runner_command(project_dir: Path) -> str:
     locked_brief = _stage01_locked_brief_path(project_dir)
     script_json = _stage01_script_json_path(project_dir)
@@ -608,16 +624,34 @@ def _creator_steps(
     reference_state: dict[str, Any] | None,
 ) -> list[dict[str, Any]]:
     project_dir = Path(_text(data.get("project_dir")) or ".")
+    stage00_state = load_json_file_if_exists(_stage00_state_json_path(project_dir)) or {}
+    stage00_status = _text(stage00_state.get("status"))
+    stage00_draft_exists = _stage00_draft_json_path(project_dir).exists()
+    stage00_command = ""
+    stage00_result = "项目 brief 仍未锁定。"
+    stage00_blocker = "先锁定立项 brief，系统才有可信输入。"
+    stage00_next_action = "锁定项目 brief。"
+    stage00_step_status = "current"
+    if stage00_status == "draft_ready" or stage00_draft_exists:
+        stage00_command = _stage00_controller_command(project_dir)
+        stage00_result = "Stage 00 intake 已齐，brief 草稿可继续生成或确认。"
+        stage00_next_action = "继续 Stage 00 官方确认闭环：生成 brief 草稿并完成 A/B/C 确认。"
+        stage00_step_status = "generated"
+    elif stage00_state:
+        stage00_command = _stage00_controller_command(project_dir)
+        stage00_result = "Stage 00 intake 正在进行中。"
+        stage00_next_action = "继续回答当前立项问题。"
     stage01_command = _stage01_runner_command(project_dir) if _bool(data.get("brief_locked")) else ""
     script_generated = _stage01_generated(data, project_dir)
     early = [
         {
             "step": "立项",
-            "status": "confirmed" if _bool(data.get("brief_locked")) else "current",
-            "current_result": "项目 brief 已锁定。" if _bool(data.get("brief_locked")) else "项目 brief 仍未锁定。",
-            "current_blocker": "" if _bool(data.get("brief_locked")) else "先锁定立项 brief，系统才有可信输入。",
-            "next_action": "锁定项目 brief。" if not _bool(data.get("brief_locked")) else "锁 brief 后，自动进入 Stage 01 剧本生成。",
+            "status": "confirmed" if _bool(data.get("brief_locked")) else stage00_step_status,
+            "current_result": "项目 brief 已锁定。" if _bool(data.get("brief_locked")) else stage00_result,
+            "current_blocker": "" if _bool(data.get("brief_locked")) else stage00_blocker,
+            "next_action": "锁 brief 后，自动进入 Stage 01 剧本生成。" if _bool(data.get("brief_locked")) else stage00_next_action,
             "risk_hint": "",
+            "command": "" if _bool(data.get("brief_locked")) else stage00_command,
         },
         {
             "step": "剧本",
@@ -671,7 +705,16 @@ def _creator_steps(
         "next_action": stage05.get("next_action") if stage05 else "开始关键帧生成。",
         "risk_hint": stage05.get("risk_hint") if stage05 else "",
     }
-    if stage05 is None and reference_state and not reference_state.get("safe_to_auto_generate"):
+    if stage05 is None and reference_state and reference_state.get("safe_to_auto_generate"):
+        keyframe_step = {
+            "step": "关键帧",
+            "status": "current" if storyboard_ready else "pending",
+            "current_result": reference_state.get("current_result") or "角色参考图已就绪，关键帧阶段可以按正常路径推进。",
+            "current_blocker": "",
+            "next_action": reference_state.get("next_action") or "确认当前关键帧提示词后，进入 Stage 05 自动生图。",
+            "risk_hint": reference_state.get("risk_hint") or "",
+        }
+    elif stage05 is None and reference_state and not reference_state.get("safe_to_auto_generate"):
         keyframe_step = {
             "step": "关键帧",
             "status": "current" if storyboard_ready else "pending",
@@ -786,6 +829,13 @@ def _recommended_entry(
 ) -> dict[str, Any]:
     current_step_name = _text(current_step.get("step"))
     current_step_command = _text(current_step.get("command"))
+    if current_step_name == "立项" and current_step_command:
+        return {
+            "label": "继续 Stage 00 立项流程",
+            "command": current_step_command,
+            "kind": "command",
+            "description": "官方入口现在统一走 run_stage00_controller.py，内部承接提问、汇总、A/B/C 确认和自动续到 Stage 01。",
+        }
     if current_step_name == "剧本" and current_step_command:
         return {
             "label": "运行 Stage 01 自动剧本生成",
@@ -802,7 +852,7 @@ def _recommended_entry(
             "kind": "file",
             "description": "默认从这里看图、审图、通过或重跑，不必先读 manifest 和脚本名。",
         }
-    if reference_state and not reference_state.get("safe_to_auto_generate"):
+    if reference_state and current_step_name == "关键帧":
         actions = reference_state.get("actions") if isinstance(reference_state.get("actions"), list) else []
         if actions:
             return actions[0]

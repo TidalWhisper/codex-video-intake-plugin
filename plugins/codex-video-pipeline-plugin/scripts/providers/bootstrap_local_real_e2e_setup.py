@@ -85,7 +85,7 @@ def bootstrap_local_real_e2e_setup(
     providers_data["comfyui"]["input_dir"] = str(comfy_input_dir).replace("\\", "/") if comfy_input_dir.exists() else ""
     providers_data["comfyui"]["output_dir"] = str(comfy_output_dir).replace("\\", "/") if comfy_output_dir.exists() else ""
     stage05 = providers_data.setdefault("stage05_keyframe_images", {})
-    stage05["provider_priority"] = ["openai_gpt_image2", "comfyui_txt2img"] if openai_key_present else ["comfyui_txt2img", "openai_gpt_image2"]
+    stage05["provider_priority"] = ["comfyui_txt2img"]
 
     if write:
         write_yaml(providers_yaml, providers_data)

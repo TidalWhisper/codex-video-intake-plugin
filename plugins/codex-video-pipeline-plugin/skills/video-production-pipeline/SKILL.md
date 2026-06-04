@@ -32,6 +32,17 @@ $video-qa-delivery
 
 Those stage skills are internal/recovery skills. They exist for debugging, reruns, and manual repair when a stage fails.
 
+For Stage 00 specifically, the official runtime chain is now:
+
+```text
+$video-production-pipeline
+-> continue_pipeline.py
+-> run_stage00_controller.py
+-> run_stage00_intake_turn.py / run_stage00_brief_from_intake.py / run_stage00_lock_and_continue.py
+```
+
+Do not describe old Python-first paths as the normal Stage 00 route.
+
 ## Normal pipeline
 
 The normal flow is:
@@ -173,6 +184,24 @@ If there are multiple possible latest projects and the target is ambiguous, ask 
 
 Follow the same one-question wizard defined by `$video-project-intake`.
 
+In the official pipeline, the single Stage 00 entry is:
+
+```bash
+python skills/video-production-pipeline/scripts/run_stage00_controller.py
+```
+
+Before a project folder exists, this controller reads and writes:
+
+```text
+.video_project/intake/intake_state.json
+```
+
+Once Stage 00-B materializes a real project, the controller continues against:
+
+```text
+video_projects/<project_id>/00_intake/intake_state.json
+```
+
 Before asking any Stage 00 question, reread these two sources and follow them exactly:
 
 - `skills/video-project-intake/references/first_layer_options.md`
@@ -198,11 +227,13 @@ Do not show future questions unless the user asks for the full list.
 
 After all 9 answers are collected:
 
-1. Create the independent project folder:
+1. Materialize the independent project folder and move Stage 00 into the project-owned intake directory:
 
 ```bash
-python skills/video-project-intake/scripts/create_project_folder.py --root video_projects --title "<short idea>"
+python skills/video-production-pipeline/scripts/run_stage00_brief_from_intake.py --state-json .video_project/intake/intake_state.json --project-root video_projects
 ```
+
+This wrapper internally creates `video_projects/<project_id>/` and writes the project-owned intake state.
 
 2. Write:
 
@@ -228,12 +259,19 @@ C. 重新填写
 ```
 
 The confirmation menu must keep these letters and meanings stable.
-
-5. If user confirms A, lock the brief:
+This `A / B / C` loop is officially owned by:
 
 ```bash
-python skills/video-project-intake/scripts/lock_project_brief.py <project_dir>/00_intake/project_brief.draft.json <project_dir>/00_intake/project_brief.locked.json
+python skills/video-production-pipeline/scripts/run_stage00_controller.py --state-json <intake_state.json>
 ```
+
+5. If user confirms A, lock the brief through the pipeline-owned wrapper:
+
+```bash
+python skills/video-production-pipeline/scripts/run_stage00_lock_and_continue.py <project_dir>
+```
+
+Do not present raw `lock_project_brief.py` as the normal Stage 00 confirmation path.
 
 6. Update manifest to:
 
@@ -526,7 +564,6 @@ Create:
 <project_dir>/05_images/image_generation_plan.md
 <project_dir>/05_images/image_generation_jobs.json
 <project_dir>/05_images/keyframe_image_manifest.json
-<project_dir>/05_images/openai_image_requests.json
 <project_dir>/05_images/comfyui_image_requests.json
 <project_dir>/05_images/image_review.md
 <project_dir>/05_images/keyframes/*.png
@@ -536,7 +573,7 @@ The image package must:
 
 1. Create start and end keyframe image jobs for every storyboard shot represented in `keyframe_prompts.json`.
 2. Preserve aspect ratio, resolution, style, camera, and character consistency prompts.
-3. Prefer OpenAI image generation when available, then local ComfyUI, then manual placement.
+3. Prefer the local ComfyUI Zimage workflows, then manual placement.
 4. Record file evidence in `keyframe_image_manifest.json` for every required image.
 5. Never claim an image is generated unless its file exists and has non-zero size.
 

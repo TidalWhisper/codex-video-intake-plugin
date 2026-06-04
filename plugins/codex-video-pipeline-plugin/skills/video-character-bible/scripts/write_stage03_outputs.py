@@ -90,19 +90,30 @@ def write_stage03_companions(
 ) -> None:
     characters = template.get("characters") if isinstance(template.get("characters"), list) else []
     bible_lines = ["# Stage 03 Character Bible", ""]
+    role_labels = {
+        "main": "主角",
+        "supporting": "配角",
+    }
     for character in characters:
         if not isinstance(character, dict):
             continue
         appearance = character.get("appearance") if isinstance(character.get("appearance"), dict) else {}
+        performance = character.get("performance_profile") if isinstance(character.get("performance_profile"), dict) else {}
+        role_label = role_labels.get(str(character.get("role") or "").strip(), str(character.get("role") or "角色"))
+        age = str(character.get("age") or "").strip()
+        positioning = f"{role_label}，{age}" if age else role_label
         bible_lines.extend([
             f"## {character.get('name')} ({character.get('character_id')})",
-            f"- 角色：{character.get('role')}",
-            f"- 年龄：{character.get('age')}",
-            f"- 性别呈现：{character.get('gender_presentation')}",
-            f"- 外貌：脸 {appearance.get('face')} / 头发 {appearance.get('hair')} / 服装 {appearance.get('clothing')}",
-            f"- 个性：{character.get('personality')}",
-            f"- 情绪弧线：{' / '.join(character.get('emotional_arc') or [])}",
-            f"- 声音：{(character.get('voice_profile') or {}).get('suggested_voice')}",
+            f"- 定位：{positioning}",
+            f"- 核心气质：{character.get('personality')}",
+            (
+                "- 外形锚点："
+                f"{appearance.get('face')} / {appearance.get('hair')} / {appearance.get('clothing')} / {appearance.get('accessories')}"
+            ),
+            f"- 表演基线：{performance.get('baseline_expression')}",
+            f"- 情绪推进：{' / '.join(character.get('emotional_arc') or [])}",
+            f"- 连续性锚点：{performance.get('continuity_anchor')}",
+            f"- 声音建议：{(character.get('voice_profile') or {}).get('suggested_voice')}",
             "",
         ])
     missing_paths = reference_status.get("missing_paths") if isinstance(reference_status.get("missing_paths"), list) else []
@@ -146,18 +157,23 @@ def build_character_bible_payload(
         performance_profile = character.get("performance_profile") if isinstance(character.get("performance_profile"), dict) else {}
         appearance = character.get("appearance") if isinstance(character.get("appearance"), dict) else {}
         accessories = str(appearance.get("accessories") or "").strip()
-        continuity_parts = [str(character.get("name") or "").strip(), str(appearance.get("clothing") or "").strip(), accessories]
+        continuity_parts = [
+            str(character.get("name") or "").strip(),
+            str(appearance.get("hair") or "").strip(),
+            str(appearance.get("clothing") or "").strip(),
+            accessories,
+        ]
         continuity_anchor = " / ".join(part for part in continuity_parts if part)
         if "baseline_expression" not in performance_profile:
             emotional_arc = character.get("emotional_arc") if isinstance(character.get("emotional_arc"), list) else []
             performance_profile["baseline_expression"] = str((emotional_arc or ["平静"])[0] or "平静")
-        performance_profile.setdefault("movement_style", "slow and restrained")
+        performance_profile.setdefault("movement_style", "慢、轻、克制，以真实呼吸带动作")
         gesture_rules = performance_profile.get("gesture_rules") if isinstance(performance_profile.get("gesture_rules"), list) else []
         if not gesture_rules:
             performance_profile["gesture_rules"] = [
-                "动作幅度偏小",
-                "表情变化自然克制",
-                "跨镜头保持身体姿态稳定",
+                "动作幅度偏小，让情绪通过呼吸和眼神出来",
+                "表情变化自然克制，不靠夸张五官表演",
+                "跨镜头保持身体姿态和停顿节奏稳定",
             ]
         performance_profile.setdefault("dialogue_delivery", "自然、克制、可停顿")
         performance_profile.setdefault("continuity_anchor", continuity_anchor or str(character.get("name") or "角色连续性"))

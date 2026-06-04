@@ -57,20 +57,13 @@ def slugify(text: str, max_len: int = 24) -> str:
     return "project"
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--root", default="video_projects", help="Root folder for all generated video projects")
-    parser.add_argument("--title", default="", help="Optional title or idea used to derive a short slug")
-    parser.add_argument("--project-id", default="", help="Optional explicit project id")
-    args = parser.parse_args()
-
+def create_project(root: Path, *, title: str = "", project_id: str = "") -> Path:
     now = datetime.now()
-    project_id = args.project_id.strip()
-    if not project_id:
-        project_id = f"video_{now.strftime('%Y%m%d_%H%M%S')}_{slugify(args.title)}"
+    resolved_project_id = project_id.strip()
+    if not resolved_project_id:
+        resolved_project_id = f"video_{now.strftime('%Y%m%d_%H%M%S')}_{slugify(title)}"
 
-    root = Path(args.root)
-    project_dir = root / project_id
+    project_dir = root / resolved_project_id
     project_dir.mkdir(parents=True, exist_ok=True)
 
     for rel in REQUIRED_DIRS:
@@ -82,8 +75,8 @@ def main() -> int:
 
     manifest = {
         "schema_version": "0.3.0",
-        "project_id": project_id,
-        "project_title": args.title.strip() or project_id,
+        "project_id": resolved_project_id,
+        "project_title": title.strip() or resolved_project_id,
         "project_dir": str(project_dir).replace("\\", "/"),
         "created_at": datetime.now(timezone.utc).isoformat(),
         "current_stage": "STAGE_00_INTAKE",
@@ -100,6 +93,19 @@ def main() -> int:
     }
     manifest_path = project_dir / "project_manifest.json"
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    return project_dir
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--root", default="video_projects", help="Root folder for all generated video projects")
+    parser.add_argument("--title", default="", help="Optional title or idea used to derive a short slug")
+    parser.add_argument("--project-id", default="", help="Optional explicit project id")
+    args = parser.parse_args()
+
+    root = Path(args.root)
+    project_dir = create_project(root, title=args.title, project_id=args.project_id)
+    manifest_path = project_dir / "project_manifest.json"
 
     print(str(project_dir).replace("\\", "/"))
     print(f"MANIFEST: {manifest_path}".replace("\\", "/"))
