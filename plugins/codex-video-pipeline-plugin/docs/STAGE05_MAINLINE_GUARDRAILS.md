@@ -1,138 +1,47 @@
 # Stage 05 Mainline Guardrails
 
-> 这份文件用于防止 Codex 在 Stage 05 执行过程中偏离用户主线任务。它是硬规则，不是建议。
+> 本文件只保留当前 Stage05 已锁定主线的执行约束。若与 `STAGE05_REFERENCE_GUIDED_REFACTOR_PLAN_20260604.md` 冲突，以后者为准。
 
-## 1. 适用范围
+## 1. 当前唯一主线
 
-本文件适用于：
+Stage 05 现在只允许按两段式主线执行：
 
-- `Stage 05` 工作流/模型选型
-- `Stage 05` 路由切换
-- `Stage 05` 真实生图 smoke
-- `Stage 05` 语义验收
+1. `Stage05-A`：根据 `Stage03` 人物语义选择一条 Zimage workflow，生成主角色参考图并回填 `Stage03`
+2. `Stage05-B`：固定使用 `AI漫剧-16宫格分镜图生成-QwenEdit+NextScene（自动分镜）-V1版.json`，把主角色参考图和 `Stage04` 分镜 prompt 组装成 reference-guided 单镜头任务
 
-只要任务涉及上面任一项，就必须先遵守这里的优先级、冻结项和扩边界限制。
+## 2. 禁止项
 
-## 2. 主线优先级
+未经用户明确要求，禁止：
 
-当前用户高频主线固定为：
+- 恢复任何 Stage 05 bridge workflow、兼容桥、过渡双轨或旧 fallback
+- 把 `Stage05-B` 改回 prompt-only 路线
+- 把 Qwen NextScene 当成批量 16 宫格分镜器使用
+- 绕开 `Stage03 / Stage04` 语义，直接临时拼一套脱离上下文的新 prompt
+- 让脚本自行决定“跳过 Stage05-A 直接进入 Stage05-B”
 
-1. `P0`: `realistic_cinematic`
-2. `P1`: `anime_jp`
-3. `P2`: `guofeng_ink`
+## 3. Stage05-A 约束
 
-执行规则：
+- 只允许在三套锁定的 Zimage workflow 中选：
+  - `amazing-z-photo_SAFETENSORS.json`
+  - `amazing-z-image-a_SAFETENSORS.json`
+  - `amazing-z-comics_SAFETENSORS.json`
+- 路由选择必须服从 `Stage00 / Stage05` 已确认的风格路线
+- 最终参考图必须回填到 `03_characters/reference_images/CHAR_001_primary.png`
 
-- 未经用户明确批准，不允许把其他路线提升到与 `P0/P1/P2` 同等优先级。
-- 如果用户没有显式指定当前处理哪条路线，默认只允许继续推进 `P0 = realistic_cinematic`。
-- 如果用户已经明确指定当前路线或当前镜头，只允许处理该路线/镜头，不允许自行扩展。
+## 4. Stage05-B 约束
 
-## 3. 冻结项
+- 固定 workflow mapping：`stage05_realistic_cinematic_qwen_edit_nextscene_local`
+- 固定控制模式：`reference_guided`
+- 固定主参考图：`03_characters/reference_images/CHAR_001_primary.png`
+- 固定输入语义来源：`04_keyframes/keyframe_prompts.json`
+- 固定交付目标：为 `Stage06` 提供人物一致性更强的分镜图，而不是普通 prompt-only 单帧图
 
-当前冻结项：
+## 5. 交付证据
 
-- `game_cg`
+声称 Stage 05 完成前，至少要有这些证据：
 
-冻结规则：
-
-- 未经用户明确点名，不允许主动推进 `game_cg` 的工作流改造、模型切换、A/B 对比、smoke 验证或语义复核。
-- 其他不在 `P0/P1/P2` 内的 Stage 05 路线，默认视为非主线；未经批准，不允许主动投入主工作量。
-
-## 4. 禁止扩边界
-
-未经用户明确批准，禁止：
-
-- 从当前主线路线扩展到其他风格路线
-- 从当前镜头扩展到其他 shot 集合
-- 新增横向风格矩阵、scene pack、路线 A/B 批量试验
-- 因为某条支线失败显眼，就把注意力转移到支线
-- 把“顺手一起做”当作扩边界理由
-
-允许的例外只有两种：
-
-1. 用户明确批准
-2. 为解决当前主线 blocker 而必须做的最小验证
-
-即使是例外，也必须在汇报里明确写出：
-
-- 为什么这是当前主线 blocker
-- 为什么不能在主线内直接继续
-- 做完后如何立即回到主线
-
-## 5. 社区工作流规则
-
-当前主线中的 Stage 05 改造必须遵守：
-
-1. 先找开源社区成熟 workflow / model stack
-2. 再看官方模板
-3. 最后才允许仓库自写 bridge
-
-额外限制：
-
-- 不允许把“社区原版跑不起来”自动降级成“随便找个可跑替代品”
-- 如果本机缺模型、缺节点、缺配套编码器或缺 VAE，必须先写清 blocker
-- 不允许把替代路线冒充为“已经复刻社区原版”
-
-## 6. 主线验收闸门
-
-默认闸门顺序：
-
-1. 先完成 `P0`
-2. `P0` 未通过前，不允许主动切到 `P1`
-3. `P1` 未通过前，不允许主动切到 `P2`
-
-“通过”不是指出图成功，而是至少同时满足：
-
-- 符合文字提示词描述
-- 主体数量正确
-- 镜头意图成立
-- 没有明显多手多脚/错误道具/错误场景污染
-
-如果只是“能跑”“能出图”“比上一张好一点”，都不算通过。
-
-## 7. 当前默认收缩策略
-
-当用户没有另行改口时，默认收缩策略如下：
-
-- 当前主线只处理一个路线
-- 当前主线只处理用户明确指定的镜头
-- 如果镜头也未指定，默认只继续当前最关键失败镜头
-
-禁止在同一轮里同时做：
-
-- 主线修复
-- 非主线 smoke
-- 非主线文档扩展
-- 非主线模型探索
-
-## 8. 汇报格式约束
-
-每次 Stage 05 相关汇报，必须显式写出：
-
-1. 当前主线路线
-2. 当前处理镜头
-3. 当前验收项
-4. 本轮是否触碰非主线
-5. 如果触碰了，用户是否明确批准
-
-如果做不到以上 5 项，就不能声称自己仍在主线内执行。
-
-## 9. 违反后的纠偏动作
-
-一旦发现已经偏离主线，必须立即执行：
-
-1. 停止继续扩边界
-2. 明确承认偏离点
-3. 回到最近一次用户确认的主线路线和镜头
-4. 把偏离产生的内容降级为“旁证”或“冻结结果”，不再继续扩展
-
-## 10. 优先级变更规则
-
-只有用户明确表达以下任一意图，才允许变更本文件的优先级：
-
-- 明确切换主线路线
-- 明确解冻某个冻结项
-- 明确要求扩大镜头范围
-- 明确要求恢复横向风格矩阵验证
-
-除此之外，Codex 不得自行解释为“用户大概也想顺便做”。
+- `05_images/keyframe_image_manifest.json`
+- `05_images/comfyui_image_requests.json`
+- `05_images/keyframes/*.png`
+- `validate_keyframe_image_manifest.py --mode final` 通过
+- `Stage06` 消费契约明确来自 `reference_guided_storyboard`

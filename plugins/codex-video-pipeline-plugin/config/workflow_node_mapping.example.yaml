@@ -56,117 +56,6 @@ workflows:
       output_image:
         node_id: REPLACE_ME
         input_name: images
-  stage05_realistic_cinematic_qwen2512_prompt_only:
-    file: workflows/comfyui/txt2img_keyframe_realistic.workflow_api.json
-    nodes:
-      positive_prompt:
-        node_id: REPLACE_ME
-        input_name: text
-      negative_prompt:
-        node_id: REPLACE_ME
-        input_name: text
-      seed:
-        node_id: REPLACE_ME
-        input_name: seed
-      steps:
-        node_id: REPLACE_ME
-        input_name: steps
-      cfg:
-        node_id: REPLACE_ME
-        input_name: cfg
-      sampler_name:
-        node_id: REPLACE_ME
-        input_name: sampler_name
-      scheduler:
-        node_id: REPLACE_ME
-        input_name: scheduler
-      denoise:
-        node_id: REPLACE_ME
-        input_name: denoise
-      width:
-        node_id: REPLACE_ME
-        input_name: width
-      height:
-        node_id: REPLACE_ME
-        input_name: height
-      output_image:
-        node_id: REPLACE_ME
-        input_name: images
-  txt2img_keyframe_realistic_zimage_photo_bridge:
-    file: workflows/comfyui/txt2img_keyframe_realistic_zimage_photo_bridge.workflow_api.json
-    nodes:
-      positive_prompt:
-        node_id: '10'
-        input_name: text
-      negative_prompt:
-        node_id: '13'
-        input_name: text
-      seed:
-        node_id: '30'
-        input_name: seed
-      steps:
-        node_id: '30'
-        input_name: steps
-      cfg:
-        node_id: '30'
-        input_name: cfg
-      sampler_name:
-        node_id: '30'
-        input_name: sampler_name
-      scheduler:
-        node_id: '30'
-        input_name: scheduler
-      denoise:
-        node_id: '30'
-        input_name: denoise
-      width:
-        node_id: '20'
-        input_name: width
-      height:
-        node_id: '20'
-        input_name: height
-  txt2img_keyframe_stylized_zimage_image_b_bridge:
-    file: workflows/comfyui/txt2img_keyframe_stylized_zimage_image_b_bridge.workflow_api.json
-    nodes:
-      positive_prompt:
-        node_id: '10'
-        input_name: text
-      style_anchor:
-        node_id: '11'
-        input_name: text
-      negative_prompt:
-        node_id: '13'
-        input_name: text
-      negative_style_anchor:
-        node_id: '14'
-        input_name: text
-      seed:
-        node_id: '30'
-        input_name: seed
-      steps:
-        node_id: '30'
-        input_name: steps
-      cfg:
-        node_id: '30'
-        input_name: cfg
-      sampler_name:
-        node_id: '30'
-        input_name: sampler_name
-      scheduler:
-        node_id: '30'
-        input_name: scheduler
-      denoise:
-        node_id: '30'
-        input_name: denoise
-      width:
-        node_id: '20'
-        input_name: width
-      height:
-        node_id: '20'
-        input_name: height
-      output_image:
-        node_id: '60'
-        input_name: images
   txt2img_keyframe_anime:
     file: workflows/comfyui/txt2img_keyframe_anime.workflow_api.json
     nodes:
@@ -412,166 +301,6 @@ workflows:
       output_image:
         node_id: '9'
         input_name: images
-  stage05_realistic_cinematic:
-    file: workflows/comfyui/txt2img_keyframe_realistic_zimage_photo_bridge.workflow_api.json
-    nodes:
-      positive_prompt:
-        node_id: '10'
-        input_name: text
-      negative_prompt:
-        node_id: '13'
-        input_name: text
-      seed:
-        node_id: '30'
-        input_name: seed
-      steps:
-        node_id: '30'
-        input_name: steps
-      cfg:
-        node_id: '30'
-        input_name: cfg
-      sampler_name:
-        node_id: '30'
-        input_name: sampler_name
-      scheduler:
-        node_id: '30'
-        input_name: scheduler
-      denoise:
-        node_id: '30'
-        input_name: denoise
-      width:
-        node_id: '20'
-        input_name: width
-      height:
-        node_id: '20'
-        input_name: height
-      output_image:
-        node_id: '60'
-        input_name: images
-  stage05_realistic_cinematic_qwen_edit_reference:
-    file: workflows/comfyui/txt2img_keyframe_shortdrama_qwen_edit_reference.workflow_api.json
-    nodes:
-      positive_prompt:
-        node_id: '22'
-        input_name: prompt
-      negative_prompt:
-        node_id: '23'
-        input_name: prompt
-      reference_image_path:
-        node_id: '10'
-        input_name: image
-      seed:
-        node_id: '30'
-        input_name: seed
-      steps:
-        node_id: '30'
-        input_name: steps
-      cfg:
-        node_id: '30'
-        input_name: cfg
-      sampler_name:
-        node_id: '30'
-        input_name: sampler_name
-      scheduler:
-        node_id: '30'
-        input_name: scheduler
-      denoise:
-        node_id: '30'
-        input_name: denoise
-      width:
-        node_id: '20'
-        input_name: width
-      height:
-        node_id: '20'
-        input_name: height
-      output_image:
-        node_id: '50'
-        input_name: images
-    capabilities:
-      supports_reference_images: true
-      supported_control_modes:
-        - prompt_only
-        - reference_guided
-  stage05_shortdrama_realistic:
-    file: workflows/comfyui/txt2img_keyframe_realistic.workflow_api.json
-    nodes:
-      positive_prompt:
-        node_id: '10'
-        input_name: text
-      negative_prompt:
-        node_id: '13'
-        input_name: text
-      seed:
-        node_id: '30'
-        input_name: seed
-      steps:
-        node_id: '30'
-        input_name: steps
-      cfg:
-        node_id: '30'
-        input_name: cfg
-      sampler_name:
-        node_id: '30'
-        input_name: sampler_name
-      scheduler:
-        node_id: '30'
-        input_name: scheduler
-      denoise:
-        node_id: '30'
-        input_name: denoise
-      width:
-        node_id: '20'
-        input_name: width
-      height:
-        node_id: '20'
-        input_name: height
-      output_image:
-        node_id: '9'
-        input_name: images
-  txt2img_keyframe_shortdrama_qwen_edit_reference:
-    file: workflows/comfyui/txt2img_keyframe_shortdrama_qwen_edit_reference.workflow_api.json
-    nodes:
-      positive_prompt:
-        node_id: '22'
-        input_name: prompt
-      negative_prompt:
-        node_id: '23'
-        input_name: prompt
-      reference_image_path:
-        node_id: '10'
-        input_name: image
-      seed:
-        node_id: '30'
-        input_name: seed
-      steps:
-        node_id: '30'
-        input_name: steps
-      cfg:
-        node_id: '30'
-        input_name: cfg
-      sampler_name:
-        node_id: '30'
-        input_name: sampler_name
-      scheduler:
-        node_id: '30'
-        input_name: scheduler
-      denoise:
-        node_id: '30'
-        input_name: denoise
-      width:
-        node_id: '20'
-        input_name: width
-      height:
-        node_id: '20'
-        input_name: height
-      output_image:
-        node_id: '50'
-        input_name: images
-    capabilities:
-      supports_reference_images: true
-      supported_control_modes:
-        - prompt_only
-        - reference_guided
   txt2img_keyframe_shortdrama_qwen_edit_dual_reference:
     file: workflows/comfyui/txt2img_keyframe_shortdrama_qwen_edit_dual_reference.workflow_api.json
     nodes:
@@ -617,8 +346,8 @@ workflows:
     capabilities:
       supports_reference_images: true
       supported_control_modes:
-        - prompt_only
-        - reference_guided
+      - prompt_only
+      - reference_guided
   stage05_realistic_cinematic_qwen_edit_dual_reference:
     file: workflows/comfyui/txt2img_keyframe_shortdrama_qwen_edit_dual_reference.workflow_api.json
     nodes:
@@ -664,135 +393,8 @@ workflows:
     capabilities:
       supports_reference_images: true
       supported_control_modes:
-        - prompt_only
-        - reference_guided
-  stage05_shortdrama_realistic_qwen_edit_reference:
-    file: workflows/comfyui/txt2img_keyframe_shortdrama_qwen_edit_reference.workflow_api.json
-    nodes:
-      positive_prompt:
-        node_id: '22'
-        input_name: prompt
-      negative_prompt:
-        node_id: '23'
-        input_name: prompt
-      reference_image_path:
-        node_id: '10'
-        input_name: image
-      seed:
-        node_id: '30'
-        input_name: seed
-      steps:
-        node_id: '30'
-        input_name: steps
-      cfg:
-        node_id: '30'
-        input_name: cfg
-      sampler_name:
-        node_id: '30'
-        input_name: sampler_name
-      scheduler:
-        node_id: '30'
-        input_name: scheduler
-      denoise:
-        node_id: '30'
-        input_name: denoise
-      width:
-        node_id: '20'
-        input_name: width
-      height:
-        node_id: '20'
-        input_name: height
-      output_image:
-        node_id: '50'
-        input_name: images
-    capabilities:
-      supports_reference_images: true
-      supported_control_modes:
-        - prompt_only
-        - reference_guided
-  stage05_shortdrama_realistic_qwen_edit_dual_reference:
-    file: workflows/comfyui/txt2img_keyframe_shortdrama_qwen_edit_dual_reference.workflow_api.json
-    nodes:
-      positive_prompt:
-        node_id: '22'
-        input_name: prompt
-      negative_prompt:
-        node_id: '23'
-        input_name: prompt
-      reference_image_path:
-        node_id: '10'
-        input_name: image
-      reference_image_path_2:
-        node_id: '11'
-        input_name: image
-      seed:
-        node_id: '30'
-        input_name: seed
-      steps:
-        node_id: '30'
-        input_name: steps
-      cfg:
-        node_id: '30'
-        input_name: cfg
-      sampler_name:
-        node_id: '30'
-        input_name: sampler_name
-      scheduler:
-        node_id: '30'
-        input_name: scheduler
-      denoise:
-        node_id: '30'
-        input_name: denoise
-      width:
-        node_id: '20'
-        input_name: width
-      height:
-        node_id: '20'
-        input_name: height
-      output_image:
-        node_id: '50'
-        input_name: images
-    capabilities:
-      supports_reference_images: true
-      supported_control_modes:
-        - prompt_only
-        - reference_guided
-  stage05_realistic_cinematic_zimage_photo_bridge:
-    file: workflows/comfyui/txt2img_keyframe_realistic_zimage_photo_bridge.workflow_api.json
-    nodes:
-      positive_prompt:
-        node_id: '10'
-        input_name: text
-      negative_prompt:
-        node_id: '13'
-        input_name: text
-      seed:
-        node_id: '30'
-        input_name: seed
-      steps:
-        node_id: '30'
-        input_name: steps
-      cfg:
-        node_id: '30'
-        input_name: cfg
-      sampler_name:
-        node_id: '30'
-        input_name: sampler_name
-      scheduler:
-        node_id: '30'
-        input_name: scheduler
-      denoise:
-        node_id: '30'
-        input_name: denoise
-      width:
-        node_id: '20'
-        input_name: width
-      height:
-        node_id: '20'
-        input_name: height
-      output_image:
-        node_id: '60'
-        input_name: images
+      - prompt_only
+      - reference_guided
   stage05_anime_jp:
     file: F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-image-a_SAFETENSORS.json
     workflow_format: ui_graph
@@ -860,42 +462,6 @@ workflows:
         node_id: '9'
         control: widget_value
         widget_index: 0
-  stage05_anime_cn_newguofeng:
-    file: workflows/comfyui/txt2img_keyframe_anime_cn_newguofeng.workflow_api.json
-    nodes:
-      positive_prompt:
-        node_id: '6'
-        input_name: text
-      negative_prompt:
-        node_id: '7'
-        input_name: text
-      seed:
-        node_id: '3'
-        input_name: seed
-      steps:
-        node_id: '3'
-        input_name: steps
-      cfg:
-        node_id: '3'
-        input_name: cfg
-      sampler_name:
-        node_id: '3'
-        input_name: sampler_name
-      scheduler:
-        node_id: '3'
-        input_name: scheduler
-      denoise:
-        node_id: '3'
-        input_name: denoise
-      width:
-        node_id: '9'
-        input_name: width
-      height:
-        node_id: '9'
-        input_name: height
-      output_image:
-        node_id: '11'
-        input_name: images
   stage05_western_cartoon:
     file: F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-comics_SAFETENSORS.json
     workflow_format: ui_graph
@@ -963,87 +529,6 @@ workflows:
         node_id: '9'
         control: widget_value
         widget_index: 0
-  stage05_guofeng_ink:
-    file: workflows/comfyui/txt2img_keyframe_guofeng_ink.workflow_api.json
-    nodes:
-      positive_prompt:
-        node_id: '10'
-        input_name: text
-      style_anchor:
-        node_id: '11'
-        input_name: text
-      negative_prompt:
-        node_id: '13'
-        input_name: text
-      negative_style_anchor:
-        node_id: '14'
-        input_name: text
-      seed:
-        node_id: '30'
-        input_name: seed
-      steps:
-        node_id: '30'
-        input_name: steps
-      cfg:
-        node_id: '30'
-        input_name: cfg
-      sampler_name:
-        node_id: '30'
-        input_name: sampler_name
-      scheduler:
-        node_id: '30'
-        input_name: scheduler
-      denoise:
-        node_id: '30'
-        input_name: denoise
-      width:
-        node_id: '20'
-        input_name: width
-      height:
-        node_id: '20'
-        input_name: height
-      output_image:
-        node_id: '60'
-        input_name: images
-  stage05_stylized_concept:
-    file: workflows/comfyui/txt2img_keyframe_stylized_zimage_image_b_bridge.workflow_api.json
-    nodes:
-      positive_prompt:
-        node_id: '10'
-        input_name: text
-      style_anchor:
-        node_id: '11'
-        input_name: text
-      negative_prompt:
-        node_id: '13'
-        input_name: text
-      negative_style_anchor:
-        node_id: '14'
-        input_name: text
-      seed:
-        node_id: '30'
-        input_name: seed
-      steps:
-        node_id: '30'
-        input_name: steps
-      cfg:
-        node_id: '30'
-        input_name: cfg
-      sampler_name:
-        node_id: '30'
-        input_name: sampler_name
-      scheduler:
-        node_id: '30'
-        input_name: scheduler
-      denoise:
-        node_id: '30'
-        input_name: denoise
-      width:
-        node_id: '20'
-        input_name: width
-      height:
-        node_id: '20'
-        input_name: height
   stage05_realistic_cinematic_amazing_z_photo_original:
     file: F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-photo_SAFETENSORS.json
     workflow_format: ui_graph
@@ -1111,90 +596,6 @@ workflows:
         node_id: '9'
         control: widget_value
         widget_index: 0
-  stage05_stylized_concept_zimage_image_b_bridge:
-    file: workflows/comfyui/txt2img_keyframe_stylized_zimage_image_b_bridge.workflow_api.json
-    nodes:
-      positive_prompt:
-        node_id: '10'
-        input_name: text
-      style_anchor:
-        node_id: '11'
-        input_name: text
-      negative_prompt:
-        node_id: '13'
-        input_name: text
-      negative_style_anchor:
-        node_id: '14'
-        input_name: text
-      seed:
-        node_id: '30'
-        input_name: seed
-      steps:
-        node_id: '30'
-        input_name: steps
-      cfg:
-        node_id: '30'
-        input_name: cfg
-      sampler_name:
-        node_id: '30'
-        input_name: sampler_name
-      scheduler:
-        node_id: '30'
-        input_name: scheduler
-      denoise:
-        node_id: '30'
-        input_name: denoise
-      width:
-        node_id: '20'
-        input_name: width
-      height:
-        node_id: '20'
-        input_name: height
-      output_image:
-        node_id: '9'
-        input_name: images
-  stage05_game_cg:
-    file: workflows/comfyui/txt2img_keyframe_game_cg_clean_plate.workflow_api.json
-    nodes:
-      positive_prompt:
-        node_id: '10'
-        input_name: text
-      style_anchor:
-        node_id: '11'
-        input_name: text
-      negative_prompt:
-        node_id: '13'
-        input_name: text
-      negative_style_anchor:
-        node_id: '14'
-        input_name: text
-      seed:
-        node_id: '30'
-        input_name: seed
-      steps:
-        node_id: '30'
-        input_name: steps
-      cfg:
-        node_id: '30'
-        input_name: cfg
-      sampler_name:
-        node_id: '30'
-        input_name: sampler_name
-      scheduler:
-        node_id: '30'
-        input_name: scheduler
-      denoise:
-        node_id: '30'
-        input_name: denoise
-      width:
-        node_id: '20'
-        input_name: width
-      height:
-        node_id: '20'
-        input_name: height
-      output_image:
-        node_id: '60'
-        input_name: images
   i2v_ltx:
     file: workflows/comfyui/i2v_ltx.workflow_api.json
     capabilities:
@@ -1382,3 +783,39 @@ workflows:
       timesignature:
         node_id: REPLACE_ME
         input_name: timesignature
+  stage05_realistic_cinematic_qwen_edit_nextscene_local:
+    file: F:/ComfyUI/ComfyUI/user/default/workflows/AI????/AI??-16???????-QwenEdit+NextScene??????-V1?.json
+    workflow_format: ui_graph
+    capabilities:
+      supports_reference_images: true
+      supported_control_modes:
+      - reference_guided
+    nodes:
+      positive_prompt:
+        node_id: '123'
+        control: widget_value
+        widget_index: 0
+      reference_image_path:
+        node_id: '13'
+        control: widget_value
+        widget_index: 0
+      seed:
+        node_id: '10'
+        control: widget_value
+        widget_index: 0
+      target_size:
+        node_id: '21'
+        control: widget_value
+        widget_index: 1
+      target_vl_size:
+        node_id: '21'
+        control: widget_value
+        widget_index: 2
+      crop_method:
+        node_id: '21'
+        control: widget_value
+        widget_index: 4
+      output_prefix:
+        node_id: '89'
+        control: widget_value
+        widget_index: 0

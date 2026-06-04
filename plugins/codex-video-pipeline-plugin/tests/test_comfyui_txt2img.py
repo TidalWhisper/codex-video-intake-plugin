@@ -621,6 +621,25 @@ def test_repo_deleted_stage05_bridge_mappings_are_absent() -> None:
     assert "stage05_game_cg" not in mapping_data["workflows"]
     assert "stage05_guofeng_ink" not in mapping_data["workflows"]
 
+
+def test_stage05_example_mapping_is_aligned_to_reference_guided_mainline() -> None:
+    mapping_data, _ = workflow_mapping.load_workflow_mapping(ROOT / "config" / "workflow_node_mapping.example.yaml")
+    assert "stage05_realistic_cinematic_qwen_edit_nextscene_local" in mapping_data["workflows"]
+    assert "stage05_realistic_cinematic" not in mapping_data["workflows"]
+    assert "stage05_realistic_cinematic_qwen2512_prompt_only" not in mapping_data["workflows"]
+    assert "stage05_realistic_cinematic_qwen_edit_reference" not in mapping_data["workflows"]
+    assert "stage05_shortdrama_realistic" not in mapping_data["workflows"]
+    assert "stage05_shortdrama_realistic_qwen_edit_reference" not in mapping_data["workflows"]
+    assert "stage05_shortdrama_realistic_qwen_edit_dual_reference" not in mapping_data["workflows"]
+    assert "stage05_realistic_cinematic_zimage_photo_bridge" not in mapping_data["workflows"]
+    assert "stage05_anime_cn_newguofeng" not in mapping_data["workflows"]
+    assert "stage05_guofeng_ink" not in mapping_data["workflows"]
+    assert "stage05_stylized_concept" not in mapping_data["workflows"]
+    assert "stage05_game_cg" not in mapping_data["workflows"]
+    assert "txt2img_keyframe_realistic_zimage_photo_bridge" not in mapping_data["workflows"]
+    assert "txt2img_keyframe_stylized_zimage_image_b_bridge" not in mapping_data["workflows"]
+
+
 def test_infer_style_family_detects_minimal_four_routes() -> None:
     cases = [
         (
