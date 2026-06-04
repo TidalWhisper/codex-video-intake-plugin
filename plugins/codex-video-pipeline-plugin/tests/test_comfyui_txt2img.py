@@ -9,6 +9,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from types import ModuleType
 
+from PIL import Image
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -38,6 +39,7 @@ class _FakeComfyTxt2ImgHandler(BaseHTTPRequestHandler):
     prompt_id = "prompt-stage05"
     requests: list[dict] = []
     output_root: Path | None = None
+    output_size: tuple[int, int] = (896, 1344)
 
     def do_POST(self) -> None:  # noqa: N802
         if self.path != "/prompt":
@@ -96,14 +98,20 @@ class _FakeComfyTxt2ImgHandler(BaseHTTPRequestHandler):
         return
 
 
-def _start_server(mode: str, *, output_root: Path) -> tuple[ThreadingHTTPServer, threading.Thread]:
+def _start_server(
+    mode: str,
+    *,
+    output_root: Path,
+    output_size: tuple[int, int] = (896, 1344),
+) -> tuple[ThreadingHTTPServer, threading.Thread]:
     _FakeComfyTxt2ImgHandler.mode = mode
     _FakeComfyTxt2ImgHandler.requests = []
     _FakeComfyTxt2ImgHandler.output_root = output_root
+    _FakeComfyTxt2ImgHandler.output_size = output_size
     out_dir = output_root / "txt2img"
     out_dir.mkdir(parents=True, exist_ok=True)
     if mode != "missing_file":
-        (out_dir / "comfy_output.png").write_bytes(b"PNGDATA")
+        Image.new("RGB", output_size, color=(120, 110, 100)).save(out_dir / "comfy_output.png", format="PNG")
     server = ThreadingHTTPServer(("127.0.0.1", 0), _FakeComfyTxt2ImgHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -113,7 +121,9 @@ def _start_server(mode: str, *, output_root: Path) -> tuple[ThreadingHTTPServer,
 def _patch_ui_graph_conversion(monkeypatch) -> None:
     def _fake_convert(workflow: dict, *, base_url: str, script_path=None, node_modules_dir=None) -> dict:
         nodes_by_id = {str(node["id"]): node for node in workflow["nodes"]}
-        output_prefix = nodes_by_id["9"]["widgets_values"][0]
+        save_node = nodes_by_id.get("9") or nodes_by_id.get("89")
+        assert save_node is not None
+        output_prefix = save_node["widgets_values"][0]
         return {
             "prompt": {
                 "9": {
@@ -138,12 +148,18 @@ def _write_config(tmp_path: Path, *, base_url: str, output_root: Path, input_roo
     data["openai_image"]["enabled"] = False
     data["comfyui"]["enabled"] = True
     data["comfyui"]["base_url"] = base_url
-    if input_root is not None:
-        data["comfyui"]["input_dir"] = str(input_root).replace("\\", "/")
+    effective_input_root = input_root or (tmp_path / "comfy_input")
+    effective_input_root.mkdir(parents=True, exist_ok=True)
+    data["comfyui"]["input_dir"] = str(effective_input_root).replace("\\", "/")
     data["comfyui"]["output_dir"] = str(output_root).replace("\\", "/")
     config_path = tmp_path / "providers.yaml"
     config_path.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8")
     return config_path
+
+
+def _write_test_png(path: Path, *, size: tuple[int, int] = (64, 96), color: tuple[int, int, int] = (128, 120, 112)) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", size, color=color).save(path, format="PNG")
 
 
 def _write_mapping_and_workflow(tmp_path: Path) -> tuple[Path, dict[str, Path]]:
@@ -192,6 +208,18 @@ def _write_mapping_and_workflow(tmp_path: Path) -> tuple[Path, dict[str, Path]]:
                     {"id": 13, "type": "LoadImage", "widgets_values": ["reference.png", "image"]},
                     {"id": 123, "type": "easy promptLine", "widgets_values": ["Next Scene：same heroine", 0, 1000, "", ""]},
                     {"id": 10, "type": "KSampler", "widgets_values": [1, "fixed", 4, 1, "euler", "simple", 1]},
+                    {
+                        "id": 21,
+                        "type": "TextEncodeQwenImageEditPlusAdvance_lrzjason",
+                        "widgets_values": [
+                            "",
+                            1024,
+                            384,
+                            "lanczos",
+                            "center",
+                            "Describe the key features of the input image (color, shape, size, texture, objects, background), then explain how the user's text instruction should alter or modify the image.",
+                        ],
+                    },
                     {"id": 89, "type": "SaveImage", "widgets_values": ["Stage05/TEST"]},
                 ]
             }
@@ -241,6 +269,9 @@ def _write_mapping_and_workflow(tmp_path: Path) -> tuple[Path, dict[str, Path]]:
                     "positive_prompt": {"node_id": "123", "control": "widget_value", "widget_index": 0},
                     "reference_image_path": {"node_id": "13", "control": "widget_value", "widget_index": 0},
                     "seed": {"node_id": "10", "control": "widget_value", "widget_index": 0},
+                    "target_size": {"node_id": "21", "control": "widget_value", "widget_index": 1},
+                    "target_vl_size": {"node_id": "21", "control": "widget_value", "widget_index": 2},
+                    "crop_method": {"node_id": "21", "control": "widget_value", "widget_index": 4},
                     "output_prefix": {"node_id": "89", "control": "widget_value", "widget_index": 0},
                 },
             }
@@ -266,9 +297,11 @@ def _prepare_manifest(tmp_path: Path) -> Path:
     intake_dir = project_dir / "00_intake"
     keyframe_dir = project_dir / "04_keyframes"
     images_dir = project_dir / "05_images"
+    reference_dir = project_dir / "03_characters" / "reference_images"
     intake_dir.mkdir(parents=True)
     keyframe_dir.mkdir(parents=True)
     images_dir.mkdir(parents=True)
+    reference_dir.mkdir(parents=True)
 
     brief = json.loads((TEMPLATES / "project_brief.draft.example.json").read_text(encoding="utf-8"))
     brief.update({
@@ -289,8 +322,28 @@ def _prepare_manifest(tmp_path: Path) -> Path:
     keyframe["source_brief"] = str(locked_brief).replace("\\", "/")
     keyframe["status"] = "confirmed"
     keyframe["shot_prompts"] = keyframe["shot_prompts"][:1]
+    keyframe["reference_image_status"] = {
+        "required": True,
+        "target_paths": ["03_characters/reference_images/CHAR_001_primary.png"],
+        "existing_paths": ["03_characters/reference_images/CHAR_001_primary.png"],
+        "missing_paths": [],
+        "all_present": True,
+        "item_count": 1,
+        "missing_count": 0,
+        "items": [{"character_id": "CHAR_001", "target_path": "03_characters/reference_images/CHAR_001_primary.png", "file_exists": True}],
+    }
+    keyframe["stage05_execution_readiness"] = {
+        "continuity_mode": "character_locked",
+        "reference_image_required": True,
+        "safe_to_auto_generate": True,
+        "blocker_reasons": [],
+        "missing_reference_images": [],
+    }
+    keyframe["self_check"]["character_reference_images_ready"] = True
+    keyframe["self_check"]["safe_for_auto_image_generation"] = True
     keyframe_json = keyframe_dir / "keyframe_prompts.json"
     keyframe_json.write_text(json.dumps(keyframe, ensure_ascii=False, indent=2), encoding="utf-8")
+    _write_test_png(reference_dir / "CHAR_001_primary.png")
 
     manifest_json = images_dir / "keyframe_image_manifest.json"
     assert new_keyframe_image_jobs.main(["new_keyframe_image_jobs.py", str(locked_brief), str(keyframe_json), str(manifest_json)]) == 0
@@ -302,9 +355,11 @@ def _prepare_scope_blocked_manifest(tmp_path: Path) -> Path:
     intake_dir = project_dir / "00_intake"
     keyframe_dir = project_dir / "04_keyframes"
     images_dir = project_dir / "05_images"
+    reference_dir = project_dir / "03_characters" / "reference_images"
     intake_dir.mkdir(parents=True)
     keyframe_dir.mkdir(parents=True)
     images_dir.mkdir(parents=True)
+    reference_dir.mkdir(parents=True)
 
     brief = json.loads((TEMPLATES / "project_brief.draft.example.json").read_text(encoding="utf-8"))
     brief.update({
@@ -325,8 +380,28 @@ def _prepare_scope_blocked_manifest(tmp_path: Path) -> Path:
     keyframe["source_brief"] = str(locked_brief).replace("\\", "/")
     keyframe["status"] = "confirmed"
     keyframe["shot_prompts"] = keyframe["shot_prompts"][:1]
+    keyframe["reference_image_status"] = {
+        "required": True,
+        "target_paths": ["03_characters/reference_images/CHAR_001_primary.png"],
+        "existing_paths": ["03_characters/reference_images/CHAR_001_primary.png"],
+        "missing_paths": [],
+        "all_present": True,
+        "item_count": 1,
+        "missing_count": 0,
+        "items": [{"character_id": "CHAR_001", "target_path": "03_characters/reference_images/CHAR_001_primary.png", "file_exists": True}],
+    }
+    keyframe["stage05_execution_readiness"] = {
+        "continuity_mode": "character_locked",
+        "reference_image_required": True,
+        "safe_to_auto_generate": True,
+        "blocker_reasons": [],
+        "missing_reference_images": [],
+    }
+    keyframe["self_check"]["character_reference_images_ready"] = True
+    keyframe["self_check"]["safe_for_auto_image_generation"] = True
     keyframe_json = keyframe_dir / "keyframe_prompts.json"
     keyframe_json.write_text(json.dumps(keyframe, ensure_ascii=False, indent=2), encoding="utf-8")
+    _write_test_png(reference_dir / "CHAR_001_primary.png")
 
     manifest_json = images_dir / "keyframe_image_manifest.json"
     assert new_keyframe_image_jobs.main([
@@ -471,34 +546,9 @@ def test_repo_stage05_zimage_workflows_expose_required_nodes() -> None:
         )[entry["nodes"]["height"]["widget_index"]] == 896
 
 
-def test_repo_stage05_reference_guided_workflow_exposes_required_nodes() -> None:
+def test_repo_stage05_deleted_character_anchor_workflow_mapping_is_absent() -> None:
     mapping_data, _ = workflow_mapping.load_workflow_mapping(ROOT / "config" / "workflow_node_mapping.yaml")
-    entry = workflow_mapping.get_workflow_mapping(mapping_data, "stage05_realistic_cinematic_qwen_edit_character_anchor_local")
-    workflow, _, _ = workflow_mapping.load_mapped_workflow(
-        mapping_data,
-        "stage05_realistic_cinematic_qwen_edit_character_anchor_local",
-    )
-    updated = comfyui_ui_workflow.apply_ui_node_inputs(
-        workflow,
-        entry["nodes"],
-        {
-            "positive_prompt": "same woman on a sunset beach, medium shot, look toward the horizon",
-            "negative_prompt": "multiple people, text, watermark",
-            "reference_image_path": "IMG_S001_ref_primary.png",
-            "aspect_ratio": "16:9",
-            "long_side": 1664,
-            "seed": 2468,
-            "output_prefix": "Stage05/IMG_S001_START",
-        },
-    )
-    nodes_by_id = {str(node["id"]): node for node in updated["nodes"]}
-    assert nodes_by_id["218"]["widgets_values"][0].startswith("same woman on a sunset beach")
-    assert nodes_by_id["220"]["widgets_values"][0] == "multiple people, text, watermark"
-    assert nodes_by_id["219"]["widgets_values"][0] == "IMG_S001_ref_primary.png"
-    assert nodes_by_id["225"]["widgets_values"][0] == "16:9"
-    assert nodes_by_id["225"]["widgets_values"][7] == 1664
-    assert nodes_by_id["194"]["widgets_values"][0] == 2468
-    assert nodes_by_id["216"]["widgets_values"][0] == "Stage05/IMG_S001_START"
+    assert "stage05_realistic_cinematic_qwen_edit_character_anchor_local" not in mapping_data["workflows"]
 
 
 def test_repo_stage05_reference_guided_nextscene_workflow_exposes_required_nodes() -> None:
@@ -517,6 +567,8 @@ def test_repo_stage05_reference_guided_nextscene_workflow_exposes_required_nodes
             "reference_image_path": "IMG_S001_ref_primary.png",
             "seed": 2468,
             "target_size": 1024,
+            "target_vl_size": 392,
+            "crop_method": "center",
             "output_prefix": "Stage05/IMG_S001_START",
         },
     )
@@ -525,6 +577,8 @@ def test_repo_stage05_reference_guided_nextscene_workflow_exposes_required_nodes
     assert nodes_by_id["13"]["widgets_values"][0] == "IMG_S001_ref_primary.png"
     assert nodes_by_id["10"]["widgets_values"][0] == 2468
     assert nodes_by_id["21"]["widgets_values"][1] == 1024
+    assert nodes_by_id["21"]["widgets_values"][2] == 392
+    assert nodes_by_id["21"]["widgets_values"][4] == "center"
     assert nodes_by_id["89"]["widgets_values"][0] == "Stage05/IMG_S001_START"
 
 
@@ -561,6 +615,7 @@ def test_repo_deleted_stage05_bridge_mappings_are_absent() -> None:
     mapping_data, _ = workflow_mapping.load_workflow_mapping(ROOT / "config" / "workflow_node_mapping.yaml")
     assert "stage05_shortdrama_realistic_qwen_edit_reference" not in mapping_data["workflows"]
     assert "stage05_realistic_cinematic_qwen_edit_dual_reference" not in mapping_data["workflows"]
+    assert "stage05_realistic_cinematic_qwen_edit_character_anchor_local" not in mapping_data["workflows"]
     assert "stage05_stylized_concept" not in mapping_data["workflows"]
     assert "stage05_game_cg" not in mapping_data["workflows"]
     assert "stage05_guofeng_ink" not in mapping_data["workflows"]
@@ -599,16 +654,19 @@ def test_resolve_stage05_route_prefers_registry_for_known_stage00_style() -> Non
     assert resolved["used_registry"] is True
     assert resolved["route_key"] == "guofeng_ink"
     assert resolved["style_family"] == "guofeng"
-    assert resolved["comfyui_workflow_mapping_key"] == "stage05_anime_jp"
-    assert resolved["comfyui_workflow_name"] == "amazing_z_image_a_safetensors"
-    assert resolved["comfyui_model_id"] == "Tongyi-MAI/Z-Image"
-    assert resolved["preferred_comfyui_workflow_candidate"] == "amazing_z_image_a_safetensors"
-    assert resolved["preferred_comfyui_model_candidate"] == "Tongyi-MAI/Z-Image"
-    assert resolved["route_migration_state"] == "repo_transitional"
-    assert resolved["comfyui_style_preset_key"] == "elegant_single_subject_umbrella"
-    assert resolved["comfyui_style_preset_label"] == "Elegant Single Subject Umbrella"
-    assert "clean limb count" in resolved["comfyui_style_positive_anchor"]
-    assert "duplicated umbrella" in resolved["comfyui_style_negative_anchor"]
+    assert resolved["stage05_mode"] == "reference_guided_storyboard"
+    assert resolved["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_qwen_edit_nextscene_local"
+    assert resolved["comfyui_workflow_name"] == "qwen_edit_nextscene_local"
+    assert resolved["comfyui_model_id"] == "Qwen/Qwen-Edit-2511"
+    assert resolved["preferred_comfyui_workflow_candidate"] == "qwen_edit_nextscene_local"
+    assert resolved["preferred_comfyui_model_candidate"] == "Qwen/Qwen-Edit-2511"
+    assert resolved["route_migration_state"] == "stage05b_reference_guided_mainline"
+    assert resolved["reference_bootstrap_workflow_mapping_key"] == "stage05_anime_jp"
+    assert resolved["reference_bootstrap_workflow_name"] == "amazing_z_image_a_safetensors"
+    assert resolved["reference_bootstrap_style_preset_key"] == "elegant_single_subject_umbrella"
+    assert resolved["reference_bootstrap_style_preset_label"] == "Elegant Single Subject Umbrella"
+    assert "clean limb count" in resolved["reference_bootstrap_style_positive_anchor"]
+    assert "duplicated umbrella" in resolved["reference_bootstrap_style_negative_anchor"]
 
 
 def test_resolve_stage05_route_prefers_registry_for_stylized_concept_style() -> None:
@@ -618,16 +676,15 @@ def test_resolve_stage05_route_prefers_registry_for_stylized_concept_style() -> 
     assert resolved["used_registry"] is True
     assert resolved["route_key"] == "stylized_concept"
     assert resolved["style_family"] == "stylized"
-    assert resolved["comfyui_workflow_mapping_key"] == "stage05_western_cartoon"
-    assert resolved["comfyui_workflow_name"] == "amazing_z_comics_safetensors"
-    assert resolved["comfyui_model_id"] == "Tongyi-MAI/Z-Image"
-    assert resolved["preferred_comfyui_workflow_candidate"] == "amazing_z_comics_safetensors"
-    assert resolved["preferred_comfyui_model_candidate"] == "Tongyi-MAI/Z-Image"
-    assert resolved["route_migration_state"] == "repo_transitional"
-    assert resolved["comfyui_style_preset_key"] == "cyberpunk_neon"
-    assert resolved["comfyui_style_preset_label"] == "Cyberpunk Neon"
-    assert "neon-driven" in resolved["comfyui_style_positive_anchor"]
-    assert "washed-out city realism" in resolved["comfyui_style_negative_anchor"]
+    assert resolved["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_qwen_edit_nextscene_local"
+    assert resolved["comfyui_workflow_name"] == "qwen_edit_nextscene_local"
+    assert resolved["comfyui_model_id"] == "Qwen/Qwen-Edit-2511"
+    assert resolved["reference_bootstrap_workflow_mapping_key"] == "stage05_western_cartoon"
+    assert resolved["reference_bootstrap_workflow_name"] == "amazing_z_comics_safetensors"
+    assert resolved["reference_bootstrap_style_preset_key"] == "cyberpunk_neon"
+    assert resolved["reference_bootstrap_style_preset_label"] == "Cyberpunk Neon"
+    assert "neon-driven" in resolved["reference_bootstrap_style_positive_anchor"]
+    assert "washed-out city realism" in resolved["reference_bootstrap_style_negative_anchor"]
 
 
 def test_resolve_stage05_route_falls_back_for_unknown_custom_style() -> None:
@@ -635,10 +692,12 @@ def test_resolve_stage05_route_falls_back_for_unknown_custom_style() -> None:
     prompts = {"shot_prompts": [{"style_prompt": "stylized concept art, bold shape design"}]}
     resolved = new_keyframe_image_jobs.resolve_stage05_route(brief, prompts)
     assert resolved["used_registry"] is False
-    assert resolved["resolution_mode"] == "legacy_style_family_fallback"
+    assert resolved["resolution_mode"] == "legacy_style_family_bootstrap_fallback_plus_stage05b_mainline"
     assert resolved["route_key"] == "stylized"
     assert resolved["style_family"] == "stylized"
-    assert resolved["comfyui_workflow_name"] == "txt2img_keyframe_stylized"
+    assert resolved["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_qwen_edit_nextscene_local"
+    assert resolved["comfyui_workflow_name"] == "qwen_edit_nextscene_local"
+    assert resolved["reference_bootstrap_workflow_mapping_key"] == "stage05_western_cartoon"
 
 
 def test_resolve_stage05_route_prefers_registry_for_game_cg_style() -> None:
@@ -648,14 +707,15 @@ def test_resolve_stage05_route_prefers_registry_for_game_cg_style() -> None:
     assert resolved["used_registry"] is True
     assert resolved["route_key"] == "game_cg"
     assert resolved["style_family"] == "stylized"
-    assert resolved["comfyui_workflow_mapping_key"] == "stage05_western_cartoon"
-    assert resolved["comfyui_workflow_name"] == "amazing_z_comics_safetensors"
-    assert resolved["comfyui_model_id"] == "Tongyi-MAI/Z-Image"
-    assert resolved["preferred_comfyui_workflow_candidate"] == "amazing_z_comics_safetensors"
-    assert resolved["comfyui_style_preset_key"] == "heroic_splash_art"
-    assert resolved["comfyui_style_preset_label"] == "Heroic Splash Art"
-    assert "high-impact hero plate" in resolved["comfyui_style_positive_anchor"]
-    assert "weak costume readability" in resolved["comfyui_style_negative_anchor"]
+    assert resolved["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_qwen_edit_nextscene_local"
+    assert resolved["comfyui_workflow_name"] == "qwen_edit_nextscene_local"
+    assert resolved["comfyui_model_id"] == "Qwen/Qwen-Edit-2511"
+    assert resolved["reference_bootstrap_workflow_mapping_key"] == "stage05_western_cartoon"
+    assert resolved["reference_bootstrap_workflow_name"] == "amazing_z_comics_safetensors"
+    assert resolved["reference_bootstrap_style_preset_key"] == "heroic_splash_art"
+    assert resolved["reference_bootstrap_style_preset_label"] == "Heroic Splash Art"
+    assert "high-impact hero plate" in resolved["reference_bootstrap_style_positive_anchor"]
+    assert "weak costume readability" in resolved["reference_bootstrap_style_negative_anchor"]
 
 
 def test_resolve_stage05_route_switches_realistic_cinematic_to_reference_guided_when_refs_ready() -> None:
@@ -677,14 +737,15 @@ def test_resolve_stage05_route_switches_realistic_cinematic_to_reference_guided_
     assert resolved["used_registry"] is True
     assert resolved["route_key"] == "realistic_cinematic"
     assert resolved["reference_guided_route_selected"] is True
-    assert resolved["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_qwen_edit_character_anchor_local"
-    assert resolved["comfyui_workflow_name"] == "qwen_edit_shortdrama_character_anchor_base"
-    assert resolved["comfyui_model_id"] == "Qwen/Qwen-Image-Edit-2511"
-    assert resolved["preferred_comfyui_workflow_candidate"] == "qwen_edit_shortdrama_character_anchor_base"
-    assert resolved["preferred_comfyui_workflow_source_ref"].endswith("Qwen-Edit-2511-shortdrama-character-anchor-base.json")
+    assert resolved["stage05_mode"] == "reference_guided_storyboard"
+    assert resolved["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_qwen_edit_nextscene_local"
+    assert resolved["comfyui_workflow_name"] == "qwen_edit_nextscene_local"
+    assert resolved["comfyui_model_id"] == "Qwen/Qwen-Edit-2511"
+    assert resolved["preferred_comfyui_workflow_candidate"] == "qwen_edit_nextscene_local"
+    assert resolved["preferred_comfyui_workflow_source_ref"].endswith("QwenEdit+NextScene（自动分镜）-V1版.json")
     assert resolved["comfyui_control_mode"] == "reference_guided"
-    assert resolved["prompt_only_workflow_mapping_key"] == "stage05_realistic_cinematic_amazing_z_photo_original"
-    assert resolved["prompt_only_workflow_name"] == "amazing_z_photo_safetensors"
+    assert resolved["reference_bootstrap_workflow_mapping_key"] == "stage05_realistic_cinematic_amazing_z_photo_original"
+    assert resolved["reference_bootstrap_workflow_name"] == "amazing_z_photo_safetensors"
 
 
 def test_workflow_replacements_for_job_includes_optional_style_anchors_when_supported() -> None:
@@ -756,6 +817,28 @@ def test_workflow_replacements_for_job_keeps_job_style_selector_over_optimizatio
         },
     )
     assert replacements["style_selector"] == "classic_film_photo"
+
+
+def test_workflow_replacements_for_qwen_nextscene_include_layout_controls() -> None:
+    replacements = run_comfyui_txt2img.workflow_replacements_for_job(
+        {
+            "prompt": "Next Scene：same heroine on the beach at dusk.",
+            "negative_prompt": "bad frame",
+        },
+        {
+            "positive_prompt": {"node_id": "123", "control": "widget_value", "widget_index": 0},
+            "seed": {"node_id": "10", "control": "widget_value", "widget_index": 0},
+            "target_size": {"node_id": "21", "control": "widget_value", "widget_index": 1},
+            "target_vl_size": {"node_id": "21", "control": "widget_value", "widget_index": 2},
+            "crop_method": {"node_id": "21", "control": "widget_value", "widget_index": 4},
+        },
+        width=1344,
+        height=896,
+        seed=42,
+    )
+    assert replacements["target_size"] == 1024
+    assert replacements["target_vl_size"] == 392
+    assert replacements["crop_method"] == "center"
 
 
 def test_build_provider_prompt_adds_prop_guardrails_for_umbrella_scenes() -> None:
@@ -845,7 +928,9 @@ def test_build_provider_prompt_keeps_reference_guided_qwen_edit_prompt_natural()
     assert "同一条裙子的版型、领口、腰线和整体轮廓" in prompt
     assert "medium close-up" in prompt
     assert "warm sunset light" in prompt
-    assert "只改变场景、机位、动作和情绪推进" in prompt
+    assert "呼吸节奏放慢，表情更安静，视线停在海平线" in prompt
+    assert "动作幅度要小，抬手、转身、迈步都放慢，停顿要清楚，不要大幅摆臂或夸张表情" in prompt
+    assert "只改变场景、机位、动作和表情变化" in prompt
     assert "Route intent:" not in prompt
     assert "Lighting:" not in prompt
     assert "Camera:" not in prompt
@@ -866,7 +951,11 @@ def test_build_provider_prompt_keeps_reference_guided_qwen_nextscene_prompt_natu
     assert "同一条裙子的版型、领口、腰线和整体轮廓" in prompt
     assert "medium close-up" in prompt
     assert "warm sunset light" in prompt
-    assert "只改变场景、机位、动作和情绪推进" in prompt
+    assert "表情更安静，嘴唇自然闭合，视线停在远处海平线" in prompt
+    assert "胸口起伏、肩膀放松和步伐节奏要能看出真实呼吸带来的轻微变化" in prompt
+    assert "只改变场景、机位、动作和表情变化" in prompt
+    assert "只输出单张完整画面，不要宫格、拼贴、多分镜格或 contact sheet" in prompt
+    assert "不要出现黑边、假电影边框、内嵌相框或任何画中画布局" in prompt
     assert "Route intent:" not in prompt
     assert "Lighting:" not in prompt
     assert "Camera:" not in prompt
@@ -890,12 +979,20 @@ def test_build_provider_prompt_trusts_concrete_qwen_nextscene_prompt_without_rea
     assert "no black bars" in prompt
     assert "镜头采用wide shot / back view" not in prompt
     assert "人物不要正面看向镜头，镜头以后背或侧后方轮廓为主" in prompt
+    assert "必须是完整满幅画面，full-frame image, no black bars, no embedded border, no picture-in-picture frame" in prompt
+    assert "发型长度、裙摆轮廓和行走姿态都要清楚可读，不能只剩模糊背影" in prompt
     assert "人物在画面中保持较小比例，环境空间要比人物更突出" in prompt
     assert "不要把画面拍成人像照或大半身构图，人物高度不要超过画面高度的三分之一，海岸线、天空和海面应占据主要画面" in prompt
+    assert "肩膀比前一镜头更放松，步伐更稳定，呼吸更均匀" in prompt
+    assert "肩膀自然下沉，背部不再紧绷" in prompt
+    assert "海面反光、晚霞层次和海平线继续清楚可见" in prompt
+    assert "主角始终是20岁出头的亚洲年轻女性，年轻干净的脸，深色过肩长发，浅色简洁长裙，黄昏海滩，表情平静，嘴唇自然闭合，眉头轻微收住，视线稳定，不夸张微笑" in prompt
     assert "人物状态与动作保持慢、轻、克制，以真实呼吸带动作" not in prompt
     assert "整体画面质感保持realistic cinematic short film" not in prompt
     assert "光线与环境氛围为warm sunset light" not in prompt
     assert "realistic cinematic short film" not in prompt
+    assert "同一情绪气场" not in prompt
+    assert "略带心事" not in prompt
 
 
 def test_build_provider_prompt_adds_establishing_specific_qwen_reinforcement() -> None:
@@ -914,14 +1011,33 @@ def test_build_provider_prompt_adds_establishing_specific_qwen_reinforcement() -
     assert "人物不要站在画面正中央成为主视觉，面部不能比环境更抢眼，应先读到海岸线、海面和天光，再读到人物" in prompt
 
 
+def test_build_provider_prompt_adds_backview_border_guardrails_for_qwen_even_without_precomposed_prompt() -> None:
+    prompt = run_comfyui_txt2img.build_provider_prompt({
+        "prompt": "Next Scene：同一位年轻亚洲女性在黄昏海边继续向前走。",
+        "style_prompt": "realistic cinematic short film, natural skin texture, restrained emotion",
+        "lighting_prompt": "warm sunset light, soft rim light, sea-surface reflections",
+        "consistency_prompt": "Character identity anchor: 同一人物设定：20岁出头的亚洲年轻女性，深色过肩长发，浅色简洁长裙；保持同一张脸和同一服装轮廓。",
+        "camera_prompt": "wide shot / back view",
+        "performance_prompt": "慢、轻、克制，以真实呼吸带动作",
+        "preferred_comfyui_workflow_source_ref": "F:/ComfyUI/ComfyUI/user/default/workflows/AI漫剧制作/AI漫剧-16宫格分镜图生成-QwenEdit+NextScene（自动分镜）-V1版.json",
+    })
+    assert "必须是完整满幅画面，full-frame image, no black bars, no embedded border, no picture-in-picture frame" in prompt
+    assert "发型长度、裙摆轮廓和行走姿态都要清楚可读，不能只剩模糊背影" in prompt
+    assert "只输出单张完整画面，不要宫格、拼贴、多分镜格或 contact sheet" in prompt
+
+
 def test_qwen_target_size_tracks_requested_dimensions() -> None:
     assert run_comfyui_txt2img._qwen_target_size_for_dimensions(1344, 896) == 1024
     assert run_comfyui_txt2img._qwen_target_size_for_dimensions(1536, 1024) == 1344
 
 
+def test_qwen_target_vl_size_tracks_requested_orientation() -> None:
+    assert run_comfyui_txt2img._qwen_target_vl_size_for_dimensions(1344, 896) == 392
+    assert run_comfyui_txt2img._qwen_target_vl_size_for_dimensions(896, 1344) == 384
+
+
 def test_qwen_nextscene_reference_is_adapted_to_landscape_canvas(tmp_path: Path) -> None:
     source_image = tmp_path / "portrait.png"
-    from PIL import Image
 
     Image.new("RGB", (896, 1344), color=(180, 170, 160)).save(source_image, format="PNG")
     manifest_path = tmp_path / "video_project" / "05_images" / "keyframe_image_manifest.json"
@@ -949,7 +1065,21 @@ def test_qwen_nextscene_reference_is_adapted_to_landscape_canvas(tmp_path: Path)
     with Image.open(staged_path) as adapted:
         ratio = adapted.width / adapted.height
     assert abs(ratio - (16 / 9)) < 0.02
-    assert staged_records[0]["adapted_canvas"]["adapted"] is True
+
+
+def test_validate_rendered_output_dimensions_blocks_landscape_request_that_falls_back_to_portrait(tmp_path: Path) -> None:
+    output_path = tmp_path / "portrait.png"
+    Image.new("RGB", (840, 1256), color=(160, 150, 140)).save(output_path, format="PNG")
+    try:
+        run_comfyui_txt2img._validate_rendered_output_dimensions(
+            output_path,
+            requested_width=1344,
+            requested_height=896,
+        )
+    except Exception as exc:  # noqa: BLE001
+        assert "fell back to portrait orientation" in str(exc)
+    else:
+        raise AssertionError("Expected orientation validation to fail")
 
 
 def test_build_provider_prompt_adds_guofeng_scenic_guardrails() -> None:
@@ -997,28 +1127,27 @@ def test_run_comfyui_txt2img_dry_run_writes_request_manifest_only(tmp_path: Path
     manifest = json.loads(manifest_json.read_text(encoding="utf-8"))
     assert manifest["style_family"] == "realistic"
     assert manifest["stage05_route_key"] == "realistic_cinematic"
-    assert manifest["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_amazing_z_photo_original"
-    assert manifest["comfyui_model_id"] == "Tongyi-MAI/Z-Image"
-    assert manifest["preferred_comfyui_workflow_candidate"] == "amazing_z_photo_safetensors"
-    assert manifest["preferred_comfyui_model_candidate"] == "Tongyi-MAI/Z-Image"
-    assert manifest["route_migration_state"] == "repo_transitional"
-    assert manifest["preferred_comfyui_workflow_source_ref"] == "F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-photo_SAFETENSORS.json"
+    assert manifest["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_qwen_edit_nextscene_local"
+    assert manifest["comfyui_model_id"] == "Qwen/Qwen-Edit-2511"
+    assert manifest["preferred_comfyui_workflow_candidate"] == "qwen_edit_nextscene_local"
+    assert manifest["preferred_comfyui_model_candidate"] == "Qwen/Qwen-Edit-2511"
+    assert manifest["route_migration_state"] == "stage05b_reference_guided_mainline"
+    assert manifest["preferred_comfyui_workflow_source_ref"] == "F:/ComfyUI/ComfyUI/user/default/workflows/AI漫剧制作/AI漫剧-16宫格分镜图生成-QwenEdit+NextScene（自动分镜）-V1版.json"
     assert manifest["preferred_comfyui_workflow_format"] == "ui_graph"
     assert manifest["preferred_comfyui_workflow_custom_node_dependencies"] == ["rgthree-comfy"]
     assert manifest["preferred_comfyui_workflow_import_blockers"] == []
     assert manifest["comfyui_optimization_profile"] == "balanced"
     assert manifest["comfyui_optimization_profile_label"] == "Balanced"
     assert manifest["comfyui_optimization"]["profile_key"] == "balanced"
-    assert manifest["comfyui_optimization"]["workflow_mapping_key"] == "stage05_realistic_cinematic_amazing_z_photo_original"
+    assert manifest["comfyui_optimization"]["workflow_mapping_key"] == "stage05_realistic_cinematic_qwen_edit_nextscene_local"
     assert manifest["route_resolution"]["used_registry"] is True
-    assert manifest["comfyui_workflow_router"]["realistic"] == "txt2img_keyframe_realistic"
     assert all(job["style_family"] == "realistic" for job in manifest["jobs"])
     assert all(job["stage05_route_key"] == "realistic_cinematic" for job in manifest["jobs"])
-    assert all(job["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_amazing_z_photo_original" for job in manifest["jobs"])
-    assert all(job["comfyui_workflow_name"] == "amazing_z_photo_safetensors" for job in manifest["jobs"])
-    assert all(job["preferred_comfyui_workflow_candidate"] == "amazing_z_photo_safetensors" for job in manifest["jobs"])
-    assert all(job["preferred_comfyui_model_candidate"] == "Tongyi-MAI/Z-Image" for job in manifest["jobs"])
-    assert all(job["route_migration_state"] == "repo_transitional" for job in manifest["jobs"])
+    assert all(job["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_qwen_edit_nextscene_local" for job in manifest["jobs"])
+    assert all(job["comfyui_workflow_name"] == "qwen_edit_nextscene_local" for job in manifest["jobs"])
+    assert all(job["preferred_comfyui_workflow_candidate"] == "qwen_edit_nextscene_local" for job in manifest["jobs"])
+    assert all(job["preferred_comfyui_model_candidate"] == "Qwen/Qwen-Edit-2511" for job in manifest["jobs"])
+    assert all(job["route_migration_state"] == "stage05b_reference_guided_mainline" for job in manifest["jobs"])
     assert all(job["preferred_comfyui_workflow_format"] == "ui_graph" for job in manifest["jobs"])
     assert all(job["comfyui_optimization_profile"] == "balanced" for job in manifest["jobs"])
     assert all(job["comfyui_optimization_profile_label"] == "Balanced" for job in manifest["jobs"])
@@ -1026,31 +1155,31 @@ def test_run_comfyui_txt2img_dry_run_writes_request_manifest_only(tmp_path: Path
     assert request_manifest["workflow_name"] == "auto_style_family"
     assert request_manifest["workflow_selection_mode"] == "stage05_route_registry"
     assert request_manifest["stage05_route_key"] == "realistic_cinematic"
-    assert request_manifest["route_resolution_mode"] == "stage00_style_registry"
-    assert request_manifest["workflow_mapping_key"] == "stage05_realistic_cinematic_amazing_z_photo_original"
-    assert request_manifest["workflow_mapping_keys"] == ["stage05_realistic_cinematic_amazing_z_photo_original"]
-    assert request_manifest["comfyui_model_id"] == "Tongyi-MAI/Z-Image"
-    assert request_manifest["preferred_comfyui_workflow_candidate"] == "amazing_z_photo_safetensors"
-    assert request_manifest["preferred_comfyui_model_candidate"] == "Tongyi-MAI/Z-Image"
-    assert request_manifest["route_migration_state"] == "repo_transitional"
-    assert request_manifest["preferred_comfyui_workflow_source_ref"] == "F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-photo_SAFETENSORS.json"
+    assert request_manifest["route_resolution_mode"] == "stage00_style_registry_plus_stage05b_mainline"
+    assert request_manifest["workflow_mapping_key"] == "stage05_realistic_cinematic_qwen_edit_nextscene_local"
+    assert request_manifest["workflow_mapping_keys"] == ["stage05_realistic_cinematic_qwen_edit_nextscene_local"]
+    assert request_manifest["comfyui_model_id"] == "Qwen/Qwen-Edit-2511"
+    assert request_manifest["preferred_comfyui_workflow_candidate"] == "qwen_edit_nextscene_local"
+    assert request_manifest["preferred_comfyui_model_candidate"] == "Qwen/Qwen-Edit-2511"
+    assert request_manifest["route_migration_state"] == "stage05b_reference_guided_mainline"
+    assert request_manifest["preferred_comfyui_workflow_source_ref"] == "F:/ComfyUI/ComfyUI/user/default/workflows/AI漫剧制作/AI漫剧-16宫格分镜图生成-QwenEdit+NextScene（自动分镜）-V1版.json"
     assert request_manifest["preferred_comfyui_workflow_format"] == "ui_graph"
     assert request_manifest["preferred_comfyui_workflow_custom_node_dependencies"] == ["rgthree-comfy"]
     assert request_manifest["preferred_comfyui_workflow_import_blockers"] == []
     assert request_manifest["optimization_profile"] == "balanced"
     assert request_manifest["optimization_profile_label"] == "Balanced"
-    assert request_manifest["workflow_path"] == str(workflow_paths["stage05_realistic_cinematic_amazing_z_photo_original"]).replace("\\", "/")
-    assert request_manifest["workflow_paths"] == [str(workflow_paths["stage05_realistic_cinematic_amazing_z_photo_original"]).replace("\\", "/")]
+    assert request_manifest["workflow_path"] == str(workflow_paths["stage05_realistic_cinematic_qwen_edit_nextscene_local"]).replace("\\", "/")
+    assert request_manifest["workflow_paths"] == [str(workflow_paths["stage05_realistic_cinematic_qwen_edit_nextscene_local"]).replace("\\", "/")]
     assert len(request_manifest["requests"]) == 2
     assert all(item["status"] == "planned" for item in request_manifest["requests"])
     assert all(item["stage05_route_key"] == "realistic_cinematic" for item in request_manifest["requests"])
     assert all(item["style_family"] == "realistic" for item in request_manifest["requests"])
-    assert all(item["workflow_mapping_key"] == "stage05_realistic_cinematic_amazing_z_photo_original" for item in request_manifest["requests"])
-    assert all(item["comfyui_model_id"] == "Tongyi-MAI/Z-Image" for item in request_manifest["requests"])
-    assert all(item["workflow_name"] == "amazing_z_photo_safetensors" for item in request_manifest["requests"])
-    assert all(item["preferred_comfyui_workflow_candidate"] == "amazing_z_photo_safetensors" for item in request_manifest["requests"])
-    assert all(item["preferred_comfyui_model_candidate"] == "Tongyi-MAI/Z-Image" for item in request_manifest["requests"])
-    assert all(item["route_migration_state"] == "repo_transitional" for item in request_manifest["requests"])
+    assert all(item["workflow_mapping_key"] == "stage05_realistic_cinematic_qwen_edit_nextscene_local" for item in request_manifest["requests"])
+    assert all(item["comfyui_model_id"] == "Qwen/Qwen-Edit-2511" for item in request_manifest["requests"])
+    assert all(item["workflow_name"] == "qwen_edit_nextscene_local" for item in request_manifest["requests"])
+    assert all(item["preferred_comfyui_workflow_candidate"] == "qwen_edit_nextscene_local" for item in request_manifest["requests"])
+    assert all(item["preferred_comfyui_model_candidate"] == "Qwen/Qwen-Edit-2511" for item in request_manifest["requests"])
+    assert all(item["route_migration_state"] == "stage05b_reference_guided_mainline" for item in request_manifest["requests"])
     assert all(item["preferred_comfyui_workflow_format"] == "ui_graph" for item in request_manifest["requests"])
     assert all(item["comfyui_optimization_profile"] == "balanced" for item in request_manifest["requests"])
     assert all(item["comfyui_optimization_profile_label"] == "Balanced" for item in request_manifest["requests"])
@@ -1157,7 +1286,7 @@ def test_run_comfyui_txt2img_dry_run_blocks_multiline_qwen_nextscene_prompt(tmp_
     project_dir = manifest_json.parents[1]
     reference_dir = project_dir / "03_characters" / "reference_images"
     reference_dir.mkdir(parents=True, exist_ok=True)
-    (reference_dir / "CHAR_001_primary.png").write_bytes(b"PNGDATA")
+    _write_test_png(reference_dir / "CHAR_001_primary.png")
 
     data = json.loads(manifest_json.read_text(encoding="utf-8"))
     data["comfyui_workflow_mapping_key"] = "stage05_realistic_cinematic_qwen_edit_nextscene_local"
@@ -1199,7 +1328,7 @@ def test_run_comfyui_txt2img_success_updates_manifest_and_passes_validator(monke
     mapping_path, workflow_paths = _write_mapping_and_workflow(tmp_path)
     output_root = tmp_path / "comfy_output"
     _patch_ui_graph_conversion(monkeypatch)
-    server, thread = _start_server("success", output_root=output_root)
+    server, thread = _start_server("success", output_root=output_root, output_size=(896, 1344))
     try:
         config_path = _write_config(tmp_path, base_url=f"http://127.0.0.1:{server.server_port}", output_root=output_root)
         assert run_comfyui_txt2img.main([
@@ -1216,39 +1345,63 @@ def test_run_comfyui_txt2img_success_updates_manifest_and_passes_validator(monke
         assert all(job["provider"] == "comfyui_txt2img" for job in data["jobs"])
         assert all(
             job["notes"].startswith(
-                "route=realistic_cinematic; route_state=repo_transitional; preferred_workflow=amazing_z_photo_safetensors; profile=balanced; size=896x1344; mapping=stage05_realistic_cinematic_amazing_z_photo_original; workflow=amazing_z_photo_safetensors;"
+                "route=realistic_cinematic; route_state=stage05b_reference_guided_mainline; preferred_workflow=qwen_edit_nextscene_local; profile=balanced; size=896x1344; mapping=stage05_realistic_cinematic_qwen_edit_nextscene_local; workflow=qwen_edit_nextscene_local;"
             )
             for job in data["jobs"]
         )
         request_manifest = json.loads((manifest_json.parent / "comfyui_image_requests.json").read_text(encoding="utf-8"))
         assert request_manifest["workflow_name"] == "auto_style_family"
         assert request_manifest["stage05_route_key"] == "realistic_cinematic"
-        assert request_manifest["workflow_mapping_key"] == "stage05_realistic_cinematic_amazing_z_photo_original"
+        assert request_manifest["workflow_mapping_key"] == "stage05_realistic_cinematic_qwen_edit_nextscene_local"
         assert request_manifest["optimization_profile"] == "balanced"
         assert request_manifest["optimization_profile_label"] == "Balanced"
-        assert request_manifest["preferred_comfyui_workflow_candidate"] == "amazing_z_photo_safetensors"
-        assert request_manifest["preferred_comfyui_model_candidate"] == "Tongyi-MAI/Z-Image"
-        assert request_manifest["route_migration_state"] == "repo_transitional"
+        assert request_manifest["preferred_comfyui_workflow_candidate"] == "qwen_edit_nextscene_local"
+        assert request_manifest["preferred_comfyui_model_candidate"] == "Qwen/Qwen-Edit-2511"
+        assert request_manifest["route_migration_state"] == "stage05b_reference_guided_mainline"
         assert request_manifest["preferred_comfyui_workflow_format"] == "ui_graph"
-        assert request_manifest["workflow_path"] == str(workflow_paths["stage05_realistic_cinematic_amazing_z_photo_original"]).replace("\\", "/")
+        assert request_manifest["workflow_path"] == str(workflow_paths["stage05_realistic_cinematic_qwen_edit_nextscene_local"]).replace("\\", "/")
         assert all(item["status"] == "succeeded" for item in request_manifest["requests"])
         assert all(item["stage05_route_key"] == "realistic_cinematic" for item in request_manifest["requests"])
-        assert all(item["workflow_mapping_key"] == "stage05_realistic_cinematic_amazing_z_photo_original" for item in request_manifest["requests"])
-        assert all(item["workflow_name"] == "amazing_z_photo_safetensors" for item in request_manifest["requests"])
-        assert all(item["preferred_comfyui_workflow_candidate"] == "amazing_z_photo_safetensors" for item in request_manifest["requests"])
-        assert all(item["route_migration_state"] == "repo_transitional" for item in request_manifest["requests"])
+        assert all(item["workflow_mapping_key"] == "stage05_realistic_cinematic_qwen_edit_nextscene_local" for item in request_manifest["requests"])
+        assert all(item["workflow_name"] == "qwen_edit_nextscene_local" for item in request_manifest["requests"])
+        assert all(item["preferred_comfyui_workflow_candidate"] == "qwen_edit_nextscene_local" for item in request_manifest["requests"])
+        assert all(item["route_migration_state"] == "stage05b_reference_guided_mainline" for item in request_manifest["requests"])
         assert all(item["preferred_comfyui_workflow_format"] == "ui_graph" for item in request_manifest["requests"])
         assert all(item["comfyui_optimization_profile"] == "balanced" for item in request_manifest["requests"])
         workflow_payload = _FakeComfyTxt2ImgHandler.requests[0]["extra_data"]["extra_pnginfo"]["workflow"]
         first_nodes = {str(node["id"]): node for node in workflow_payload["nodes"]}
-        assert "Route intent:" not in first_nodes["57"]["widgets_values"][0]
-        assert "Lighting:" not in first_nodes["57"]["widgets_values"][0]
-        assert "Avoid:" not in first_nodes["57"]["widgets_values"][0]
-        assert "same young woman" in first_nodes["57"]["widgets_values"][0]
-        assert "long black hair" in first_nodes["57"]["widgets_values"][0]
-        assert "不要出现摄影机" in first_nodes["57"]["widgets_values"][0]
-        assert first_nodes["243"]["widgets_values"][0] == 896
-        assert first_nodes["248"]["widgets_values"][0] == 1344
+        assert "严格沿用参考图中的同一位主角" in first_nodes["123"]["widgets_values"][0]
+        assert "不要出现黑边" in first_nodes["123"]["widgets_values"][0]
+        assert "只输出单张完整画面" in first_nodes["123"]["widgets_values"][0]
+        assert first_nodes["13"]["widgets_values"][0].endswith(".png")
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
+
+
+def test_run_comfyui_txt2img_fails_when_portrait_request_falls_back_to_landscape(monkeypatch, tmp_path: Path) -> None:
+    manifest_json = _prepare_manifest(tmp_path)
+    mapping_path, _ = _write_mapping_and_workflow(tmp_path)
+    output_root = tmp_path / "comfy_output"
+    _patch_ui_graph_conversion(monkeypatch)
+    server, thread = _start_server("success", output_root=output_root, output_size=(1256, 840))
+    try:
+        config_path = _write_config(tmp_path, base_url=f"http://127.0.0.1:{server.server_port}", output_root=output_root)
+        assert run_comfyui_txt2img.main([
+            str(manifest_json),
+            "--config", str(config_path),
+            "--mapping", str(mapping_path),
+            "--workflow-name", "stage05_realistic_cinematic_amazing_z_photo_original",
+            "--poll-interval", "0.01",
+            "--max-wait-seconds", "2",
+        ]) == 1
+        data = json.loads(manifest_json.read_text(encoding="utf-8"))
+        assert all(job["status"] == "failed" for job in data["jobs"])
+        assert "fell back to landscape orientation" in data["jobs"][0]["errors"][0]["message"]
+        request_manifest = json.loads((manifest_json.parent / "comfyui_image_requests.json").read_text(encoding="utf-8"))
+        assert request_manifest["requests"][0]["status"] == "failed"
+        assert "fell back to landscape orientation" in request_manifest["requests"][0]["error_message"]
     finally:
         server.shutdown()
         thread.join(timeout=5)
@@ -1438,18 +1591,18 @@ def test_run_comfyui_txt2img_failure_records_errors(monkeypatch, tmp_path: Path)
         assert all(job["errors"] for job in data["jobs"])
         request_manifest = json.loads((manifest_json.parent / "comfyui_image_requests.json").read_text(encoding="utf-8"))
         assert request_manifest["stage05_route_key"] == "realistic_cinematic"
-        assert request_manifest["workflow_mapping_key"] == "stage05_realistic_cinematic_amazing_z_photo_original"
+        assert request_manifest["workflow_mapping_key"] == "stage05_realistic_cinematic_qwen_edit_nextscene_local"
         assert request_manifest["optimization_profile"] == "balanced"
-        assert request_manifest["preferred_comfyui_workflow_candidate"] == "amazing_z_photo_safetensors"
-        assert request_manifest["route_migration_state"] == "repo_transitional"
+        assert request_manifest["preferred_comfyui_workflow_candidate"] == "qwen_edit_nextscene_local"
+        assert request_manifest["route_migration_state"] == "stage05b_reference_guided_mainline"
         assert request_manifest["preferred_comfyui_workflow_format"] == "ui_graph"
-        assert request_manifest["workflow_path"] == str(workflow_paths["stage05_realistic_cinematic_amazing_z_photo_original"]).replace("\\", "/")
+        assert request_manifest["workflow_path"] == str(workflow_paths["stage05_realistic_cinematic_qwen_edit_nextscene_local"]).replace("\\", "/")
         assert all(item["status"] == "failed" for item in request_manifest["requests"])
         assert all(item["stage05_route_key"] == "realistic_cinematic" for item in request_manifest["requests"])
-        assert all(item["workflow_mapping_key"] == "stage05_realistic_cinematic_amazing_z_photo_original" for item in request_manifest["requests"])
-        assert all(item["workflow_name"] == "amazing_z_photo_safetensors" for item in request_manifest["requests"])
-        assert all(item["preferred_comfyui_workflow_candidate"] == "amazing_z_photo_safetensors" for item in request_manifest["requests"])
-        assert all(item["route_migration_state"] == "repo_transitional" for item in request_manifest["requests"])
+        assert all(item["workflow_mapping_key"] == "stage05_realistic_cinematic_qwen_edit_nextscene_local" for item in request_manifest["requests"])
+        assert all(item["workflow_name"] == "qwen_edit_nextscene_local" for item in request_manifest["requests"])
+        assert all(item["preferred_comfyui_workflow_candidate"] == "qwen_edit_nextscene_local" for item in request_manifest["requests"])
+        assert all(item["route_migration_state"] == "stage05b_reference_guided_mainline" for item in request_manifest["requests"])
         assert all(item["preferred_comfyui_workflow_format"] == "ui_graph" for item in request_manifest["requests"])
     finally:
         server.shutdown()

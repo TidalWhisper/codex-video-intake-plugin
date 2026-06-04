@@ -5,46 +5,51 @@
   "project_id": "video_20260528_103000_sunset_beach_girl",
   "source_brief": "project_brief.locked.json",
   "source_keyframe_prompts": "keyframe_prompts.json",
-  "created_at": "2026-05-28T10:50:00+08:00",
+  "created_at": "2026-06-04T10:50:00+08:00",
   "image_provider_strategy": {
-    "primary": "placeholder_test_generator",
+    "primary": "comfyui_txt2img",
     "fallback": [
       "manual"
     ],
-    "execution_mode": "example"
+    "execution_mode": "provider_or_manual"
   },
   "output_root": "example_keyframe_images",
   "keyframes_dir": "example_keyframe_images",
+  "stage05_mode": "reference_guided_storyboard",
+  "primary_reference_image_path": "03_characters/reference_images/CHAR_001_primary.png",
+  "reference_bootstrap": {
+    "stage05_mode": "reference_bootstrap",
+    "required": true,
+    "ready": true,
+    "target_reference_image_path": "03_characters/reference_images/CHAR_001_primary.png",
+    "workflow_mapping_key": "stage05_realistic_cinematic_amazing_z_photo_original",
+    "workflow_name": "amazing_z_photo_safetensors",
+    "comfyui_model_id": "Tongyi-MAI/Z-Image",
+    "preferred_workflow_candidate": "amazing_z_photo_safetensors",
+    "preferred_workflow_source_ref": "F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-photo_SAFETENSORS.json",
+    "preferred_workflow_format": "ui_graph",
+    "style_preset_key": "classic_film_realism",
+    "style_preset_label": "Classic Film Realism",
+    "style_positive_anchor": "Keep the frame grounded inside the story world.",
+    "style_negative_anchor": "behind-the-scenes film set, duplicate subject",
+    "style_selector": "classic_film_photo"
+  },
   "stage05_route_key": "realistic_cinematic",
-  "comfyui_workflow_mapping_key": "stage05_realistic_cinematic_amazing_z_photo_original",
-  "comfyui_workflow_name": "amazing_z_photo_safetensors",
-  "comfyui_model_id": "Tongyi-MAI/Z-Image",
+  "style_family": "realistic",
+  "comfyui_workflow_mapping_key": "stage05_realistic_cinematic_qwen_edit_nextscene_local",
+  "comfyui_workflow_name": "qwen_edit_nextscene_local",
+  "comfyui_model_id": "Qwen/Qwen-Edit-2511",
   "comfyui_style_preset_key": null,
   "comfyui_style_preset_label": null,
   "comfyui_style_positive_anchor": null,
   "comfyui_style_negative_anchor": null,
-  "comfyui_control_mode": "prompt_only",
+  "comfyui_control_mode": "reference_guided",
   "comfyui_optimization_profile": "balanced",
   "comfyui_optimization_profile_label": "Balanced",
-  "comfyui_optimization": {
-    "workflow_mapping_key": "stage05_realistic_cinematic_amazing_z_photo_original",
-    "profile_key": "balanced",
-    "profile_label": "Balanced",
-    "profile_description": "Default Stage 05 local profile for the three active Zimage UI workflows.",
-    "dimension_scale": 0.875,
-    "round_to_multiple": 64,
-    "max_width": null,
-    "max_height": null,
-    "workflow_replacements": {
-      "style_selector": "production_photo"
-    },
-    "notes": [],
-    "config_path": "config/stage05_optimization_profiles.yaml"
-  },
-  "preferred_comfyui_workflow_candidate": "amazing_z_photo_safetensors",
-  "preferred_comfyui_model_candidate": "Tongyi-MAI/Z-Image",
-  "route_migration_state": "repo_transitional",
-  "preferred_comfyui_workflow_source_ref": "F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-photo_SAFETENSORS.json",
+  "preferred_comfyui_workflow_candidate": "qwen_edit_nextscene_local",
+  "preferred_comfyui_model_candidate": "Qwen/Qwen-Edit-2511",
+  "route_migration_state": "stage05b_reference_guided_mainline",
+  "preferred_comfyui_workflow_source_ref": "F:/ComfyUI/ComfyUI/user/default/workflows/AI漫剧制作/AI漫剧-16宫格分镜图生成-QwenEdit+NextScene（自动分镜）-V1版.json",
   "preferred_comfyui_workflow_format": "ui_graph",
   "preferred_comfyui_workflow_custom_node_dependencies": [
     "rgthree-comfy"
@@ -53,18 +58,19 @@
   "route_resolution": {
     "route_key": "realistic_cinematic",
     "style_family": "realistic",
-    "comfyui_workflow_mapping_key": "stage05_realistic_cinematic_amazing_z_photo_original",
-    "comfyui_workflow_name": "amazing_z_photo_safetensors",
-    "comfyui_model_id": "Tongyi-MAI/Z-Image",
+    "stage05_mode": "reference_guided_storyboard",
+    "comfyui_workflow_mapping_key": "stage05_realistic_cinematic_qwen_edit_nextscene_local",
+    "comfyui_workflow_name": "qwen_edit_nextscene_local",
+    "comfyui_model_id": "Qwen/Qwen-Edit-2511",
     "comfyui_style_preset_key": null,
     "comfyui_style_preset_label": null,
     "comfyui_style_positive_anchor": null,
     "comfyui_style_negative_anchor": null,
-    "comfyui_control_mode": "prompt_only",
-    "preferred_comfyui_workflow_candidate": "amazing_z_photo_safetensors",
-    "preferred_comfyui_model_candidate": "Tongyi-MAI/Z-Image",
-    "route_migration_state": "repo_transitional",
-    "preferred_comfyui_workflow_source_ref": "F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-photo_SAFETENSORS.json",
+    "comfyui_control_mode": "reference_guided",
+    "preferred_comfyui_workflow_candidate": "qwen_edit_nextscene_local",
+    "preferred_comfyui_model_candidate": "Qwen/Qwen-Edit-2511",
+    "route_migration_state": "stage05b_reference_guided_mainline",
+    "preferred_comfyui_workflow_source_ref": "F:/ComfyUI/ComfyUI/user/default/workflows/AI漫剧制作/AI漫剧-16宫格分镜图生成-QwenEdit+NextScene（自动分镜）-V1版.json",
     "preferred_comfyui_workflow_format": "ui_graph",
     "preferred_comfyui_workflow_custom_node_dependencies": [
       "rgthree-comfy"
@@ -73,58 +79,58 @@
     "stage00_style": "电影级写实",
     "registry_path": "config/stage05_route_registry.yaml",
     "used_registry": true,
-    "resolution_mode": "stage00_style_registry",
-    "workflow_mapping_resolution": "route_registry_current_mapping"
+    "resolution_mode": "stage00_style_registry_plus_stage05b_mainline",
+    "workflow_mapping_resolution": "stage05b_qwen_nextscene_mainline",
+    "reference_bootstrap_workflow_mapping_key": "stage05_realistic_cinematic_amazing_z_photo_original",
+    "reference_bootstrap_workflow_name": "amazing_z_photo_safetensors"
   },
-  "shot_frame_requirements": {
-    "S001": [
-      "start",
-      "end"
-    ]
-  },
+  "reference_guidance_requested": true,
+  "reference_guidance_ready": true,
+  "reference_guidance_active": true,
   "jobs": [
     {
       "image_id": "IMG_S001_START",
       "shot_id": "S001",
       "frame_role": "start",
+      "stage05_mode": "reference_guided_storyboard",
       "source_prompt_ref": "keyframe_prompts.json#S001.start",
-      "prompt": "cinematic realistic wide shot of a young woman walking on a sunset beach",
+      "prompt": "Next Scene：同一位20岁出头的亚洲年轻女性，保持同一张脸、同一发型、同一条浅色长裙的版型、领口、腰线和整体轮廓不变。她正在黄昏海滩沿着潮线慢慢往前走。镜头采用极宽建立镜头，人物全身入镜且只占画面约三分之一，海岸线、天空和海面必须清楚可读。暖金色夕阳逆光，情绪保持克制。full-frame image, no black bars, no embedded border, no extra people.",
       "negative_prompt": "distorted face, extra limbs, low quality",
       "consistency_prompt": "same young woman, long black hair, light summer dress",
+      "reference_images": [
+        "03_characters/reference_images/CHAR_001_primary.png"
+      ],
+      "primary_reference_image_path": "03_characters/reference_images/CHAR_001_primary.png",
       "style_prompt": "warm healing cinematic realism",
-      "camera_prompt": "wide shot",
+      "camera_prompt": "wide establishing shot",
       "stage05_route_key": "realistic_cinematic",
-      "comfyui_workflow_mapping_key": "stage05_realistic_cinematic_amazing_z_photo_original",
-      "comfyui_workflow_name": "amazing_z_photo_safetensors",
-      "comfyui_model_id": "Tongyi-MAI/Z-Image",
-      "comfyui_style_preset_key": null,
-      "comfyui_style_preset_label": null,
-      "comfyui_style_positive_anchor": null,
-      "comfyui_style_negative_anchor": null,
-      "comfyui_control_mode": "prompt_only",
+      "comfyui_workflow_mapping_key": "stage05_realistic_cinematic_qwen_edit_nextscene_local",
+      "comfyui_workflow_name": "qwen_edit_nextscene_local",
+      "comfyui_model_id": "Qwen/Qwen-Edit-2511",
+      "comfyui_control_mode": "reference_guided",
       "comfyui_optimization_profile": "balanced",
       "comfyui_optimization_profile_label": "Balanced",
-      "preferred_comfyui_workflow_candidate": "amazing_z_photo_safetensors",
-      "preferred_comfyui_model_candidate": "Tongyi-MAI/Z-Image",
-      "route_migration_state": "repo_transitional",
-      "preferred_comfyui_workflow_source_ref": "F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-photo_SAFETENSORS.json",
+      "preferred_comfyui_workflow_candidate": "qwen_edit_nextscene_local",
+      "preferred_comfyui_model_candidate": "Qwen/Qwen-Edit-2511",
+      "route_migration_state": "stage05b_reference_guided_mainline",
+      "preferred_comfyui_workflow_source_ref": "F:/ComfyUI/ComfyUI/user/default/workflows/AI漫剧制作/AI漫剧-16宫格分镜图生成-QwenEdit+NextScene（自动分镜）-V1版.json",
       "preferred_comfyui_workflow_format": "ui_graph",
       "preferred_comfyui_workflow_custom_node_dependencies": [
         "rgthree-comfy"
       ],
-      "preferred_comfyui_workflow_import_blockers": [],
-      "aspect_ratio": "9:16",
+      "aspect_ratio": "16:9",
       "resolution": "1080P",
       "provider_priority": [
-        "placeholder_test_generator"
+        "comfyui_txt2img",
+        "manual"
       ],
-      "provider": "placeholder_test_generator",
+      "provider": "comfyui_txt2img",
       "status": "succeeded",
-      "seed": 1,
+      "seed": 2468,
       "output_path": "example_keyframe_images/S001_start.png",
       "quality_gate": {
         "risk_tags": [],
-        "control_mode": "prompt_only",
+        "control_mode": "reference_guided",
         "requires_manual_review": false,
         "manual_review_status": "not_required",
         "reason": null
@@ -133,87 +139,24 @@
         "file_path": "example_keyframe_images/S001_start.png",
         "file_exists": true,
         "file_size_bytes": 1263,
-        "created_at": "2026-05-28T10:50:00+08:00"
+        "created_at": "2026-06-04T10:50:00+08:00"
       },
       "errors": [],
-      "notes": "route=realistic_cinematic; route_state=repo_transitional; preferred_workflow=amazing_z_photo_safetensors; profile=balanced; size=896x1344; mapping=stage05_realistic_cinematic_amazing_z_photo_original; workflow=amazing_z_photo_safetensors; example image"
-    },
-    {
-      "image_id": "IMG_S001_END",
-      "shot_id": "S001",
-      "frame_role": "end",
-      "source_prompt_ref": "keyframe_prompts.json#S001.end",
-      "prompt": "cinematic continuation, the same woman stops near the shoreline under golden sunset",
-      "negative_prompt": "distorted face, extra limbs, low quality",
-      "consistency_prompt": "same young woman, long black hair, light summer dress",
-      "style_prompt": "warm healing cinematic realism",
-      "camera_prompt": "wide shot",
-      "stage05_route_key": "realistic_cinematic",
-      "comfyui_workflow_mapping_key": "stage05_realistic_cinematic_amazing_z_photo_original",
-      "comfyui_workflow_name": "amazing_z_photo_safetensors",
-      "comfyui_model_id": "Tongyi-MAI/Z-Image",
-      "comfyui_style_preset_key": null,
-      "comfyui_style_preset_label": null,
-      "comfyui_style_positive_anchor": null,
-      "comfyui_style_negative_anchor": null,
-      "comfyui_control_mode": "prompt_only",
-      "comfyui_optimization_profile": "balanced",
-      "comfyui_optimization_profile_label": "Balanced",
-      "preferred_comfyui_workflow_candidate": "amazing_z_photo_safetensors",
-      "preferred_comfyui_model_candidate": "Tongyi-MAI/Z-Image",
-      "route_migration_state": "repo_transitional",
-      "preferred_comfyui_workflow_source_ref": "F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-photo_SAFETENSORS.json",
-      "preferred_comfyui_workflow_format": "ui_graph",
-      "preferred_comfyui_workflow_custom_node_dependencies": [
-        "rgthree-comfy"
-      ],
-      "preferred_comfyui_workflow_import_blockers": [],
-      "aspect_ratio": "9:16",
-      "resolution": "1080P",
-      "provider_priority": [
-        "placeholder_test_generator"
-      ],
-      "provider": "placeholder_test_generator",
-      "status": "succeeded",
-      "seed": 2,
-      "output_path": "example_keyframe_images/S001_end.png",
-      "quality_gate": {
-        "risk_tags": [],
-        "control_mode": "prompt_only",
-        "requires_manual_review": false,
-        "manual_review_status": "not_required",
-        "reason": null
-      },
-      "evidence": {
-        "file_path": "example_keyframe_images/S001_end.png",
-        "file_exists": true,
-        "file_size_bytes": 1263,
-        "created_at": "2026-05-28T10:50:00+08:00"
-      },
-      "errors": [],
-      "notes": "route=realistic_cinematic; route_state=repo_transitional; preferred_workflow=amazing_z_photo_safetensors; profile=balanced; size=896x1344; mapping=stage05_realistic_cinematic_amazing_z_photo_original; workflow=amazing_z_photo_safetensors; example image"
+      "notes": "route=realistic_cinematic; route_state=stage05b_reference_guided_mainline; preferred_workflow=qwen_edit_nextscene_local; profile=balanced; size=1344x896; mapping=stage05_realistic_cinematic_qwen_edit_nextscene_local; workflow=qwen_edit_nextscene_local; example image"
     }
   ],
   "summary": {
     "shot_count": 1,
-    "expected_image_count": 2,
-    "generated_image_count": 2,
+    "expected_image_count": 1,
+    "generated_image_count": 1,
     "failed_image_count": 0
-  },
-  "quality_signals": {
-    "intent_route_matches_strategy": true,
-    "style_route_matches_strategy": true,
-    "consistency_prompts_present": true,
-    "quality_targets_defined": true
   },
   "quality_review": {
     "risky_image_count": 0,
-    "risky_image_ids": [],
     "required_count": 0,
-    "approved_count": 0,
     "pending_count": 0,
+    "approved_count": 0,
     "waived_count": 0,
-    "blocking_image_ids": [],
     "manual_review_cleared": true
   },
   "self_check": {

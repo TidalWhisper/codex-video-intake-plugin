@@ -9,6 +9,7 @@ import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -43,6 +44,37 @@ STYLE_FAMILY_TO_WORKFLOW = {
     "guofeng": "txt2img_keyframe_guofeng",
     "stylized": "txt2img_keyframe_stylized",
 }
+
+STYLE_FAMILY_TO_REFERENCE_BOOTSTRAP_MAPPING = {
+    "realistic": "stage05_realistic_cinematic_amazing_z_photo_original",
+    "anime": "stage05_anime_jp",
+    "guofeng": "stage05_anime_jp",
+    "stylized": "stage05_western_cartoon",
+}
+
+STYLE_FAMILY_TO_REFERENCE_BOOTSTRAP_WORKFLOW_NAME = {
+    "realistic": "amazing_z_photo_safetensors",
+    "anime": "amazing_z_image_a_safetensors",
+    "guofeng": "amazing_z_image_a_safetensors",
+    "stylized": "amazing_z_comics_safetensors",
+}
+
+STYLE_FAMILY_TO_REFERENCE_BOOTSTRAP_SOURCE_REF = {
+    "realistic": "F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-photo_SAFETENSORS.json",
+    "anime": "F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-image-a_SAFETENSORS.json",
+    "guofeng": "F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-image-a_SAFETENSORS.json",
+    "stylized": "F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-comics_SAFETENSORS.json",
+}
+
+QWEN_NEXTSCENE_MAPPING_KEY = "stage05_realistic_cinematic_qwen_edit_nextscene_local"
+QWEN_NEXTSCENE_WORKFLOW_SOURCE_REF = (
+    "F:/ComfyUI/ComfyUI/user/default/workflows/AI漫剧制作/"
+    "AI漫剧-16宫格分镜图生成-QwenEdit+NextScene（自动分镜）-V1版.json"
+)
+QWEN_NEXTSCENE_WORKFLOW_CANDIDATE = "qwen_edit_nextscene_local"
+QWEN_NEXTSCENE_MODEL_ID = "Qwen/Qwen-Edit-2511"
+STAGE05_MODE_REFERENCE_GUIDED_STORYBOARD = "reference_guided_storyboard"
+STAGE05_MODE_REFERENCE_BOOTSTRAP = "reference_bootstrap"
 
 ANIME_STYLE_HINTS = (
     "日系动画",
@@ -469,43 +501,55 @@ def resolve_stage05_route(brief: dict, prompts: dict) -> dict:
     normalized = normalized_brief(brief)
     style = str(normalized.get("style") or brief.get("style") or "").strip()
     fallback_style_family = infer_style_family(brief, prompts)
-    fallback_workflow_name = STYLE_FAMILY_TO_WORKFLOW[fallback_style_family]
+    fallback_bootstrap_mapping_key = STYLE_FAMILY_TO_REFERENCE_BOOTSTRAP_MAPPING[fallback_style_family]
+    fallback_bootstrap_workflow_name = STYLE_FAMILY_TO_REFERENCE_BOOTSTRAP_WORKFLOW_NAME[fallback_style_family]
     reference_image_status = prompts.get("reference_image_status") if isinstance(prompts.get("reference_image_status"), dict) else {}
     stage05_execution_readiness = (
         prompts.get("stage05_execution_readiness") if isinstance(prompts.get("stage05_execution_readiness"), dict) else {}
     )
     reference_guided_requested = bool(stage05_execution_readiness.get("reference_image_required"))
     reference_guided_ready = bool(reference_guided_requested and reference_image_status.get("all_present"))
+    bootstrap_prompt = prompts.get("reference_bootstrap_prompt") if isinstance(prompts.get("reference_bootstrap_prompt"), dict) else {}
     resolved = {
         "route_key": fallback_style_family,
         "style_family": fallback_style_family,
-        "comfyui_workflow_mapping_key": fallback_workflow_name,
-        "comfyui_workflow_name": fallback_workflow_name,
-        "comfyui_model_id": None,
+        "stage05_mode": STAGE05_MODE_REFERENCE_GUIDED_STORYBOARD,
+        "comfyui_workflow_mapping_key": QWEN_NEXTSCENE_MAPPING_KEY,
+        "comfyui_workflow_name": QWEN_NEXTSCENE_WORKFLOW_CANDIDATE,
+        "comfyui_model_id": QWEN_NEXTSCENE_MODEL_ID,
         "comfyui_style_selector": None,
-        "prompt_only_workflow_mapping_key": fallback_workflow_name,
-        "prompt_only_workflow_name": fallback_workflow_name,
-        "prompt_only_comfyui_model_id": None,
-        "prompt_only_preferred_comfyui_workflow_candidate": None,
-        "prompt_only_preferred_comfyui_workflow_source_ref": None,
-        "preferred_comfyui_workflow_candidate": None,
-        "preferred_comfyui_model_candidate": None,
-        "route_migration_state": None,
-        "preferred_comfyui_workflow_source_ref": None,
-        "preferred_comfyui_workflow_format": None,
-        "preferred_comfyui_workflow_custom_node_dependencies": None,
-        "preferred_comfyui_workflow_import_blockers": None,
+        "preferred_comfyui_workflow_candidate": QWEN_NEXTSCENE_WORKFLOW_CANDIDATE,
+        "preferred_comfyui_model_candidate": QWEN_NEXTSCENE_MODEL_ID,
+        "route_migration_state": "stage05b_reference_guided_mainline",
+        "preferred_comfyui_workflow_source_ref": QWEN_NEXTSCENE_WORKFLOW_SOURCE_REF,
+        "preferred_comfyui_workflow_format": "ui_graph",
+        "preferred_comfyui_workflow_custom_node_dependencies": ["rgthree-comfy"],
+        "preferred_comfyui_workflow_import_blockers": [],
         "comfyui_style_preset_key": None,
         "comfyui_style_preset_label": None,
         "comfyui_style_positive_anchor": None,
         "comfyui_style_negative_anchor": None,
-        "comfyui_control_mode": "prompt_only",
+        "comfyui_control_mode": "reference_guided",
         "stage00_style": style,
         "registry_path": None,
         "used_registry": False,
-        "resolution_mode": "legacy_style_family_fallback",
-        "workflow_mapping_resolution": "legacy_style_family_fallback",
-        "reference_guided_route_selected": False,
+        "resolution_mode": "legacy_style_family_bootstrap_fallback_plus_stage05b_mainline",
+        "workflow_mapping_resolution": "stage05b_qwen_nextscene_mainline",
+        "reference_guided_route_selected": True,
+        "reference_bootstrap_workflow_mapping_key": fallback_bootstrap_mapping_key,
+        "reference_bootstrap_workflow_name": fallback_bootstrap_workflow_name,
+        "reference_bootstrap_comfyui_model_id": "Tongyi-MAI/Z-Image",
+        "reference_bootstrap_preferred_workflow_candidate": fallback_bootstrap_workflow_name,
+        "reference_bootstrap_preferred_workflow_source_ref": STYLE_FAMILY_TO_REFERENCE_BOOTSTRAP_SOURCE_REF[fallback_style_family],
+        "reference_bootstrap_preferred_workflow_format": "ui_graph",
+        "reference_bootstrap_style_preset_key": None,
+        "reference_bootstrap_style_preset_label": None,
+        "reference_bootstrap_style_positive_anchor": None,
+        "reference_bootstrap_style_negative_anchor": None,
+        "reference_bootstrap_style_selector": None,
+        "reference_bootstrap_required": reference_guided_requested,
+        "reference_bootstrap_ready": reference_guided_ready,
+        "reference_bootstrap_prompt_source": str(bootstrap_prompt.get("source") or "").strip() or None,
     }
     if not style:
         return resolved
@@ -518,41 +562,33 @@ def resolve_stage05_route(brief: dict, prompts: dict) -> dict:
 
     comfyui_target = resolve_current_comfyui_target(route_key, route_entry)
     style_preset = resolve_route_style_preset(style_entry, route_entry)
-    workflow_name = str(comfyui_target.get("workflow_name") or "").strip() or fallback_workflow_name
+    workflow_name = str(comfyui_target.get("workflow_name") or "").strip() or fallback_bootstrap_workflow_name
     workflow_mapping_key = str(comfyui_target.get("workflow_mapping_key") or "").strip() or workflow_name
     style_family = str(comfyui_target.get("style_family") or "").strip() or fallback_style_family
-    control_mode = str(route_entry.get("control_mode") or "prompt_only").strip() or "prompt_only"
     style_selector = style_preset.get("style_selector")
     resolved.update(
         {
             "route_key": route_key,
             "style_family": style_family,
-            "comfyui_workflow_mapping_key": workflow_mapping_key,
-            "comfyui_workflow_name": workflow_name,
-            "comfyui_model_id": comfyui_target.get("model_id"),
             "comfyui_style_selector": style_selector,
-            "prompt_only_workflow_mapping_key": workflow_mapping_key,
-            "prompt_only_workflow_name": workflow_name,
-            "prompt_only_comfyui_model_id": comfyui_target.get("model_id"),
-            "prompt_only_preferred_comfyui_workflow_candidate": comfyui_target.get("preferred_workflow_candidate"),
-            "prompt_only_preferred_comfyui_workflow_source_ref": comfyui_target.get("preferred_workflow_source_ref"),
-            "preferred_comfyui_workflow_candidate": comfyui_target.get("preferred_workflow_candidate"),
-            "preferred_comfyui_model_candidate": comfyui_target.get("preferred_model_candidate"),
-            "route_migration_state": comfyui_target.get("migration_state"),
-            "preferred_comfyui_workflow_source_ref": comfyui_target.get("preferred_workflow_source_ref"),
-            "preferred_comfyui_workflow_format": comfyui_target.get("preferred_workflow_format"),
-            "preferred_comfyui_workflow_custom_node_dependencies": comfyui_target.get("preferred_workflow_custom_node_dependencies"),
-            "preferred_comfyui_workflow_import_blockers": comfyui_target.get("preferred_workflow_import_blockers"),
-            "comfyui_style_preset_key": style_preset.get("preset_key"),
-            "comfyui_style_preset_label": style_preset.get("preset_label"),
-            "comfyui_style_positive_anchor": style_preset.get("positive_anchor"),
-            "comfyui_style_negative_anchor": style_preset.get("negative_anchor"),
-            "comfyui_control_mode": control_mode,
             "registry_path": str(registry_path).replace("\\", "/"),
             "used_registry": True,
-            "resolution_mode": "stage00_style_registry",
-            "workflow_mapping_resolution": "route_registry_current_mapping",
-            "reference_guided_route_selected": False,
+            "resolution_mode": "stage00_style_registry_plus_stage05b_mainline",
+            "workflow_mapping_resolution": "stage05b_qwen_nextscene_mainline",
+            "reference_guided_route_selected": True,
+            "reference_bootstrap_workflow_mapping_key": workflow_mapping_key,
+            "reference_bootstrap_workflow_name": workflow_name,
+            "reference_bootstrap_comfyui_model_id": comfyui_target.get("model_id"),
+            "reference_bootstrap_preferred_workflow_candidate": comfyui_target.get("preferred_workflow_candidate"),
+            "reference_bootstrap_preferred_workflow_source_ref": comfyui_target.get("preferred_workflow_source_ref"),
+            "reference_bootstrap_preferred_workflow_format": comfyui_target.get("preferred_workflow_format"),
+            "reference_bootstrap_style_preset_key": style_preset.get("preset_key"),
+            "reference_bootstrap_style_preset_label": style_preset.get("preset_label"),
+            "reference_bootstrap_style_positive_anchor": style_preset.get("positive_anchor"),
+            "reference_bootstrap_style_negative_anchor": style_preset.get("negative_anchor"),
+            "reference_bootstrap_style_selector": style_selector,
+            "reference_bootstrap_required": reference_guided_requested,
+            "reference_bootstrap_ready": reference_guided_ready,
         }
     )
     return resolved
@@ -681,6 +717,7 @@ def main(argv: list[str]) -> int:
     project_id = brief.get("project_id") or prompts.get("project_id") or out_path.parents[1].name
     aspect, resolution = parse_visual_spec(brief)
     route_resolution = resolve_stage05_route(brief, prompts)
+    stage05_mode = str(route_resolution.get("stage05_mode") or STAGE05_MODE_REFERENCE_GUIDED_STORYBOARD)
     stage05_route_key = str(route_resolution["route_key"])
     style_family = str(route_resolution["style_family"])
     comfyui_workflow_mapping_key = str(route_resolution["comfyui_workflow_mapping_key"])
@@ -698,7 +735,32 @@ def main(argv: list[str]) -> int:
     comfyui_style_positive_anchor = route_resolution.get("comfyui_style_positive_anchor")
     comfyui_style_negative_anchor = route_resolution.get("comfyui_style_negative_anchor")
     comfyui_style_selector = route_resolution.get("comfyui_style_selector")
-    declared_comfyui_control_mode = str(route_resolution.get("comfyui_control_mode") or "prompt_only")
+    declared_comfyui_control_mode = str(route_resolution.get("comfyui_control_mode") or "reference_guided")
+    reference_bootstrap_workflow_mapping_key = str(
+        route_resolution.get("reference_bootstrap_workflow_mapping_key")
+        or STYLE_FAMILY_TO_REFERENCE_BOOTSTRAP_MAPPING[style_family]
+    )
+    reference_bootstrap_workflow_name = str(
+        route_resolution.get("reference_bootstrap_workflow_name")
+        or STYLE_FAMILY_TO_REFERENCE_BOOTSTRAP_WORKFLOW_NAME[style_family]
+    )
+    reference_bootstrap_comfyui_model_id = route_resolution.get("reference_bootstrap_comfyui_model_id") or "Tongyi-MAI/Z-Image"
+    reference_bootstrap_preferred_workflow_candidate = (
+        route_resolution.get("reference_bootstrap_preferred_workflow_candidate")
+        or reference_bootstrap_workflow_name
+    )
+    reference_bootstrap_preferred_workflow_source_ref = (
+        route_resolution.get("reference_bootstrap_preferred_workflow_source_ref")
+        or STYLE_FAMILY_TO_REFERENCE_BOOTSTRAP_SOURCE_REF[style_family]
+    )
+    reference_bootstrap_preferred_workflow_format = (
+        route_resolution.get("reference_bootstrap_preferred_workflow_format") or "ui_graph"
+    )
+    reference_bootstrap_style_preset_key = route_resolution.get("reference_bootstrap_style_preset_key")
+    reference_bootstrap_style_preset_label = route_resolution.get("reference_bootstrap_style_preset_label")
+    reference_bootstrap_style_positive_anchor = route_resolution.get("reference_bootstrap_style_positive_anchor")
+    reference_bootstrap_style_negative_anchor = route_resolution.get("reference_bootstrap_style_negative_anchor")
+    reference_bootstrap_style_selector = route_resolution.get("reference_bootstrap_style_selector")
     route_entry: dict | None = None
     if route_resolution.get("used_registry") is True:
         try:
@@ -717,10 +779,18 @@ def main(argv: list[str]) -> int:
         or compiled.get("continuity_mode") == "character_locked"
     )
     reference_guidance_ready = bool(reference_guidance_requested and reference_image_status.get("all_present"))
+    primary_reference_image_path = ""
+    if isinstance(reference_image_status.get("target_paths"), list):
+        for item in reference_image_status["target_paths"]:
+            if isinstance(item, str) and item.strip():
+                primary_reference_image_path = str(item).replace("\\", "/")
+                break
+    if not primary_reference_image_path:
+        primary_reference_image_path = "03_characters/reference_images/CHAR_001_primary.png"
     workflow_mapping_path: str | None = None
     workflow_mapping_capabilities = {
         "supports_reference_images": False,
-        "supported_control_modes": ["prompt_only"],
+        "supported_control_modes": ["reference_guided"],
     }
     try:
         mapping_data, mapping_path = load_workflow_mapping(root=ROOT)
@@ -731,7 +801,7 @@ def main(argv: list[str]) -> int:
     except Exception:
         workflow_mapping_capabilities = {
             "supports_reference_images": False,
-            "supported_control_modes": ["prompt_only"],
+            "supported_control_modes": ["reference_guided"],
         }
     reference_guidance_active = bool(
         reference_guidance_ready
@@ -743,6 +813,8 @@ def main(argv: list[str]) -> int:
         workflow_capability_gaps.append("reference_images_missing")
     if reference_guidance_requested and workflow_mapping_capabilities.get("supports_reference_images") is not True:
         workflow_capability_gaps.append("selected_workflow_does_not_accept_reference_images")
+    if reference_guidance_requested and not reference_guidance_ready:
+        workflow_capability_gaps.append("reference_bootstrap_required_before_stage05b")
     comfyui_control_mode = "reference_guided" if reference_guidance_active else declared_comfyui_control_mode
     quality_contract = build_quality_contract(brief, compiled)
     quality_targets = build_stage_quality_targets("STAGE_05", quality_contract)
@@ -880,6 +952,7 @@ def main(argv: list[str]) -> int:
                 "image_id": image_id,
                 "shot_id": shot_id,
                 "frame_role": frame_role,
+                "stage05_mode": stage05_mode,
                 "source_prompt_ref": f"{prompts_ref}#{shot_id}.{frame_role}",
                 "prompt": prompt_text,
                 "negative_prompt": negative_prompt,
@@ -891,6 +964,7 @@ def main(argv: list[str]) -> int:
                 "reference_images": effective_reference_images,
                 "secondary_reference_images": secondary_reference_images,
                 "reference_bundle_mode": reference_bundle_mode,
+                "primary_reference_image_path": primary_reference_image_path,
                 "missing_reference_images": missing_reference_images,
                 "stage06_route_hint": route_hint,
                 "stage06_requires_mid_guide": frame_plan["requires_mid"],
@@ -974,13 +1048,35 @@ def main(argv: list[str]) -> int:
         self_check_notes.append("Manual review is required for risky prop-contact scenes before Stage 06.")
     if isinstance(stage05_execution_readiness.get("missing_reference_images"), list) and stage05_execution_readiness.get("missing_reference_images"):
         self_check_notes.append(
-            "Stage 05 automatic generation is not safe yet because character reference images are still missing: "
+            "Stage05-B is blocked until the primary character reference image is prepared by Stage05-A: "
             + ", ".join(str(path_text) for path_text in stage05_execution_readiness["missing_reference_images"])
         )
     if "selected_workflow_does_not_accept_reference_images" in workflow_capability_gaps:
         self_check_notes.append(
-            "Current Stage 05 ComfyUI workflow is still prompt-only. Even after reference images are supplied, reference-guided continuity will stay inactive until a reference-capable workflow is mapped."
+            "Current Stage05-B Qwen NextScene workflow mapping is missing required reference-guided capability bindings."
         )
+    if "reference_bootstrap_required_before_stage05b" in workflow_capability_gaps:
+        self_check_notes.append(
+            "Run Stage05-A first to generate and backfill the primary reference image before Stage05-B storyboard generation."
+        )
+
+    reference_bootstrap = {
+        "stage05_mode": STAGE05_MODE_REFERENCE_BOOTSTRAP,
+        "required": reference_guidance_requested,
+        "ready": reference_guidance_ready,
+        "target_reference_image_path": primary_reference_image_path,
+        "workflow_mapping_key": reference_bootstrap_workflow_mapping_key,
+        "workflow_name": reference_bootstrap_workflow_name,
+        "comfyui_model_id": reference_bootstrap_comfyui_model_id,
+        "preferred_workflow_candidate": reference_bootstrap_preferred_workflow_candidate,
+        "preferred_workflow_source_ref": reference_bootstrap_preferred_workflow_source_ref,
+        "preferred_workflow_format": reference_bootstrap_preferred_workflow_format,
+        "style_preset_key": reference_bootstrap_style_preset_key,
+        "style_preset_label": reference_bootstrap_style_preset_label,
+        "style_positive_anchor": reference_bootstrap_style_positive_anchor,
+        "style_negative_anchor": reference_bootstrap_style_negative_anchor,
+        "style_selector": reference_bootstrap_style_selector,
+    }
 
     manifest = {
         "schema_version": "0.6.0",
@@ -997,6 +1093,9 @@ def main(argv: list[str]) -> int:
         "routing": routing,
         "output_root": str(out_path.parent).replace("\\", "/"),
         "keyframes_dir": str(keyframes_dir).replace("\\", "/"),
+        "stage05_mode": stage05_mode,
+        "primary_reference_image_path": primary_reference_image_path,
+        "reference_bootstrap": reference_bootstrap,
         "reference_image_status": reference_image_status,
         "stage05_execution_readiness": stage05_execution_readiness,
         "workflow_mapping_path": workflow_mapping_path,
@@ -1008,7 +1107,7 @@ def main(argv: list[str]) -> int:
         "stage05_route_key": stage05_route_key,
         "style_family": style_family,
         "comfyui_workflow_mapping_key": comfyui_workflow_mapping_key,
-        "comfyui_workflow_router": STYLE_FAMILY_TO_WORKFLOW,
+        "reference_bootstrap_workflow_router": STYLE_FAMILY_TO_REFERENCE_BOOTSTRAP_MAPPING,
         "route_resolution": route_resolution,
         "shot_frame_requirements": shot_frame_requirements,
         "comfyui_workflow_name": comfyui_workflow_name,
@@ -1040,7 +1139,7 @@ def main(argv: list[str]) -> int:
         },
         "quality_signals": {
             "intent_route_matches_strategy": routing.get("legacy_mode") or requested_output_allows_stage("STAGE_05", compiled),
-            "style_route_matches_strategy": style_family == compiled.get("visual_family_hint"),
+            "style_route_matches_strategy": bool(reference_bootstrap_workflow_mapping_key),
             "consistency_prompts_present": all(bool(j.get("consistency_prompt")) for j in jobs),
             "quality_targets_defined": bool(quality_targets),
         },
@@ -1063,10 +1162,14 @@ def main(argv: list[str]) -> int:
     (out_path.parent / "image_generation_plan.md").write_text(
         "# Stage 05 Keyframe Image Generation Plan\n\n"
         f"Project: `{project_id}`\n\n"
+        f"Stage05 mode: `{stage05_mode}`\n\n"
+        f"Primary reference image: `{primary_reference_image_path}`\n\n"
+        f"Stage05-A bootstrap workflow mapping key: `{reference_bootstrap_workflow_mapping_key}`\n\n"
+        f"Stage05-A bootstrap workflow route: `{reference_bootstrap_workflow_name}`\n\n"
         f"Stage 05 route key: `{stage05_route_key}`\n\n"
         f"Style family: `{style_family}`\n\n"
-        f"ComfyUI workflow mapping key: `{comfyui_workflow_mapping_key}`\n\n"
-        f"ComfyUI workflow route: `{comfyui_workflow_name}`\n\n"
+        f"Stage05-B workflow mapping key: `{comfyui_workflow_mapping_key}`\n\n"
+        f"Stage05-B workflow route: `{comfyui_workflow_name}`\n\n"
         f"ComfyUI model candidate: `{comfyui_model_id or 'unassigned'}`\n\n"
         f"ComfyUI style selector: `{comfyui_style_selector or 'none'}`\n\n"
         f"ComfyUI declared control mode: `{declared_comfyui_control_mode}`\n\n"
@@ -1077,7 +1180,8 @@ def main(argv: list[str]) -> int:
         f"Reference guidance active: `{reference_guidance_active}`\n\n"
         f"ComfyUI optimization profile: `{comfyui_optimization['profile_key']}` ({comfyui_optimization['profile_label']})\n\n"
         f"Expected images: {len(jobs)}\n\n"
-        "Provider order: OpenAI image → ComfyUI txt2img → manual placement.\n\n"
+        "Provider order: ComfyUI txt2img → manual placement.\n\n"
+        "Do not run Stage05-B before Stage05-A has prepared and backfilled the primary character reference image.\n\n"
         "Do not mark Stage 05 complete until `keyframe_image_manifest.json` passes final validation.\n",
         encoding="utf-8"
     )

@@ -22,14 +22,14 @@ def load_module(name: str, path: Path) -> ModuleType:
 
 
 new_keyframe_image_jobs = load_module("new_keyframe_image_jobs_stage05_bootstrap_test", IMAGES / "new_keyframe_image_jobs.py")
-bootstrap_reference_image_from_keyframe = load_module(
-    "bootstrap_reference_image_from_keyframe_test",
-    IMAGES / "bootstrap_reference_image_from_keyframe.py",
+run_stage05_reference_bootstrap = load_module(
+    "run_stage05_reference_bootstrap_test",
+    IMAGES / "run_stage05_reference_bootstrap.py",
 )
 
 
-def test_bootstrap_reference_image_from_existing_keyframe_switches_realistic_route_to_reference_guided(tmp_path: Path) -> None:
-    project_dir = tmp_path / "video_projects" / "video_20260531_bootstrap_reference_demo"
+def test_stage05_reference_bootstrap_generates_primary_reference_from_stage03_prompt_and_rebuilds_stage05b(tmp_path: Path) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260604_reference_bootstrap_demo"
     intake_dir = project_dir / "00_intake"
     characters_dir = project_dir / "03_characters"
     keyframe_dir = project_dir / "04_keyframes"
@@ -48,7 +48,7 @@ def test_bootstrap_reference_image_from_existing_keyframe_switches_realistic_rou
         "status": "locked",
         "confirmed_by_user": True,
         "allowed_next_stage": "STAGE_01_SCRIPT_GENERATION",
-        "locked_at": "2026-05-31T18:00:00+08:00",
+        "locked_at": "2026-06-04T18:00:00+08:00",
     })
     brief["normalized"]["style"] = "写实电影感"
     brief["normalized"]["final_output"] = "生成关键帧图片素材包"
@@ -85,49 +85,65 @@ def test_bootstrap_reference_image_from_existing_keyframe_switches_realistic_rou
     keyframe_json = keyframe_dir / "keyframe_prompts.json"
     keyframe_json.write_text(json.dumps(keyframe, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    character_bible = {
+    character_bible = json.loads((TEMPLATES / "character_bible.example.json").read_text(encoding="utf-8"))
+    character_bible.update({
         "schema_version": "0.4.0",
         "stage": "STAGE_03_CHARACTER_BIBLE",
         "status": "draft",
         "project_id": project_dir.name,
+        "source_brief": str(locked_brief).replace("\\", "/"),
         "reference_image_required": True,
-        "compiled_requirements": {"continuity_mode": "character_locked"},
-        "reference_image_plan": {
-            "project_id": project_dir.name,
-            "required": True,
-            "reference_images": [
-                {
-                    "character_id": "CHAR_001",
-                    "name": "主角",
-                    "target_path": target_reference,
-                    "visual_consistency_prompt": "same protagonist",
-                    "negative_consistency_prompt": "different character",
-                }
-            ],
-        },
-        "reference_image_status": {
-            "required": True,
-            "target_paths": [target_reference],
-            "existing_paths": [],
-            "missing_paths": [target_reference],
-            "all_present": False,
-            "item_count": 1,
-            "missing_count": 1,
-            "items": [{"character_id": "CHAR_001", "target_path": target_reference, "file_exists": False}],
-        },
-        "stage05_execution_readiness": {
-            "continuity_mode": "character_locked",
-            "reference_image_required": True,
-            "safe_to_auto_generate": False,
-            "blocker_reasons": ["missing_character_reference_images"],
-            "missing_reference_images": [target_reference],
-        },
-        "self_check": {
-            "reference_images_planned": True,
-            "reference_images_ready": False,
-            "safe_for_character_locked_image_generation": False,
-            "notes": [f"Reference images still missing for character-locked continuity: {target_reference}"],
-        },
+    })
+    character_bible["compiled_requirements"] = {"continuity_mode": "character_locked"}
+    character_bible["characters"] = [
+        {
+            "character_id": "CHAR_001",
+            "name": "年轻的亚洲女性",
+            "role": "main",
+            "visual_consistency_prompt": "同一人物设定：20岁出头的亚洲年轻女性，深色过肩长发，浅色简洁长裙，脸和裙型都要保持稳定。",
+            "negative_consistency_prompt": "避免脸型变化，避免发型变化，避免服装轮廓漂移，避免多人入镜",
+            "appearance": {
+                "face": "脸部清秀自然，五官清楚",
+                "hair": "深色过肩长发，长度稳定",
+                "clothing": "浅色简洁长裙，裙摆和腰线清楚",
+            },
+        }
+    ]
+    character_bible["reference_image_plan"] = {
+        "project_id": project_dir.name,
+        "required": True,
+        "reference_images": [
+            {
+                "character_id": "CHAR_001",
+                "name": "年轻的亚洲女性",
+                "target_path": target_reference,
+                "visual_consistency_prompt": "同一人物设定：20岁出头的亚洲年轻女性，深色过肩长发，浅色简洁长裙，脸和裙型都要保持稳定。",
+                "negative_consistency_prompt": "避免脸型变化，避免发型变化，避免服装轮廓漂移，避免多人入镜",
+            }
+        ],
+    }
+    character_bible["reference_image_status"] = {
+        "required": True,
+        "target_paths": [target_reference],
+        "existing_paths": [],
+        "missing_paths": [target_reference],
+        "all_present": False,
+        "item_count": 1,
+        "missing_count": 1,
+        "items": [{"character_id": "CHAR_001", "target_path": target_reference, "file_exists": False}],
+    }
+    character_bible["stage05_execution_readiness"] = {
+        "continuity_mode": "character_locked",
+        "reference_image_required": True,
+        "safe_to_auto_generate": False,
+        "blocker_reasons": ["missing_character_reference_images"],
+        "missing_reference_images": [target_reference],
+    }
+    character_bible["self_check"] = {
+        "reference_images_planned": True,
+        "reference_images_ready": False,
+        "safe_for_character_locked_image_generation": False,
+        "notes": [f"Reference images still missing for character-locked continuity: {target_reference}"],
     }
     character_bible_path = characters_dir / "character_bible.json"
     character_bible_path.write_text(json.dumps(character_bible, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -141,63 +157,51 @@ def test_bootstrap_reference_image_from_existing_keyframe_switches_realistic_rou
         "--allow-beyond-requested-scope",
     ]) == 0
 
-    manifest = json.loads(manifest_json.read_text(encoding="utf-8"))
-    source_job = manifest["jobs"][0]
-    source_path = Path(source_job["output_path"])
-    source_path.parent.mkdir(parents=True, exist_ok=True)
-    source_path.write_bytes(b"PNGDATA")
-    source_job["status"] = "succeeded"
-    source_job["provider"] = "comfyui_txt2img"
-    source_job["evidence"]["file_path"] = str(source_path).replace("\\", "/")
-    source_job["evidence"]["file_exists"] = True
-    source_job["evidence"]["file_size_bytes"] = source_path.stat().st_size
-    manifest_json.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    provider_calls: list[list[str]] = []
 
-    rerun_calls: list[list[str]] = []
-
-    def fake_rerun(argv: list[str] | None = None) -> int:
+    def fake_run(argv: list[str] | None = None) -> int:
         assert argv is not None
-        rerun_calls.append(list(argv))
-        image_id = argv[2]
-        current = json.loads(manifest_json.read_text(encoding="utf-8"))
-        for job in current["jobs"]:
-            if job["image_id"] != image_id:
-                continue
-            output_path = Path(job["output_path"])
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            output_path.write_bytes(f"PNG-{image_id}".encode("utf-8"))
-            job["status"] = "succeeded"
-            job["provider"] = "comfyui_txt2img"
-            job["notes"] = f"rerun via reference-guided bundle {image_id}"
-            job["evidence"]["file_path"] = str(output_path).replace("\\", "/")
-            job["evidence"]["file_exists"] = True
-            job["evidence"]["file_size_bytes"] = output_path.stat().st_size
-        manifest_json.write_text(json.dumps(current, ensure_ascii=False, indent=2), encoding="utf-8")
+        provider_calls.append(list(argv))
+        bootstrap_manifest_path = Path(argv[0])
+        bootstrap_manifest = json.loads(bootstrap_manifest_path.read_text(encoding="utf-8"))
+        job = bootstrap_manifest["jobs"][0]
+        output_path = Path(job["output_path"])
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"BOOTSTRAP_PNG")
+        job["status"] = "succeeded"
+        job["provider"] = "comfyui_txt2img"
+        job["evidence"]["file_path"] = str(output_path).replace("\\", "/")
+        job["evidence"]["file_exists"] = True
+        job["evidence"]["file_size_bytes"] = output_path.stat().st_size
+        bootstrap_manifest["summary"]["generated_image_count"] = 1
+        bootstrap_manifest_path.write_text(json.dumps(bootstrap_manifest, ensure_ascii=False, indent=2), encoding="utf-8")
         return 0
 
-    bootstrap_reference_image_from_keyframe.run_comfyui_txt2img.main = fake_rerun
+    run_stage05_reference_bootstrap.run_comfyui_txt2img.main = fake_run
 
-    assert bootstrap_reference_image_from_keyframe.main([
+    assert run_stage05_reference_bootstrap.main([
         str(manifest_json),
-        "--target-reference",
-        target_reference,
-        "--source-image-id",
-        str(source_job["image_id"]),
         "--allow-beyond-requested-scope",
     ]) == 0
 
     target_path = reference_dir / "CHAR_001_primary.png"
     assert target_path.exists()
-    assert target_path.read_bytes() == b"PNGDATA"
+    assert target_path.read_bytes() == b"BOOTSTRAP_PNG"
 
     refreshed_character_bible = json.loads(character_bible_path.read_text(encoding="utf-8"))
     assert refreshed_character_bible["reference_image_status"]["all_present"] is True
     assert refreshed_character_bible["stage05_execution_readiness"]["safe_to_auto_generate"] is True
 
+    refreshed_keyframe = json.loads(keyframe_json.read_text(encoding="utf-8"))
+    assert refreshed_keyframe["reference_image_status"]["all_present"] is True
+    assert refreshed_keyframe["stage05_execution_readiness"]["safe_to_auto_generate"] is True
+
     refreshed_manifest = json.loads(manifest_json.read_text(encoding="utf-8"))
+    assert refreshed_manifest["stage05_mode"] == "reference_guided_storyboard"
     assert refreshed_manifest["reference_guidance_ready"] is True
-    assert refreshed_manifest["reference_guidance_active"] is False
-    assert refreshed_manifest["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_amazing_z_photo_original"
-    assert refreshed_manifest["comfyui_workflow_name"] == "amazing_z_photo_safetensors"
-    assert refreshed_manifest["route_resolution"]["workflow_mapping_resolution"] == "route_registry_current_mapping"
-    assert [args[2] for args in rerun_calls] == ["IMG_S001_START", "IMG_S001_END"]
+    assert refreshed_manifest["reference_guidance_active"] is True
+    assert refreshed_manifest["comfyui_workflow_mapping_key"] == "stage05_realistic_cinematic_qwen_edit_nextscene_local"
+    assert refreshed_manifest["comfyui_workflow_name"] == "qwen_edit_nextscene_local"
+    assert refreshed_manifest["reference_bootstrap"]["workflow_mapping_key"] == "stage05_realistic_cinematic_amazing_z_photo_original"
+    assert refreshed_manifest["reference_bootstrap"]["stage05_mode"] == "reference_bootstrap"
+    assert provider_calls and provider_calls[0][2] == "stage05_realistic_cinematic_amazing_z_photo_original"

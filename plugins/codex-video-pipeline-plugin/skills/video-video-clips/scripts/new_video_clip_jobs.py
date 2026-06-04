@@ -131,7 +131,13 @@ def realized_keyframe_path(image_manifest_path: Path, job: dict) -> str:
 
 def stage05_formal_progression_ready(image_manifest: dict) -> bool:
     self_check = image_manifest.get("self_check") if isinstance(image_manifest.get("self_check"), dict) else {}
-    return bool(self_check.get("ready_for_video_clip_generation"))
+    stage05_mode = str(image_manifest.get("stage05_mode") or "").strip()
+    reference_guidance_active = bool(image_manifest.get("reference_guidance_active"))
+    return bool(
+        self_check.get("ready_for_video_clip_generation")
+        and stage05_mode == "reference_guided_storyboard"
+        and reference_guidance_active
+    )
 
 
 def request_record(job: dict, provider: str) -> dict:
@@ -254,6 +260,7 @@ def main(argv: list[str]) -> int:
         print("ERROR: keyframe image manifest stage must be STAGE_05_KEYFRAME_IMAGES", file=sys.stderr)
         return 1
     image_manifest_status = str(image_manifest.get("status") or "").strip()
+    image_manifest_mode = str(image_manifest.get("stage05_mode") or "").strip()
     stage05_ready_for_stage06 = stage05_formal_progression_ready(image_manifest)
     allowed_stage05_statuses = {"generated", "confirmed"}
     if allow_stage05_in_progress:
@@ -263,6 +270,14 @@ def main(argv: list[str]) -> int:
         print(
             "CREATOR_HINT: 你还没有真正拿到并确认关键帧图片，所以现在不能生成视频片段。"
             " 下一步请先补角色参考图、完成关键帧出图，并在 Stage 05 工作台里完成复核。",
+            file=sys.stderr,
+        )
+        return 1
+    if image_manifest_mode != "reference_guided_storyboard":
+        print("ERROR: Stage 06 now requires Stage05-B reference_guided_storyboard outputs.", file=sys.stderr)
+        print(
+            "CREATOR_HINT: 当前 Stage 05 产物还不是正式的 Stage05-B 一致性分镜图。"
+            " 请先完成 Stage05-A 主参考图回填，再用 Qwen NextScene 生成 Stage05-B 分镜图。",
             file=sys.stderr,
         )
         return 1
@@ -319,6 +334,7 @@ def main(argv: list[str]) -> int:
         jobs.append({
             "clip_id": clip_id,
             "shot_id": shot_id,
+            "source_stage05_mode": image_manifest_mode,
             "source_storyboard_ref": f"{storyboard_ref}#{shot_id}",
             "source_prompt_ref": f"{prompts_ref}#{shot_id}",
             "source_keyframes": {
@@ -409,6 +425,7 @@ def main(argv: list[str]) -> int:
             "allow_beyond_requested_scope": allow_beyond_scope,
             "allow_stage05_in_progress": allow_stage05_in_progress,
             "stage05_gate_ready_for_stage06": stage05_ready_for_stage06,
+            "source_stage05_mode": image_manifest_mode,
             "formal_progression_status": formal_progression_status,
         },
         "formal_promotion_status": formal_progression_status,
@@ -423,6 +440,7 @@ def main(argv: list[str]) -> int:
         },
         "quality_signals": {
             "intent_route_matches_strategy": routing.get("legacy_mode") or requested_output_allows_stage("STAGE_06", compiled),
+            "source_stage05_mode_is_reference_guided_storyboard": image_manifest_mode == "reference_guided_storyboard",
             "continuity_sources_present": all(bool((j.get("source_keyframes") or {}).get("start")) and bool((j.get("source_keyframes") or {}).get("end")) for j in jobs),
             "performance_prompts_present": all(bool(j.get("performance_prompt") or j.get("motion_prompt")) for j in jobs),
             "quality_targets_defined": bool(quality_targets),
@@ -442,6 +460,7 @@ def main(argv: list[str]) -> int:
                     if j.get("blocking_reasons")
                 ],
                 *([stage05_gate_note] if stage05_gate_note else []),
+                *(["Stage 06 now only accepts Stage05-B reference_guided_storyboard outputs."] if image_manifest_mode != "reference_guided_storyboard" else []),
                 *([
                     "Stage 06 planning was explicitly allowed while Stage 05 remains in_progress; treat this manifest as a planning refresh, not final readiness."
                 ] if allow_stage05_in_progress and image_manifest_status == "in_progress" else [])

@@ -355,14 +355,92 @@ def _sanitize_qwen_nextscene_base_prompt(base_prompt: str) -> str:
     return text.strip(" ,，。;；")
 
 
+def _rewrite_qwen_continuity_fragment(text: str, *, cjk: bool) -> str:
+    if not text:
+        return text
+    if cjk:
+        text = text.replace("同一情绪气场", "基础表情、视线方向和动作节奏")
+        text = text.replace("整体气质", "基础表情、视线方向和动作节奏")
+    return text
+
+
+def _rewrite_qwen_abstract_cjk_text(text: str) -> str:
+    rewritten = text
+    replacements = [
+        ("像是在等海风把心事吹散", "海风吹动头发和裙摆，她继续慢慢往前走，不要夸张表情"),
+        ("把心事留在身后", "不再回头，肩膀自然下沉，背部不再紧绷"),
+        ("整个人终于轻下来", "肩膀比前一镜头更放松，步伐更稳定，呼吸更均匀"),
+        ("海风把情绪一点点吹开", "海风吹动头发和裙摆，眉头慢慢放松，肩膀比前一镜头更放松"),
+        ("呼吸和情绪都一点点慢下来", "呼吸节奏放慢，表情更安静，视线停在海平线"),
+        ("呼吸和情绪一点点慢下来", "呼吸节奏放慢，表情更安静，视线停在海平线"),
+        ("情绪慢慢沉下来", "表情更安静，嘴唇自然闭合，视线停在远处海平线"),
+        ("情绪推进到安静停顿", "人物停下来不说话，视线停在海平线，表情安静"),
+        ("情绪推进到安静观察", "人物继续看向前方海面，不说话，表情平静"),
+        ("情绪推进到安静克制", "表情收住，嘴唇自然闭合，眉头不要夸张上扬"),
+        ("情绪从克制转向松开", "眉头从轻微收住变为放松，嘴角不再绷紧，肩膀比前一镜头更放松"),
+        ("情绪收束而释然", "表情平静，眉头舒展，肩膀放松，不再回头"),
+        ("那点没说出口的情绪终于开始松开", "眉头慢慢放松，嘴角不再绷紧，肩膀和手臂比前一镜头更放松"),
+        ("海面与晚霞继续呼吸", "海面反光、晚霞层次和海平线继续清楚可见"),
+        ("表情安静克制、略带心事", "表情平静，嘴唇自然闭合，眉头轻微收住，视线稳定，不夸张微笑"),
+        ("表情安静克制，略带心事", "表情平静，嘴唇自然闭合，眉头轻微收住，视线稳定，不夸张微笑"),
+        ("安静克制、略带心事", "表情平静，嘴唇自然闭合，眉头轻微收住，视线稳定，不夸张微笑"),
+        ("安静克制，略带心事", "表情平静，嘴唇自然闭合，眉头轻微收住，视线稳定，不夸张微笑"),
+        ("表情安静克制", "表情平静，嘴唇自然闭合，眉头轻微收住"),
+        ("安静克制", "表情平静，嘴唇自然闭合，眉头轻微收住"),
+        ("略带心事", "眉头轻微收住，嘴角不要上扬，视线稳定"),
+    ]
+    for source, target in replacements:
+        rewritten = rewritten.replace(source, target)
+    rewritten = re.sub(r"情绪推进到([^\n，。]+)", r"表情和动作变化要直接表现为\1", rewritten)
+    rewritten = re.sub(r"情绪落在([^\n，。]+)", r"表情和动作最后停在\1", rewritten)
+    rewritten = re.sub(r"气场", "表情和动作状态", rewritten)
+    return rewritten
+
+
+def _rewrite_qwen_prompt_for_model_clarity(text: str, *, cjk: bool) -> str:
+    if not text:
+        return text
+    if not cjk:
+        return text
+    rewritten = _rewrite_qwen_abstract_cjk_text(text)
+    rewritten = re.sub(r"\s{2,}", " ", rewritten)
+    rewritten = re.sub(r"([，。！？])\1+", r"\1", rewritten)
+    return rewritten.strip(" ,，。;；")
+
+
+def _qwen_concrete_performance_sentences(performance: str, emotion: str, *, cjk: bool) -> list[str]:
+    if not cjk:
+        return []
+    lowered_performance = performance.lower()
+    lowered_emotion = emotion.lower()
+    sentences: list[str] = []
+    if performance:
+        if "慢" in performance or "轻" in performance or "克制" in performance:
+            sentences.append("动作幅度要小，抬手、转身、迈步都放慢，停顿要清楚，不要大幅摆臂或夸张表情")
+        if "呼吸" in performance:
+            sentences.append("胸口起伏、肩膀放松和步伐节奏要能看出真实呼吸带来的轻微变化")
+    if emotion:
+        if "克制" in emotion or "restrained" in lowered_emotion:
+            sentences.append("表情收住，嘴唇自然闭合，眉头不要夸张上扬")
+        if "松开" in emotion or "释然" in emotion or "轻下来" in emotion:
+            sentences.append("表情比前一镜头更放松，眉头舒展，肩膀自然下沉")
+        if "安静" in emotion or "平静" in emotion:
+            sentences.append("人物停顿或慢速动作时保持安静表情，视线稳定，不要夸张张嘴或大笑")
+    return sentences
+
+
 def _qwen_camera_reinforcement_sentences(camera: str, *, cjk: bool) -> list[str]:
     lowered = camera.lower()
     sentences: list[str] = []
     if "back view" in lowered:
         if cjk:
             sentences.append("人物不要正面看向镜头，镜头以后背或侧后方轮廓为主")
+            sentences.append("必须是完整满幅画面，full-frame image, no black bars, no embedded border, no picture-in-picture frame")
+            sentences.append("发型长度、裙摆轮廓和行走姿态都要清楚可读，不能只剩模糊背影")
         else:
             sentences.append("Do not show the subject facing the camera; keep the view on the back or rear three-quarter silhouette")
+            sentences.append("Keep it as a full-frame image with no black bars, no embedded border, and no picture-in-picture frame")
+            sentences.append("Keep the hair length, dress silhouette, and walking posture clearly readable instead of reducing the subject to an indistinct back silhouette")
     if "wide" in lowered or "establishing" in lowered:
         if cjk:
             sentences.append("人物在画面中保持较小比例，环境空间要比人物更突出")
@@ -376,6 +454,18 @@ def _qwen_camera_reinforcement_sentences(camera: str, *, cjk: bool) -> list[str]
         else:
             sentences.append("Do not place the subject as the central visual focus; the coastline, sea, and sky should read before the face or body")
     return sentences
+
+
+def _qwen_output_guardrail_sentences(*, cjk: bool) -> list[str]:
+    if cjk:
+        return [
+            "只输出单张完整画面，不要宫格、拼贴、多分镜格或 contact sheet",
+            "不要出现黑边、假电影边框、内嵌相框或任何画中画布局",
+        ]
+    return [
+        "Output one single full-frame cinematic frame only, not a collage, contact sheet, storyboard grid, or split-panel layout",
+        "Do not introduce black bars, fake letterboxing, embedded frames, or any picture-in-picture layout",
+    ]
 
 
 def _original_zimage_scene_guardrails(job: dict[str, Any], *, cjk: bool) -> list[str]:
@@ -443,9 +533,7 @@ def _build_original_zimage_prompt(job: dict[str, Any]) -> str:
     elif composition_focus and composition_focus not in base_prompt:
         _append_unique_sentence(sentences, composition_focus)
 
-    if trust_base_prompt:
-        pass
-    elif performance:
+    if performance:
         normalized_performance = performance.replace(" / ", "，" if cjk else ", ")
         if cjk:
             _append_unique_sentence(sentences, f"人物状态与动作保持{normalized_performance}")
@@ -497,6 +585,9 @@ def _build_reference_guided_qwen_edit_prompt(job: dict[str, Any]) -> str:
     trust_base_prompt = _qwen_prompt_is_already_composed(job, base_prompt)
     if trust_base_prompt:
         base_prompt = _sanitize_qwen_nextscene_base_prompt(base_prompt)
+    base_prompt = _rewrite_qwen_prompt_for_model_clarity(base_prompt, cjk=cjk)
+    continuity = _rewrite_qwen_continuity_fragment(continuity, cjk=cjk)
+    identity_description = _rewrite_qwen_prompt_for_model_clarity(identity_description, cjk=cjk)
 
     sentences: list[str] = []
     if cjk:
@@ -512,9 +603,8 @@ def _build_reference_guided_qwen_edit_prompt(job: dict[str, Any]) -> str:
         else:
             _append_unique_sentence(sentences, f"The protagonist remains {identity_description}")
 
-    if trust_base_prompt:
-        for reinforcement in _qwen_camera_reinforcement_sentences(camera, cjk=cjk):
-            _append_unique_sentence(sentences, reinforcement)
+    for reinforcement in _qwen_camera_reinforcement_sentences(camera, cjk=cjk):
+        _append_unique_sentence(sentences, reinforcement)
 
     if trust_base_prompt:
         pass
@@ -536,12 +626,14 @@ def _build_reference_guided_qwen_edit_prompt(job: dict[str, Any]) -> str:
     elif performance:
         normalized_performance = performance.replace(" / ", "，" if cjk else ", ")
         if cjk:
-            _append_unique_sentence(sentences, f"人物状态与动作保持{normalized_performance}")
+            for sentence in _qwen_concrete_performance_sentences(normalized_performance, emotion, cjk=cjk):
+                _append_unique_sentence(sentences, sentence)
         else:
             _append_unique_sentence(sentences, f"Keep the body language and performance {normalized_performance}")
     elif emotion:
         if cjk:
-            _append_unique_sentence(sentences, f"人物情绪保持{emotion}")
+            for sentence in _qwen_concrete_performance_sentences("", emotion, cjk=cjk):
+                _append_unique_sentence(sentences, sentence)
         else:
             _append_unique_sentence(sentences, f"Keep the emotional tone {emotion}")
 
@@ -558,8 +650,11 @@ def _build_reference_guided_qwen_edit_prompt(job: dict[str, Any]) -> str:
         else:
             _append_unique_sentence(sentences, f"Keep the overall visual treatment {style}")
 
+    for sentence in _qwen_output_guardrail_sentences(cjk=cjk):
+        _append_unique_sentence(sentences, sentence)
+
     if cjk:
-        _append_unique_sentence(sentences, "只改变场景、机位、动作和情绪推进，人物身份、服装主结构和整体气质必须稳定一致")
+        _append_unique_sentence(sentences, "只改变场景、机位、动作和表情变化，人物身份、服装主结构、基础表情、视线方向和动作节奏必须前后一致")
         _append_unique_sentence(sentences, "画面里不要出现多人，不要出现文字、水印、片场设备或任何破坏叙事连续性的元素")
     else:
         _append_unique_sentence(sentences, "Only change the scene, camera angle, action, and emotional progression while keeping the character identity, outfit structure, and overall presence stable")
@@ -694,19 +789,16 @@ def _sync_stage05_manifest_command(manifest_path: Path) -> str:
     return f"python {runner_text} {manifest_text}"
 
 
-def _reference_bootstrap_command(manifest_path: Path, *, target_reference_path: str, source_image_id: str | None = None) -> str:
+def _reference_bootstrap_command(manifest_path: Path) -> str:
     plugin_root = plugin_root_for_manifest(manifest_path)
     runner = (
-        plugin_root / "skills" / "video-keyframe-images" / "scripts" / "bootstrap_reference_image_from_keyframe.py"
+        plugin_root / "skills" / "video-keyframe-images" / "scripts" / "run_stage05_reference_bootstrap.py"
         if plugin_root
-        else Path("plugins/codex-video-pipeline-plugin/skills/video-keyframe-images/scripts/bootstrap_reference_image_from_keyframe.py")
+        else Path("plugins/codex-video-pipeline-plugin/skills/video-keyframe-images/scripts/run_stage05_reference_bootstrap.py")
     )
     runner_text = str(runner.resolve() if isinstance(runner, Path) and runner.is_absolute() else runner).replace("\\", "/")
     manifest_text = str(manifest_path.resolve()).replace("\\", "/")
-    command = f"python {runner_text} {manifest_text} --target-reference {target_reference_path}"
-    if source_image_id:
-        command += f" --source-image-id {source_image_id}"
-    return command
+    return f"python {runner_text} {manifest_text}"
 
 
 def reference_bootstrap_candidates(
@@ -792,37 +884,25 @@ def build_missing_reference_manual_recovery(manifest_path: Path, blocked_jobs: l
             normalized = str(path_text).replace("\\", "/")
             if normalized not in missing_paths:
                 missing_paths.append(normalized)
-    bootstrap_candidates = reference_bootstrap_candidates(
-        manifest_path,
-        missing_reference_images=missing_paths,
-    )
     suggested_command = None
-    if bootstrap_candidates:
-        preferred = bootstrap_candidates[0]
-        target_path = str((preferred.get("target_reference_paths") or [None])[0] or "")
-        if target_path:
-            suggested_command = _reference_bootstrap_command(
-                manifest_path,
-                target_reference_path=target_path,
-                source_image_id=str(preferred.get("image_id") or "").strip() or None,
-            )
+    if missing_paths:
+        suggested_command = _reference_bootstrap_command(manifest_path)
     steps = [
-        "1. 先补齐 Stage 03 角色参考图，至少提供主角清晰正向参考图。",
-        f"2. 缺失参考图优先补到这些路径：{', '.join(missing_paths) if missing_paths else '03_characters/reference_images/...'}。",
+        "1. 先执行 Stage05-A，按 Stage03 人物设定生成主角参考图。",
+        f"2. 缺失参考图最终需要回填到这些路径：{', '.join(missing_paths) if missing_paths else '03_characters/reference_images/...'}。",
     ]
     if suggested_command:
-        steps.append(f"3. 如果当前项目里已经有一张可用关键帧，可以直接回填角色锚图：`{suggested_command}`。")
-        steps.append("4. 回填后会自动刷新 Stage 03 / Stage 05 状态，并把 realistic 路线切到 reference-guided 工作流。")
-        steps.append("5. 再重跑当前 Stage 05 执行器，并横向核对 start / mid / end 是否为同一人物。")
+        steps.append(f"3. 推荐直接执行：`{suggested_command}`。")
+        steps.append("4. 这会按当前项目的风格路由选择合适的 Zimage 工作流，生成主参考图并回填 Stage03。")
+        steps.append("5. 回填成功后重新生成 Stage05-B manifest，再执行 Qwen NextScene 一致性分镜图生成。")
     else:
-        steps.append("3. 补图后重新运行当前 Stage 05 执行器，并横向核对 start / mid / end 是否为同一人物。")
+        steps.append("3. 补图后重新运行当前 Stage05-B 执行器，并横向核对 start / mid / end 是否为同一人物。")
     steps.append(f"6. 如需人工兜底，也请把修正后的关键帧放到 {keyframes_dir_text} 后再执行 `{_sync_stage05_manifest_command(manifest_path)}`。")
     return {
         "status": "required",
-        "reason": "高风险 character-locked 镜头缺少 Stage 03 角色参考图，已阻断自动生图。",
+        "reason": "Stage05-B 缺少 Stage03 主角色参考图，已阻断 reference-guided 一致性分镜生成。",
         "blocked_image_ids": blocked_image_ids,
         "missing_reference_images": missing_paths,
-        "bootstrap_candidates": bootstrap_candidates[:3],
         "suggested_bootstrap_command": suggested_command,
         "steps": steps,
         "created_at": utc_now(),
@@ -858,29 +938,12 @@ def _review_queue_markdown_lines(data: dict[str, Any], manifest_path: Path | Non
     bootstrap_command = str(manual_recovery.get("suggested_bootstrap_command") or "").strip()
     if bootstrap_command:
         lines.extend([
-            "## 先补角色锚图",
+            "## 先跑 Stage05-A",
             "",
             f"- 推荐先执行：`{bootstrap_command}`",
-            "- 这会把当前项目里已生成的一张关键帧回填为 Stage 03 角色参考图，并自动刷新 Stage 03 / Stage 05 状态。",
+            "- 这会根据 Stage03 人物设定和当前风格路由生成主角色参考图，并自动回填 Stage03。",
             "",
         ])
-        bootstrap_candidates = manual_recovery.get("bootstrap_candidates") if isinstance(manual_recovery.get("bootstrap_candidates"), list) else []
-        if bootstrap_candidates:
-            lines.extend([
-                "## 可用回填候选",
-                "",
-            ])
-            for item in bootstrap_candidates:
-                if not isinstance(item, dict):
-                    continue
-                image_id = str(item.get("image_id") or "").strip() or "unknown"
-                shot_id = str(item.get("shot_id") or "").strip() or "-"
-                frame_role = str(item.get("frame_role") or "").strip() or "-"
-                source_path = str(item.get("source_path") or "").strip() or "-"
-                targets = ", ".join(str(path_text) for path_text in (item.get("target_reference_paths") or []) if str(path_text).strip())
-                lines.append(f"- `{image_id}` (`{shot_id}` / `{frame_role}`) -> `{targets or '03_characters/reference_images/...'}`")
-                lines.append(f"  来源：`{source_path}`")
-            lines.append("")
     if not queue:
         lines.extend([
             "## 复核结论",

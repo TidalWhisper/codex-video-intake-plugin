@@ -17,6 +17,7 @@
 6. docs/COMFYUI_WORKFLOW_EXPORT_GUIDE.md
 7. docs/CODEX_LOCAL_TASK_RUNBOOK.md
 8. docs/STAGE05_MAINLINE_GUARDRAILS.md
+9. docs/STAGE05_REFERENCE_GUIDED_REFACTOR_PLAN_20260604.md
 
 读完后，先输出：
 - 当前插件已经完成到哪个阶段
@@ -132,8 +133,9 @@ Codex 后续修改时必须遵守：
 15. 如果任务涉及 `F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-comics_SAFETENSORS.json`，必须先读取 `$video-keyframe-amazing-z-comics-style-switch`；其中 `#57` 是唯一主 prompt 输入，`#88 STYLE SELECTOR` 才是真实 style 开关，不能用内部 style 文本节点伪装成已理解。
 16. 如果任务涉及 `F:/ComfyUI/ComfyUI/user/default/workflows/Zimage/amazing-z-image-a_SAFETENSORS.json`，必须先读取 `$video-keyframe-amazing-z-image-a-style-switch`；其中 `#57` 是唯一主 prompt 输入，`#88 STYLE SELECTOR` 才是真实 style 开关，不能用内部 style 文本节点伪装成已理解。
 17. 如果任务涉及上述三套本地 Zimage UI workflow 之一，必须先读取统一总规范 `skills/video-keyframe-style-selection/references/zimage-style-switch-unified-spec.md`，再读取对应的单独 skill。
-18. 如果任务涉及 Stage 00 立项提问，必须先读取 `skills/video-project-intake/references/first_layer_options.md` 和 `skills/video-project-intake/references/stage00_question_blocks.md`；对用户展示的字母选项必须与 canonical 映射完全一致，禁止自创、改写或重排选项菜单。
-19. 进行修改或重构时，不允许保留兼容桥、过渡双轨、临时 fallback、干扰性的旧文件/旧脚本/旧分支等“保留项”；如果主线方案已经确定，必须把这些干扰项删除干净，并同步清理引用、路由和文档。除非用户明确要求保留，否则不允许用“兼容”名义继续挂着旧实现。
+18. 如果任务涉及 `F:/ComfyUI/ComfyUI/user/default/workflows/AI漫剧制作/AI漫剧-16宫格分镜图生成-QwenEdit+NextScene（自动分镜）-V1版.json`，必须先读取 `$video-keyframe-qwen-nextscene-reference-guided`，严格按单镜头执行模式、单参考图、串行 manifest 写回规则运行，不允许把它当 16 宫格批量分镜器使用。当前已锁定的新主线是：先用 `Stage05-A` 的 Zimage bootstrap 生成主角色参考图并回填 `Stage03`，再用这条 Qwen NextScene 工作流执行 `Stage05-B`。
+19. 如果任务涉及 Stage 00 立项提问，必须先读取 `skills/video-project-intake/references/first_layer_options.md` 和 `skills/video-project-intake/references/stage00_question_blocks.md`；对用户展示的字母选项必须与 canonical 映射完全一致，禁止自创、改写或重排选项菜单。
+20. 进行修改或重构时，不允许保留兼容桥、过渡双轨、临时 fallback、干扰性的旧文件/旧脚本/旧分支等“保留项”；如果主线方案已经确定，必须把这些干扰项删除干净，并同步清理引用、路由和文档。除非用户明确要求保留，否则不允许用“兼容”名义继续挂着旧实现。
 ```
 
 ## 6. 本地开发前先跑自检

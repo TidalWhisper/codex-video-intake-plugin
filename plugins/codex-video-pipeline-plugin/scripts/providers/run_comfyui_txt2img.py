@@ -181,6 +181,18 @@ def _qwen_target_size_for_dimensions(width: int, height: int) -> int:
     return min(QWEN_REFERENCE_TARGET_SIZES, key=lambda candidate: abs(candidate - target_area_side))
 
 
+def _qwen_target_vl_size_for_dimensions(width: int, height: int) -> int:
+    if width <= 0 or height <= 0:
+        return 384
+    return 392 if width >= height else 384
+
+
+def _qwen_crop_method_for_dimensions(width: int, height: int) -> str:
+    if width <= 0 or height <= 0:
+        return "center"
+    return "center"
+
+
 def _qwen_reference_canvas_size(width: int, height: int, target_ratio: float) -> tuple[int, int]:
     if width <= 0 or height <= 0 or target_ratio <= 0:
         return width, height
@@ -244,6 +256,50 @@ def copy_selected_output(selected_output: dict[str, Any], target_path: Path) -> 
         raise ComfyUIError(f"ComfyUI output file is empty: {source}", kind="output_missing", details=selected_output)
     target_path.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(source, target_path)
+
+
+def _validate_rendered_output_dimensions(
+    output_path: Path,
+    *,
+    requested_width: int,
+    requested_height: int,
+) -> dict[str, int]:
+    with Image.open(output_path) as rendered:
+        actual_width, actual_height = rendered.size
+    if requested_width > requested_height and actual_width < actual_height:
+        raise ComfyUIError(
+            (
+                "Rendered output fell back to portrait orientation despite a landscape request: "
+                f"requested {requested_width}x{requested_height}, got {actual_width}x{actual_height}"
+            ),
+            kind="output_mismatch",
+            details={
+                "output_path": str(output_path).replace("\\", "/"),
+                "requested_width": requested_width,
+                "requested_height": requested_height,
+                "actual_width": actual_width,
+                "actual_height": actual_height,
+            },
+        )
+    if requested_height > requested_width and actual_height < actual_width:
+        raise ComfyUIError(
+            (
+                "Rendered output fell back to landscape orientation despite a portrait request: "
+                f"requested {requested_width}x{requested_height}, got {actual_width}x{actual_height}"
+            ),
+            kind="output_mismatch",
+            details={
+                "output_path": str(output_path).replace("\\", "/"),
+                "requested_width": requested_width,
+                "requested_height": requested_height,
+                "actual_width": actual_width,
+                "actual_height": actual_height,
+            },
+        )
+    return {
+        "actual_width": actual_width,
+        "actual_height": actual_height,
+    }
 
 
 def choose_output(outputs: list[dict[str, Any]]) -> dict[str, Any]:
@@ -365,6 +421,10 @@ def workflow_replacements_for_job(
     }
     if "target_size" in nodes:
         candidate_replacements["target_size"] = _qwen_target_size_for_dimensions(width, height)
+    if "target_vl_size" in nodes:
+        candidate_replacements["target_vl_size"] = _qwen_target_vl_size_for_dimensions(width, height)
+    if "crop_method" in nodes:
+        candidate_replacements["crop_method"] = _qwen_crop_method_for_dimensions(width, height)
     if style_selector:
         candidate_replacements["style_selector"] = style_selector
         candidate_replacements["upstream_style_preset"] = style_selector
@@ -863,6 +923,11 @@ def main(argv: list[str] | None = None) -> int:
                     })
             output_path = resolve_path(manifest_path, job.get("output_path") or job.get("evidence", {}).get("file_path"))
             copy_selected_output(final_output, output_path)
+            output_dimensions = _validate_rendered_output_dimensions(
+                output_path,
+                requested_width=width,
+                requested_height=height,
+            )
             job["provider"] = "comfyui_txt2img"
             job["status"] = "succeeded"
             job["seed"] = final_seed
@@ -872,6 +937,8 @@ def main(argv: list[str] | None = None) -> int:
                 "file_path": str(output_path).replace("\\", "/"),
                 "file_exists": True,
                 "file_size_bytes": output_path.stat().st_size,
+                "image_width": output_dimensions["actual_width"],
+                "image_height": output_dimensions["actual_height"],
                 "created_at": utc_now(),
             })
             job["auto_repair_status"] = repair_status
@@ -898,6 +965,7 @@ def main(argv: list[str] | None = None) -> int:
                 "prompt_id": submitted["prompt_id"],
                 "selected_output": final_output,
                 "repair_status": repair_status,
+                **output_dimensions,
             })
         except ComfyUIError as exc:
             failed = True

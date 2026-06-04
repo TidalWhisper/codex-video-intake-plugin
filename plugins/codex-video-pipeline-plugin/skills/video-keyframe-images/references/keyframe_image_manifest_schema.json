@@ -12,6 +12,14 @@
       "manual"
     ]
   },
+  "stage05_mode": "reference_guided_storyboard|reference_bootstrap",
+  "primary_reference_image_path": "path (required for Stage05-A/Stage05-B handoff)",
+  "reference_bootstrap": {
+    "stage05_mode": "reference_bootstrap",
+    "target_reference_image_path": "03_characters/reference_images/CHAR_001_primary.png",
+    "workflow_mapping_key": "stage05_realistic_cinematic_amazing_z_photo_original|stage05_anime_jp|stage05_western_cartoon",
+    "workflow_name": "amazing_z_photo_safetensors|amazing_z_image_a_safetensors|amazing_z_comics_safetensors"
+  },
   "stage05_route_key": "string (optional, preferred route key for Stage 05 local image generation)",
   "comfyui_workflow_mapping_key": "string (optional, preferred workflow_node_mapping key selected for this Stage 05 route)",
   "comfyui_workflow_name": "string (optional, current underlying workflow target name used by the selected mapping key)",
@@ -25,7 +33,7 @@
   "comfyui_style_preset_label": "string (optional, human-readable label for the selected route-internal style preset)",
   "comfyui_style_positive_anchor": "string (optional, positive style anchor text patched into workflow nodes when supported)",
   "comfyui_style_negative_anchor": "string (optional, negative style anchor text patched into workflow nodes when supported)",
-  "comfyui_control_mode": "string (optional, current local control strategy such as prompt_only or pose_guided)",
+  "comfyui_control_mode": "string (optional, current local control strategy such as prompt_only or reference_guided)",
   "comfyui_optimization_profile": "string (optional, selected local speed-quality optimization profile such as preview, balanced, or quality)",
   "comfyui_optimization_profile_label": "string (optional, human-readable label for the selected local optimization profile)",
   "comfyui_optimization": {
@@ -54,7 +62,7 @@
     "route_key": "string",
     "style_family": "realistic|anime|guofeng|stylized",
     "comfyui_workflow_mapping_key": "string",
-    "comfyui_workflow_name": "txt2img_keyframe_*",
+    "comfyui_workflow_name": "qwen_edit_nextscene_local|amazing_z_*",
     "comfyui_model_id": "string|null",
     "preferred_comfyui_workflow_candidate": "string|null",
     "preferred_comfyui_model_candidate": "string|null",
@@ -75,8 +83,8 @@
     "stage00_style": "string",
     "registry_path": "path|null",
     "used_registry": true,
-    "resolution_mode": "stage00_style_registry|legacy_style_family_fallback",
-    "workflow_mapping_resolution": "route_registry_current_mapping|legacy_style_family_fallback"
+    "resolution_mode": "stage00_style_registry_plus_stage05b_mainline|legacy_style_family_bootstrap_fallback_plus_stage05b_mainline",
+    "workflow_mapping_resolution": "stage05b_qwen_nextscene_mainline"
   },
   "shot_frame_requirements": {
     "S001": [
@@ -90,8 +98,13 @@
       "image_id": "IMG_S001_START",
       "shot_id": "S001",
       "frame_role": "start|mid|end",
+      "stage05_mode": "reference_guided_storyboard|reference_bootstrap",
       "prompt": "string",
       "negative_prompt": "string",
+      "reference_images": [
+        "03_characters/reference_images/CHAR_001_primary.png"
+      ],
+      "primary_reference_image_path": "03_characters/reference_images/CHAR_001_primary.png",
       "stage05_route_key": "string (optional, should match top-level route key when present)",
       "comfyui_workflow_mapping_key": "string (optional, should match top-level mapping key when present)",
       "comfyui_workflow_name": "string (optional, current underlying workflow target name for this job)",

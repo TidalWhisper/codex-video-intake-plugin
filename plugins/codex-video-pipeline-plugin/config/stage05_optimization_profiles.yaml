@@ -33,9 +33,6 @@ workflow_profiles:
         workflow_replacements:
           style_selector: production_photo
 
-  stage05_realistic_cinematic_qwen_edit_character_anchor_local:
-    inherits: stage05_realistic_cinematic_amazing_z_photo_original
-
   stage05_realistic_cinematic_qwen_edit_nextscene_local:
     inherits: stage05_realistic_cinematic_amazing_z_photo_original
 

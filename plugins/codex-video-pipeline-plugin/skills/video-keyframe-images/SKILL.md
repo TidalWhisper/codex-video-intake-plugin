@@ -16,7 +16,7 @@ If the route touches one of the original local Zimage UI workflows, also read `s
 If the route touches the original local `amazing-z-photo_SAFETENSORS.json` workflow, also load `$video-keyframe-amazing-z-photo-style-switch` before changing mappings, prompts, or style-switch logic.
 If the route touches the original local `amazing-z-comics_SAFETENSORS.json` workflow, also load `$video-keyframe-amazing-z-comics-style-switch` before changing mappings, prompts, or style-switch logic.
 If the route touches the original local `amazing-z-image-a_SAFETENSORS.json` workflow, also load `$video-keyframe-amazing-z-image-a-style-switch` before changing mappings, prompts, or style-switch logic.
-If the task is explicitly about `Qwen-Image-Edit` local reference-guided Stage 05 continuity, first load [references/stage05-qwen-workflow-runtime-map.md](./references/stage05-qwen-workflow-runtime-map.md), then load [references/stage05-qwen-reference-guided-workflow-rules.md](./references/stage05-qwen-reference-guided-workflow-rules.md), [references/stage05-qwen-quality-gate-rules.md](./references/stage05-qwen-quality-gate-rules.md), and [references/stage05-qwen-nextscene-prompt-convergence-rules.md](./references/stage05-qwen-nextscene-prompt-convergence-rules.md) before selecting or calling a local Qwen workflow.
+If the task is explicitly about `Qwen-Image-Edit` local reference-guided Stage 05 continuity, or touches `AI漫剧-16宫格分镜图生成-QwenEdit+NextScene（自动分镜）-V1版.json`, first load `$video-keyframe-qwen-nextscene-reference-guided`.
 
 ## Inputs
 
@@ -80,12 +80,24 @@ python skills/video-keyframe-images/scripts/new_keyframe_image_jobs.py \
 05_images/comfyui_image_requests.json
 ```
 
-4. Generate images through the configured provider.
+4. 根据主角色参考图状态选择主线：
+
+- 如果 `03_characters/reference_images/CHAR_001_primary.png` 缺失，先执行 `Stage05-A`：
+
+```bash
+python skills/video-keyframe-images/scripts/run_stage05_reference_bootstrap.py \
+  <project_dir>/05_images/keyframe_image_manifest.json
+```
+
+- `Stage05-A` 会根据 `Stage03` 人物设定和当前风格路由，选择三条锁定 Zimage workflow 之一生成主角色参考图，并回填 `Stage03`。
+- 回填完成后，它会自动刷新 `03_characters/character_bible.json`、`04_keyframes/keyframe_prompts.json`、以及 `05_images/keyframe_image_manifest.json`。
+
+5. 生成 `Stage05-B` 一致性分镜图。
 
 Preferred production provider order:
 
 ```text
-1. Local ComfyUI txt2img workflow on the locked Zimage UI graphs
+1. Local ComfyUI txt2img workflow on the locked Stage05 mainline
 2. Manual placement of externally generated images into `05_images/keyframes/`
 ```
 
@@ -98,7 +110,14 @@ python scripts/providers/run_comfyui_txt2img.py \
 
 This runner reads `config/workflow_node_mapping.yaml`, loads the mapped `txt2img_keyframe.workflow_api.json`, injects prompt and image-size fields, submits the ComfyUI workflow, copies the resulting image files into `05_images/keyframes/`, and updates `keyframe_image_manifest.json`.
 
-Stage 05 ComfyUI txt2img now supports a minimal 4-route workflow split:
+Stage05 当前分成两段：
+
+```text
+Stage05-A: Zimage bootstrap
+Stage05-B: Qwen NextScene reference-guided storyboard
+```
+
+Stage 05 ComfyUI txt2img still uses a minimal 4-route split for `Stage05-A` workflow selection:
 
 ```text
 realistic
@@ -115,7 +134,7 @@ Current execution semantics:
 - `style_family` remains a compatibility field for existing Stage 05 validation and runner logic
 - `style_family` only decides the internal ComfyUI route family, not provider order
 
-Current default ComfyUI route families now collapse directly onto the three locked local Zimage UI workflows:
+Current default route families now map onto the three locked local Zimage UI workflows, but only for `Stage05-A`:
 
 - `realistic_cinematic` → `stage05_realistic_cinematic_amazing_z_photo_original` → `amazing_z_photo_safetensors`
 - `shortdrama_realistic` → `stage05_realistic_cinematic_amazing_z_photo_original` → `amazing_z_photo_safetensors`
@@ -128,12 +147,13 @@ Current default ComfyUI route families now collapse directly onto the three lock
 
 Stage 05 default mainline rules:
 
-- The three locked local Zimage UI workflows remain the default Stage 05 execution targets for prompt-only routes.
-- Route variation must happen through `style_selector` and route preset metadata.
-- If the user explicitly needs `single-character reference-guided continuity` and the selected local workflow is Qwen-based, treat that as a separate governed exception and follow [references/stage05-qwen-reference-guided-workflow-rules.md](./references/stage05-qwen-reference-guided-workflow-rules.md) instead of improvising a new route.
-- Do not mix prompt-only Zimage semantics and reference-guided Qwen semantics inside the same shot bundle.
+- The three locked local Zimage UI workflows are now only the `Stage05-A` primary-reference bootstrap targets.
+- `Stage05-B` mainline is fixed to `stage05_realistic_cinematic_qwen_edit_nextscene_local`.
+- Route variation for `Stage05-A` must happen through `style_selector` and route preset metadata.
+- `Stage05-B` must follow [references/stage05-qwen-reference-guided-workflow-rules.md](./references/stage05-qwen-reference-guided-workflow-rules.md) and the Qwen NextScene prompt convergence rules.
+- Do not mix prompt-only Zimage shot generation and reference-guided Qwen storyboard generation inside the same Stage05-B shot bundle.
 
-The generated `keyframe_image_manifest.json` records `stage05_route_key`, `style_family`, `comfyui_workflow_mapping_key`, `comfyui_workflow_name`, `comfyui_model_id`, and `route_resolution` for each run.
+The generated `keyframe_image_manifest.json` now records `stage05_mode`, `primary_reference_image_path`, `reference_bootstrap`, `stage05_route_key`, `style_family`, `comfyui_workflow_mapping_key`, `comfyui_workflow_name`, `comfyui_model_id`, and `route_resolution`.
 
 Do not treat deleted bridge or fallback routes as candidates to keep "just in case". Route changes should go through the real Stage 05 registry and the three active Zimage workflows only.
 
@@ -145,7 +165,7 @@ python scripts/providers/run_comfyui_txt2img.py \
   --workflow-name stage05_anime_jp
 ```
 
-5. After image files exist, sync evidence:
+6. After image files exist, sync evidence:
 
 ```bash
 python skills/video-keyframe-images/scripts/sync_keyframe_image_manifest.py \
@@ -170,14 +190,14 @@ python skills/video-keyframe-images/scripts/approve_stage05_review_queue.py \
   --content-aligned --content-alignment-note "confirmed content matches shot description"
 ```
 
-6. Validate final manifest:
+7. Validate final manifest:
 
 ```bash
 python skills/video-keyframe-images/scripts/validate_keyframe_image_manifest.py --mode final \
   <project_dir>/05_images/keyframe_image_manifest.json
 ```
 
-7. If validation fails, fix missing images or failed jobs. Do not claim Stage 05 is complete until final validation passes.
+8. If validation fails, fix missing images or failed jobs. Do not claim Stage 05 is complete until final validation passes.
 
 ## Test-only placeholder mode
 
