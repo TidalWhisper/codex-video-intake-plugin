@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+
+ROOT="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
+SCRIPT="$ROOT/plugins/codex-video-pipeline-plugin/scripts/repo_change_gate.py"
+
+if command -v py >/dev/null 2>&1; then
+  exec py -3 "$SCRIPT" --mode pre-commit
+fi
+
+exec python "$SCRIPT" --mode pre-commit

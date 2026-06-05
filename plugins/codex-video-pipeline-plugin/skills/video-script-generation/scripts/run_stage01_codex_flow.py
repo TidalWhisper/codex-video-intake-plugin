@@ -3,23 +3,22 @@
 
 Flow:
 1. Build `stage01_prompt_packet.json`
-2. Generate `stage01_llm_output.json` locally from the locked brief while
-   preserving the same audit artifact chain
+2. Generate `stage01_llm_output.json` through Codex structured output
 3. Render official Stage 01 outputs through `new_script_template.py`
-4. If validation fails, build a repair packet and deterministically regenerate
-   a corrected full structured output
+4. If validation fails, build a repair packet and request a corrected full
+   structured output from Codex again
 """
 from __future__ import annotations
 
 import argparse
 import json
-import shutil
 import sys
 from pathlib import Path
 from typing import Any
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PLUGIN_ROOT = Path(__file__).resolve().parents[3]
+REPO_ROOT = Path(__file__).resolve().parents[5]
 sys.path.insert(0, str(SCRIPT_DIR))
 sys.path.insert(0, str(PLUGIN_ROOT / "scripts"))
 
@@ -29,9 +28,10 @@ from pipeline_core.codex_flow import (  # noqa: E402
     build_generation_request,
     build_repair_request,
     cleanup_failure_artifacts,
+    run_codex_exec,
     resolve_codex_bin,
+    write_codex_output_json,
 )
-from stage01_local_semantics import build_stage01_llm_output  # noqa: E402
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -48,8 +48,23 @@ def write_json(path: Path, data: Any) -> None:
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def write_local_execution_marker(path: Path, header: str) -> None:
-    path.write_text(header.rstrip() + "\n", encoding="utf-8")
+def generate_stage01_llm_output(
+    *,
+    request_text: str,
+    schema_path: Path,
+    llm_output_path: Path,
+    output_message_path: Path,
+    codex_bin: str,
+    cwd: Path,
+) -> dict[str, Any]:
+    run_codex_exec(
+        request_text,
+        schema_path,
+        output_message_path,
+        codex_bin=codex_bin,
+        cwd=cwd,
+    )
+    return write_codex_output_json(output_message_path, llm_output_path)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -80,6 +95,7 @@ def main(argv: list[str] | None = None) -> int:
     llm_output_path = script_dir / "stage01_llm_output.json"
     generation_last_message_path = script_dir / "stage01_codex_last_message.txt"
     generation_request_path = script_dir / "stage01_codex_generation_request.txt"
+    resolved_codex_bin = resolve_codex_bin(args.codex_bin)
 
     generation_request = build_generation_request(
         stage_label="Stage 01",
@@ -88,12 +104,14 @@ def main(argv: list[str] | None = None) -> int:
         prompt_packet_path=prompt_packet_path,
     )
     generation_request_path.write_text(generation_request, encoding="utf-8")
-    write_local_execution_marker(
-        generation_last_message_path,
-        "STAGE01_LOCAL_EXECUTION_MODE\n"
-        "Structured output generated locally from the locked brief to avoid recursive Codex CLI deadlocks.",
+    generate_stage01_llm_output(
+        request_text=generation_request,
+        schema_path=schema_path,
+        llm_output_path=llm_output_path,
+        output_message_path=generation_last_message_path,
+        codex_bin=resolved_codex_bin,
+        cwd=REPO_ROOT,
     )
-    write_json(llm_output_path, build_stage01_llm_output(brief, prompt_packet=prompt_packet))
 
     total_attempts = max(0, int(args.max_repair_attempts))
     for attempt_index in range(total_attempts + 1):
@@ -128,19 +146,13 @@ def main(argv: list[str] | None = None) -> int:
             current_llm_output_path=llm_output_path,
         )
         repair_request_path.write_text(repair_request, encoding="utf-8")
-        write_local_execution_marker(
-            repair_last_message_path,
-            "STAGE01_LOCAL_REPAIR_MODE\n"
-            "Validation failed, so Stage 01 was deterministically regenerated from the same locked brief.",
-        )
-        repair_packet = load_json(repair_packet_path)
-        write_json(
-            llm_output_path,
-            build_stage01_llm_output(
-                brief,
-                prompt_packet=prompt_packet,
-                repair_packet=repair_packet,
-            ),
+        generate_stage01_llm_output(
+            request_text=repair_request,
+            schema_path=schema_path,
+            llm_output_path=llm_output_path,
+            output_message_path=repair_last_message_path,
+            codex_bin=resolved_codex_bin,
+            cwd=REPO_ROOT,
         )
 
     return 1

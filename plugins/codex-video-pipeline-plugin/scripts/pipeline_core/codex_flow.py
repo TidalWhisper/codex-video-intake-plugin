@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 import os
 import shutil
@@ -8,6 +9,13 @@ import sys
 import time
 from pathlib import Path
 from typing import Any
+
+
+TRANSIENT_CODEX_ERROR_HINTS = (
+    "stream disconnected before completion",
+    "upstream request failed",
+    "reconnecting...",
+)
 
 
 def load_text(path: Path) -> str:
@@ -117,6 +125,73 @@ def build_repair_request(
     ])
 
 
+def _allow_null(schema: dict[str, Any]) -> dict[str, Any]:
+    updated = copy.deepcopy(schema)
+    type_value = updated.get("type")
+    if isinstance(type_value, str):
+        if type_value != "null":
+            updated["type"] = [type_value, "null"]
+        return updated
+    if isinstance(type_value, list):
+        if "null" not in type_value:
+            updated["type"] = [*type_value, "null"]
+        return updated
+    any_of = updated.get("anyOf")
+    if isinstance(any_of, list):
+        if not any(isinstance(item, dict) and item.get("type") == "null" for item in any_of):
+            updated["anyOf"] = [*any_of, {"type": "null"}]
+        return updated
+    return {
+        "anyOf": [
+            updated,
+            {"type": "null"},
+        ]
+    }
+
+
+def build_strict_response_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    updated = copy.deepcopy(schema)
+    properties = updated.get("properties")
+    if isinstance(properties, dict):
+        original_required = set(updated.get("required") or [])
+        strict_properties: dict[str, Any] = {}
+        for key, value in properties.items():
+            normalized = build_strict_response_schema(value) if isinstance(value, dict) else value
+            if key not in original_required and isinstance(normalized, dict):
+                normalized = _allow_null(normalized)
+            strict_properties[key] = normalized
+        updated["properties"] = strict_properties
+        updated["required"] = list(strict_properties.keys())
+        if "type" not in updated:
+            updated["type"] = "object"
+        if "additionalProperties" not in updated:
+            updated["additionalProperties"] = False
+    items = updated.get("items")
+    if isinstance(items, dict):
+        updated["items"] = build_strict_response_schema(items)
+    elif isinstance(items, list):
+        updated["items"] = [
+            build_strict_response_schema(item) if isinstance(item, dict) else item
+            for item in items
+        ]
+    for key in ("anyOf", "oneOf", "allOf"):
+        value = updated.get(key)
+        if isinstance(value, list):
+            updated[key] = [
+                build_strict_response_schema(item) if isinstance(item, dict) else item
+                for item in value
+            ]
+    return updated
+
+
+def write_strict_response_schema(schema_path: Path, output_message_path: Path) -> Path:
+    raw_schema = json.loads(load_text(schema_path))
+    strict_schema = build_strict_response_schema(raw_schema)
+    strict_schema_path = output_message_path.with_name(f"{schema_path.stem}.codex_response_format.schema.json")
+    strict_schema_path.write_text(json.dumps(strict_schema, ensure_ascii=False, indent=2), encoding="utf-8")
+    return strict_schema_path
+
+
 def run_codex_exec(
     request_text: str,
     schema_path: Path,
@@ -125,7 +200,9 @@ def run_codex_exec(
     codex_bin: str,
     cwd: Path,
     timeout_seconds: int = 180,
+    max_transient_retries: int = 3,
 ) -> None:
+    strict_schema_path = write_strict_response_schema(schema_path, output_message_path)
     cmd = [
         codex_bin,
         "--ask-for-approval",
@@ -134,45 +211,56 @@ def run_codex_exec(
         "--cd",
         str(cwd),
         "--skip-git-repo-check",
+        "--ephemeral",
         "--sandbox",
         "read-only",
         "--ignore-rules",
         "--color",
         "never",
         "--output-schema",
-        str(schema_path),
+        str(strict_schema_path),
         "--output-last-message",
         str(output_message_path),
         "-",
     ]
-    start = time.time()
-    try:
-        result = subprocess.run(
-            cmd,
-            input=request_text,
-            text=True,
-            capture_output=True,
-            cwd=str(cwd),
-            encoding="utf-8",
-            timeout=max(1, int(timeout_seconds)),
-        )
-    except subprocess.TimeoutExpired as exc:
-        elapsed = time.time() - start
-        stderr = ((exc.stderr or "") if isinstance(exc.stderr, str) else "").strip()
-        stdout = ((exc.stdout or "") if isinstance(exc.stdout, str) else "").strip()
-        details = stderr or stdout or "codex exec timed out without producing stderr/stdout"
-        raise SystemExit(
-            "ERROR: codex exec timed out after "
-            f"{int(elapsed)}s. This usually means the nested Codex CLI is unhealthy or its provider endpoint "
-            f"is unreachable. details={details}"
-        ) from exc
-    if result.returncode != 0:
+    attempts = max(1, int(max_transient_retries) + 1)
+    last_error: str | None = None
+    for attempt in range(1, attempts + 1):
+        start = time.time()
+        try:
+            result = subprocess.run(
+                cmd,
+                input=request_text,
+                text=True,
+                capture_output=True,
+                cwd=str(cwd),
+                encoding="utf-8",
+                timeout=max(1, int(timeout_seconds)),
+            )
+        except subprocess.TimeoutExpired as exc:
+            elapsed = time.time() - start
+            stderr = ((exc.stderr or "") if isinstance(exc.stderr, str) else "").strip()
+            stdout = ((exc.stdout or "") if isinstance(exc.stdout, str) else "").strip()
+            details = stderr or stdout or "codex exec timed out without producing stderr/stdout"
+            raise SystemExit(
+                "ERROR: codex exec timed out after "
+                f"{int(elapsed)}s. This usually means the nested Codex CLI is unhealthy or its provider endpoint "
+                f"is unreachable. details={details}"
+            ) from exc
+        if result.returncode == 0:
+            if not output_message_path.exists():
+                raise SystemExit(f"ERROR: Codex output file was not created: {output_message_path}")
+            return
         stderr = (result.stderr or "").strip()
         stdout = (result.stdout or "").strip()
         details = stderr or stdout or f"codex exec failed with exit code {result.returncode}"
-        raise SystemExit(f"ERROR: {details}")
-    if not output_message_path.exists():
-        raise SystemExit(f"ERROR: Codex output file was not created: {output_message_path}")
+        last_error = details
+        normalized = details.lower()
+        is_transient = any(hint in normalized for hint in TRANSIENT_CODEX_ERROR_HINTS)
+        if not is_transient or attempt >= attempts:
+            raise SystemExit(f"ERROR: {details}")
+        time.sleep(min(6, attempt))
+    raise SystemExit(f"ERROR: {last_error or 'codex exec failed'}")
 
 
 def write_codex_output_json(output_message_path: Path, llm_output_path: Path) -> dict[str, Any]:

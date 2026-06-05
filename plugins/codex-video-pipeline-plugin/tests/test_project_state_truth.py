@@ -288,3 +288,117 @@ def test_sync_project_truth_marks_stage01_generated_as_pending_confirmation(tmp_
     assert "待用户确认" in script_step["current_result"]
     assert "Stage 02" in script_step["current_blocker"]
     assert script_step["next_action"] == "确认剧本内容。"
+
+
+def test_sync_project_truth_marks_stage02_dispatch_failure_as_rerunnable(tmp_path: Path) -> None:
+    project_dir = tmp_path / "video_projects" / "stage02_dispatch_stalled"
+    (project_dir / "01_script").mkdir(parents=True, exist_ok=True)
+    manifest_path = project_dir / "project_manifest.json"
+    manifest_path.write_text(json.dumps({
+        "project_id": project_dir.name,
+        "project_title": "雨夜便利店",
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "current_stage": "STAGE_01_SCRIPT_CONFIRMED",
+        "status": "active",
+        "brief_locked": True,
+        "script_confirmed": True,
+        "storyboard_confirmed": False,
+        "allowed_next_stage": "STAGE_02_STORYBOARD",
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    (project_dir / "01_script" / "script.json").write_text(json.dumps({
+        "stage": "STAGE_01_SCRIPT_GENERATION",
+        "project_id": project_dir.name,
+        "title": "雨夜便利店门口",
+        "status": "confirmed",
+        "allowed_next_stage": "STAGE_02_STORYBOARD",
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    assert project_state.sync_project_manifest_truth(manifest_path) == manifest_path
+
+    synced = json.loads(manifest_path.read_text(encoding="utf-8"))
+    overview = synced["creator_status_overview"]
+    storyboard_step = next(step for step in overview["steps"] if step["step"] == "分镜")
+    recommended = overview["recommended_entry"]
+    assert overview["trusted_stage"] == "STAGE_01_SCRIPT_CONFIRMED"
+    assert storyboard_step["status"] == "current"
+    assert storyboard_step["current_result"] == "Stage 02 分镜尚未产出。"
+    assert "还没完成" in storyboard_step["current_blocker"]
+    assert storyboard_step["next_action"] == "重试 Stage 02 正式分镜生成。"
+    assert "continue_pipeline.py" in storyboard_step["command"]
+    assert recommended["label"] == "重试 Stage 02 正式分镜生成"
+    assert "continue_pipeline.py" in recommended["command"]
+
+
+def test_sync_project_truth_backfills_stage03_stage04_confirmation_when_stage05_is_confirmed(tmp_path: Path) -> None:
+    project_dir = tmp_path / "video_projects" / "stage05_backfill_confirmation"
+    (project_dir / "03_characters").mkdir(parents=True, exist_ok=True)
+    (project_dir / "04_keyframes").mkdir(parents=True, exist_ok=True)
+    (project_dir / "05_images").mkdir(parents=True, exist_ok=True)
+    manifest_path = project_dir / "project_manifest.json"
+    manifest_path.write_text(json.dumps({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "current_stage": "STAGE_05_KEYFRAME_IMAGES_CONFIRMED",
+        "status": "active",
+        "brief_locked": True,
+        "script_confirmed": True,
+        "storyboard_confirmed": True,
+        "character_bible_confirmed": False,
+        "keyframe_prompts_confirmed": False,
+        "keyframe_images_confirmed": True,
+        "allowed_next_stage": "STAGE_06_VIDEO_CLIPS",
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    (project_dir / "03_characters" / "character_bible.json").write_text(json.dumps({
+        "stage": "STAGE_03_CHARACTER_BIBLE",
+        "status": "draft",
+        "project_id": project_dir.name,
+        "self_check": {
+            "matches_locked_brief": True,
+            "matches_script": True,
+            "matches_storyboard": True,
+            "ready_for_keyframe_stage": True,
+        },
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    (project_dir / "04_keyframes" / "keyframe_prompts.json").write_text(json.dumps({
+        "stage": "STAGE_04_KEYFRAME_PROMPTS",
+        "status": "draft",
+        "project_id": project_dir.name,
+        "self_check": {
+            "matches_locked_brief": True,
+            "matches_script": True,
+            "matches_storyboard": True,
+            "uses_character_consistency": True,
+            "covers_all_storyboard_shots": True,
+            "ready_for_image_generation": True,
+        },
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    (project_dir / "05_images" / "keyframe_image_manifest.json").write_text(json.dumps({
+        "stage": "STAGE_05_KEYFRAME_IMAGES",
+        "status": "generated",
+        "project_id": project_dir.name,
+        "image_provider_strategy": {"primary": "comfyui_txt2img", "fallback": ["manual"]},
+        "jobs": [
+            {
+                "image_id": "IMG_S001_START",
+                "provider": "comfyui_txt2img",
+                "status": "succeeded",
+                "evidence": {"file_exists": True, "file_size_bytes": 2048},
+            }
+        ],
+        "quality_review": {"manual_review_cleared": True},
+        "self_check": {
+            "all_required_images_exist": True,
+            "manual_review_cleared": True,
+            "ready_for_video_clip_generation": True,
+        },
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    assert project_state.sync_project_manifest_truth(manifest_path) == manifest_path
+
+    synced = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert synced["character_bible_confirmed"] is True
+    assert synced["keyframe_prompts_confirmed"] is True
+    overview = synced["creator_status_overview"]
+    storyboard_step = next(step for step in overview["steps"] if step["step"] == "分镜")
+    assert storyboard_step["status"] == "confirmed"
+    assert storyboard_step["current_result"] == "分镜已确认。"

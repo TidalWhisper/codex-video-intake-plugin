@@ -1,9 +1,16 @@
 #!/usr/bin/env python3
 """Deterministic Stage 01 local semantics.
 
-Stage 01 keeps the codex-first artifact chain, but the actual structured output
-is generated locally from the locked brief to avoid recursive Codex CLI
-deadlocks in the desktop environment.
+This module is not part of the formal Stage 01 production runtime.
+
+It exists only for non-formal roles such as:
+
+- tests
+- fixtures
+- explicitly labeled manual fallback work
+
+The official Stage01 path must go through `run_stage01_codex_flow.py` and
+generate structured output through Codex/LLM rather than importing this module.
 """
 from __future__ import annotations
 

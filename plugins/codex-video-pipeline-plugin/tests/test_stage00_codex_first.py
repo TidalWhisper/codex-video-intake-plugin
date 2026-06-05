@@ -11,6 +11,7 @@ from types import ModuleType
 ROOT = Path(__file__).resolve().parents[1]
 INTAKE = ROOT / "skills" / "video-project-intake" / "scripts"
 PIPELINE = ROOT / "skills" / "video-production-pipeline" / "scripts"
+SCRIPT = ROOT / "skills" / "video-script-generation" / "scripts"
 sys.path.insert(0, str(ROOT / "scripts"))
 
 
@@ -74,6 +75,18 @@ validate_project_brief = load_module(
 create_project_folder = load_module(
     "create_project_folder_stage00_for_test",
     INTAKE / "create_project_folder.py",
+)
+new_script_template = load_module(
+    "new_script_template_stage00_for_test",
+    SCRIPT / "new_script_template.py",
+)
+stage01_local_semantics = load_module(
+    "stage01_local_semantics_stage00_for_test",
+    SCRIPT / "stage01_local_semantics.py",
+)
+stage01_stage_tests = load_module(
+    "stage00_stage01_shared_helpers_for_test",
+    ROOT / "tests" / "test_stage00_stage01.py",
 )
 stage00_intake_common = load_module(
     "stage00_intake_common_for_test",
@@ -612,3 +625,84 @@ def test_project_state_recommended_entry_prefers_stage00_command_when_brief_not_
     recommended = synced["creator_status_overview"]["recommended_entry"]
     assert recommended["label"] == "继续 Stage 00 立项流程"
     assert "run_stage00_controller.py" in recommended["command"]
+
+
+def test_official_pipeline_blank_project_reaches_stage01_without_rainy_store_phrase_regression(tmp_path: Path) -> None:
+    state_path = tmp_path / ".video_project" / "intake" / "intake_state.json"
+    project_root = tmp_path / "video_projects"
+    replies = [
+        "雨夜便利店门口，一个年轻女孩把伞留给没带伞的陌生人，然后自己走进雨里，回头发现门口多了一杯热可可。",
+        "B",
+        "G",
+        "M",
+        "B2",
+        "A，主角是二十多岁的年轻女性，穿浅色衬衫和深色长裤，手里拿一把黑伞。",
+        "B",
+        "B3",
+        "F",
+        "A",
+    ]
+
+    original_stage01_main = run_stage00_controller.run_stage00_lock_and_continue.run_stage01_from_locked_brief.main
+
+    def fake_stage01_main(argv: list[str] | None = None) -> int:
+        assert argv is not None
+        locked_brief = Path(argv[0])
+        script_json = Path(argv[1])
+        script_json.parent.mkdir(parents=True, exist_ok=True)
+        llm_output = stage01_stage_tests.make_stage01_llm_output_for_rainy_store()
+        (script_json.parent / "stage01_llm_output.json").write_text(
+            json.dumps(llm_output, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        return new_script_template.main([
+            "new_script_template.py",
+            str(locked_brief),
+            str(script_json),
+        ])
+
+    run_stage00_controller.run_stage00_lock_and_continue.run_stage01_from_locked_brief.main = fake_stage01_main
+
+    try:
+        assert run_stage00_controller.main([
+            "--state-json",
+            str(state_path),
+            "--project-root",
+            str(project_root),
+        ]) == 0
+        for reply in replies:
+            assert run_stage00_controller.main([
+                "--state-json",
+                str(state_path),
+                "--project-root",
+                str(project_root),
+                "--user-reply",
+                reply,
+            ]) == 0
+    finally:
+        run_stage00_controller.run_stage00_lock_and_continue.run_stage01_from_locked_brief.main = original_stage01_main
+
+    projects = [item for item in project_root.iterdir() if item.is_dir()]
+    assert len(projects) == 1
+    project_dir = projects[0]
+    manifest = json.loads((project_dir / "project_manifest.json").read_text(encoding="utf-8"))
+    assert manifest["current_stage"] == "STAGE_01_SCRIPT_GENERATION"
+    assert manifest["brief_locked"] is True
+    assert manifest["script_confirmed"] is False
+
+    summary_path = project_dir / "00_intake" / "stage00_brief_confirmation_summary.md"
+    assert summary_path.exists()
+    assert "背景配乐（underscore）" in summary_path.read_text(encoding="utf-8")
+
+    script_path = project_dir / "01_script" / "script.json"
+    assert script_path.exists()
+    script = json.loads(script_path.read_text(encoding="utf-8-sig"))
+    assert script["title"] == "雨夜留下的伞"
+    assert "热可可" in script["logline"]
+
+    beat_summaries = [str(beat.get("summary") or "") for beat in script["duration_plan"]["beats"]]
+    visuals = [str(section.get("visual") or "") for section in script["script"]["sections"]]
+    assert any("最后一把伞" in summary or "淋着雨" in summary for summary in beat_summaries)
+    assert any("热可可" in summary for summary in beat_summaries)
+    assert all("年轻女孩雨夜便利店门口" not in summary for summary in beat_summaries)
+    assert all("雨夜便利店门口里，年轻女孩雨夜便利店门口" not in visual for visual in visuals)

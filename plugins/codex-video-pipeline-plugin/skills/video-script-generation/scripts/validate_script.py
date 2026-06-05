@@ -33,7 +33,7 @@ REQUIRED_TOP = [
 
 def load_json(path: Path) -> dict[str, Any]:
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        return json.loads(path.read_text(encoding="utf-8-sig"))
     except FileNotFoundError:
         raise SystemExit(f"ERROR: file not found: {path}")
     except json.JSONDecodeError as exc:

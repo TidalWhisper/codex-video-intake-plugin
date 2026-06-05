@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Build a deterministic Stage 01 prompt packet from a locked brief.
 
-This is a first-batch shell interface for the planned Codex-first Stage 01
-refactor. It does not switch the active Stage 01 runtime yet.
+This module is part of the active Stage 01 formal runtime. Its job is to
+compile hard constraints and anchor data from the locked brief for Codex/LLM
+generation. It must not author creative prose itself.
 """
 from __future__ import annotations
 

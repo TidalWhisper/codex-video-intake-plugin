@@ -116,6 +116,41 @@ def _stage01_runner_command(project_dir: Path) -> str:
     )
 
 
+def _stage01_confirm_command(project_dir: Path) -> str:
+    return (
+        "python skills/video-production-pipeline/scripts/confirm_stage01_and_continue.py "
+        f"{as_posix(project_dir)}"
+    )
+
+
+def _continue_pipeline_command(project_dir: Path) -> str:
+    return (
+        "python skills/video-production-pipeline/scripts/continue_pipeline.py "
+        f"--project-dir {as_posix(project_dir)}"
+    )
+
+
+def _stage02_confirm_command(project_dir: Path) -> str:
+    return (
+        "python skills/video-production-pipeline/scripts/confirm_stage02_and_continue.py "
+        f"{as_posix(project_dir)}"
+    )
+
+
+def _stage03_confirm_command(project_dir: Path) -> str:
+    return (
+        "python skills/video-production-pipeline/scripts/confirm_stage03_and_continue.py "
+        f"{as_posix(project_dir)}"
+    )
+
+
+def _stage04_confirm_command(project_dir: Path) -> str:
+    return (
+        "python skills/video-production-pipeline/scripts/confirm_stage04_and_continue.py "
+        f"{as_posix(project_dir)}"
+    )
+
+
 def _stage01_generated(data: dict[str, Any], project_dir: Path) -> bool:
     current_stage = _text(data.get("current_stage"))
     if current_stage == "STAGE_01_SCRIPT_GENERATION":
@@ -642,7 +677,15 @@ def _creator_steps(
         stage00_result = "Stage 00 intake 正在进行中。"
         stage00_next_action = "继续回答当前立项问题。"
     stage01_command = _stage01_runner_command(project_dir) if _bool(data.get("brief_locked")) else ""
+    stage01_confirm_command = _stage01_confirm_command(project_dir) if _bool(data.get("brief_locked")) else ""
+    continue_pipeline_command = _continue_pipeline_command(project_dir) if _bool(data.get("script_confirmed")) else ""
+    stage02_confirm_command = _stage02_confirm_command(project_dir)
+    stage03_confirm_command = _stage03_confirm_command(project_dir)
+    stage04_confirm_command = _stage04_confirm_command(project_dir)
     script_generated = _stage01_generated(data, project_dir)
+    storyboard_generated = (project_dir / "02_storyboard" / "storyboard.json").exists()
+    character_generated = (project_dir / "03_characters" / "character_bible.json").exists()
+    keyframe_generated = (project_dir / "04_keyframes" / "keyframe_prompts.json").exists()
     early = [
         {
             "step": "立项",
@@ -684,17 +727,53 @@ def _creator_steps(
                 else ("确认剧本内容。" if script_generated else ("运行 Stage 01 自动剧本生成。" if _bool(data.get("brief_locked")) else "先完成立项并锁定 brief。"))
             ),
             "risk_hint": "",
-            "command": stage01_command if _bool(data.get("brief_locked")) and not _bool(data.get("script_confirmed")) and not script_generated else "",
+            "command": (
+                stage01_confirm_command
+                if _bool(data.get("brief_locked")) and not _bool(data.get("script_confirmed")) and script_generated
+                else (stage01_command if _bool(data.get("brief_locked")) and not _bool(data.get("script_confirmed")) and not script_generated else "")
+            ),
         },
     ]
-    storyboard_ready = _bool(data.get("storyboard_confirmed")) and _bool(data.get("character_bible_confirmed")) and _bool(data.get("keyframe_prompts_confirmed"))
     early.append({
         "step": "分镜",
-        "status": "confirmed" if storyboard_ready else ("current" if _bool(data.get("script_confirmed")) else "pending"),
-        "current_result": "分镜、角色设定和关键帧提示词已齐。" if storyboard_ready else "分镜链路仍在准备中。",
-        "current_blocker": "" if storyboard_ready else "Stage 02-04 任一步未确认，关键帧阶段就不应被当成完全就绪。",
-        "next_action": "补齐分镜、角色设定和关键帧提示词确认。" if not storyboard_ready else "进入关键帧阶段。",
+        "status": (
+            "confirmed"
+            if _bool(data.get("storyboard_confirmed"))
+            else ("generated" if storyboard_generated else ("current" if _bool(data.get("script_confirmed")) else "pending"))
+        ),
+        "current_result": (
+            "分镜已确认。"
+            if _bool(data.get("storyboard_confirmed"))
+            else (
+                "Stage 02 分镜已生成，待用户确认。"
+                if storyboard_generated
+                else ("Stage 02 分镜尚未产出。" if _bool(data.get("script_confirmed")) else "分镜链路仍在准备中。")
+            )
+        ),
+        "current_blocker": (
+            ""
+            if _bool(data.get("storyboard_confirmed"))
+            else (
+                "分镜还未确认，不能正式推进到 Stage 03 人物设定。"
+                if storyboard_generated
+                else (
+                    "Stage 02 正式分镜生成还没完成，当前没有可确认的分镜结果。"
+                    if _bool(data.get("script_confirmed"))
+                    else "需要先确认剧本，系统才会正式进入 Stage 02 分镜生成。"
+                )
+            )
+        ),
+        "next_action": (
+            "进入人物设定阶段。"
+            if _bool(data.get("storyboard_confirmed"))
+            else ("确认分镜内容。" if storyboard_generated else ("重试 Stage 02 正式分镜生成。" if _bool(data.get("script_confirmed")) else "先确认剧本并进入 Stage 02。"))
+        ),
         "risk_hint": "",
+        "command": (
+            stage02_confirm_command
+            if storyboard_generated and not _bool(data.get("storyboard_confirmed"))
+            else continue_pipeline_command
+        ),
     })
     stage05 = stage_truth.get("stage05")
     keyframe_step = {
@@ -708,20 +787,86 @@ def _creator_steps(
     if stage05 is None and reference_state and reference_state.get("safe_to_auto_generate"):
         keyframe_step = {
             "step": "关键帧",
-            "status": "current" if storyboard_ready else "pending",
-            "current_result": reference_state.get("current_result") or "角色参考图已就绪，关键帧阶段可以按正常路径推进。",
-            "current_blocker": "",
-            "next_action": reference_state.get("next_action") or "确认当前关键帧提示词后，进入 Stage 05 自动生图。",
+            "status": (
+                "confirmed"
+                if _bool(data.get("keyframe_prompts_confirmed"))
+                else (
+                    "generated"
+                    if character_generated and not _bool(data.get("character_bible_confirmed"))
+                    else ("generated" if keyframe_generated else ("current" if _bool(data.get("character_bible_confirmed")) else "pending"))
+                )
+            ),
+            "current_result": (
+                "Stage 04 关键帧提示词已确认。"
+                if _bool(data.get("keyframe_prompts_confirmed"))
+                else (
+                    "Stage 03 人物设定已生成，待用户确认。"
+                    if character_generated and not _bool(data.get("character_bible_confirmed"))
+                    else (
+                        "Stage 04 关键帧提示词已生成，待用户确认。"
+                        if keyframe_generated
+                        else (
+                            "Stage 03 人物设定已确认，角色参考图已就绪。"
+                            if _bool(data.get("character_bible_confirmed"))
+                            else (reference_state.get("current_result") or "角色参考图已就绪，关键帧阶段可以按正常路径推进。")
+                        )
+                    )
+                )
+            ),
+            "current_blocker": (
+                ""
+                if _bool(data.get("keyframe_prompts_confirmed"))
+                else (
+                    "人物设定还未确认，不能正式推进到 Stage 04。"
+                    if character_generated and not _bool(data.get("character_bible_confirmed"))
+                    else ("提示词包还未确认，不能正式推进到 Stage 05。" if keyframe_generated else "")
+                )
+            ),
+            "next_action": (
+                "进入 Stage 05 关键帧图片生成。"
+                if _bool(data.get("keyframe_prompts_confirmed"))
+                else (
+                    "确认人物设定。"
+                    if character_generated and not _bool(data.get("character_bible_confirmed"))
+                    else ("确认当前提示词包。" if keyframe_generated else (reference_state.get("next_action") or "确认当前关键帧提示词后，进入 Stage 05 自动生图。"))
+                )
+            ),
             "risk_hint": reference_state.get("risk_hint") or "",
+            "command": (
+                stage03_confirm_command
+                if character_generated and not _bool(data.get("character_bible_confirmed"))
+                else (stage04_confirm_command if keyframe_generated and not _bool(data.get("keyframe_prompts_confirmed")) else "")
+            ),
         }
     elif stage05 is None and reference_state and not reference_state.get("safe_to_auto_generate"):
         keyframe_step = {
             "step": "关键帧",
-            "status": "current" if storyboard_ready else "pending",
-            "current_result": reference_state.get("current_result") or "角色参考图仍未补齐。",
-            "current_blocker": reference_state.get("current_blocker") or "",
-            "next_action": reference_state.get("next_action") or "先补角色参考图。",
+            "status": (
+                "generated"
+                if character_generated and not _bool(data.get("character_bible_confirmed"))
+                else ("generated" if keyframe_generated and not _bool(data.get("keyframe_prompts_confirmed")) else ("current" if _bool(data.get("storyboard_confirmed")) else "pending"))
+            ),
+            "current_result": (
+                "Stage 03 人物设定已生成，待用户确认。"
+                if character_generated and not _bool(data.get("character_bible_confirmed"))
+                else ("Stage 04 关键帧提示词已生成，但角色参考图未齐。" if keyframe_generated and not _bool(data.get("keyframe_prompts_confirmed")) else (reference_state.get("current_result") or "角色参考图仍未补齐。"))
+            ),
+            "current_blocker": (
+                "人物设定还未确认，不能正式推进到 Stage 04。"
+                if character_generated and not _bool(data.get("character_bible_confirmed"))
+                else (reference_state.get("current_blocker") or "")
+            ),
+            "next_action": (
+                "确认人物设定。"
+                if character_generated and not _bool(data.get("character_bible_confirmed"))
+                else ("确认当前提示词包并补角色参考图。" if keyframe_generated and not _bool(data.get("keyframe_prompts_confirmed")) else (reference_state.get("next_action") or "先补角色参考图。"))
+            ),
             "risk_hint": reference_state.get("risk_hint") or "",
+            "command": (
+                stage03_confirm_command
+                if character_generated and not _bool(data.get("character_bible_confirmed"))
+                else (stage04_confirm_command if keyframe_generated and not _bool(data.get("keyframe_prompts_confirmed")) else "")
+            ),
         }
     early.append(keyframe_step)
     stage08 = stage_truth.get("stage08")
@@ -837,11 +982,31 @@ def _recommended_entry(
             "description": "官方入口现在统一走 run_stage00_controller.py，内部承接提问、汇总、A/B/C 确认和自动续到 Stage 01。",
         }
     if current_step_name == "剧本" and current_step_command:
+        label = "确认剧本并进入 Stage 02" if "confirm_stage01_and_continue.py" in current_step_command else "运行 Stage 01 自动剧本生成"
+        description = (
+            "正式确认剧本后，官方链路会自动推进到 Stage 02 分镜生成。"
+            if "confirm_stage01_and_continue.py" in current_step_command
+            else "Stage 00 锁 brief 后，$video-production-pipeline 的下一步就是自动进入 Stage 01 并调用官方 Stage 01 执行脚本。"
+        )
         return {
-            "label": "运行 Stage 01 自动剧本生成",
+            "label": label,
             "command": current_step_command,
             "kind": "command",
-            "description": "Stage 00 锁 brief 后，$video-production-pipeline 的下一步就是自动进入 Stage 01 并调用官方 Stage 01 执行脚本。",
+            "description": description,
+        }
+    if current_step_name == "分镜" and current_step_command:
+        if "confirm_stage02_and_continue.py" in current_step_command:
+            return {
+                "label": "确认分镜并进入 Stage 03",
+                "command": current_step_command,
+                "kind": "command",
+                "description": "正式确认分镜后，官方链路会自动推进到 Stage 03 人物设定生成。",
+            }
+        return {
+            "label": "重试 Stage 02 正式分镜生成",
+            "command": current_step_command,
+            "kind": "command",
+            "description": "当 Stage 01 已确认但分镜还没真正落盘时，从这里重试官方 Stage 02 正式生成链路。",
         }
     stage05 = stage_truth.get("stage05")
     workbench_path = project_dir / "05_images" / "stage05_review_workbench.html"
@@ -851,6 +1016,19 @@ def _recommended_entry(
             "path": as_posix(workbench_path),
             "kind": "file",
             "description": "默认从这里看图、审图、通过或重跑，不必先读 manifest 和脚本名。",
+        }
+    if current_step_name == "关键帧" and current_step_command:
+        label = "确认提示词并进入 Stage 05" if "confirm_stage04_and_continue.py" in current_step_command else "确认人物设定并进入 Stage 04"
+        description = (
+            "正式确认提示词包后，官方链路会自动进入 Stage 05 并脚手架出图清单。"
+            if "confirm_stage04_and_continue.py" in current_step_command
+            else "正式确认人物设定后，官方链路会自动推进到 Stage 04 关键帧提示词生成。"
+        )
+        return {
+            "label": label,
+            "command": current_step_command,
+            "kind": "command",
+            "description": description,
         }
     if reference_state and current_step_name == "关键帧":
         actions = reference_state.get("actions") if isinstance(reference_state.get("actions"), list) else []
@@ -862,6 +1040,52 @@ def _recommended_entry(
         "kind": "file",
         "description": _text(current_step.get("next_action")) or "从这里继续当前项目。",
     }
+
+
+def _manifest_self_check_true(data: dict[str, Any] | None, required_keys: list[str]) -> bool:
+    if not isinstance(data, dict):
+        return False
+    self_check = _as_dict(data.get("self_check"))
+    return all(self_check.get(key) is True for key in required_keys)
+
+
+def _should_backfill_early_confirmation(data: dict[str, Any], stage_truth: dict[str, dict[str, Any]]) -> bool:
+    current_stage = _text(data.get("current_stage"))
+    if current_stage.startswith(("STAGE_05", "STAGE_06", "STAGE_07", "STAGE_08", "STAGE_09")):
+        return True
+    if any(stage_truth.get(key) is not None for key in ["stage05", "stage06", "stage07", "stage08"]):
+        return True
+    return any(
+        _bool(data.get(flag))
+        for flag in ["keyframe_images_confirmed", "video_clips_confirmed", "audio_confirmed", "assembly_confirmed"]
+    )
+
+
+def _sync_early_stage_confirmation_flags(project_dir: Path, data: dict[str, Any], stage_truth: dict[str, dict[str, Any]]) -> None:
+    if not _should_backfill_early_confirmation(data, stage_truth):
+        return
+
+    _, character_bible = _read_stage_manifest(project_dir, STAGE03_MANIFEST)
+    _, keyframe_prompts = _read_stage_manifest(project_dir, STAGE04_MANIFEST)
+
+    if not _bool(data.get("character_bible_confirmed")) and _manifest_self_check_true(
+        character_bible,
+        ["matches_locked_brief", "matches_script", "matches_storyboard", "ready_for_keyframe_stage"],
+    ):
+        data["character_bible_confirmed"] = True
+
+    if not _bool(data.get("keyframe_prompts_confirmed")) and _manifest_self_check_true(
+        keyframe_prompts,
+        [
+            "matches_locked_brief",
+            "matches_script",
+            "matches_storyboard",
+            "uses_character_consistency",
+            "covers_all_storyboard_shots",
+            "ready_for_image_generation",
+        ],
+    ):
+        data["keyframe_prompts_confirmed"] = True
 
 
 def build_creator_status_overview(project_dir: Path, data: dict[str, Any], stage_truth: dict[str, dict[str, Any]]) -> dict[str, Any]:
@@ -1179,6 +1403,7 @@ def sync_project_manifest_truth(manifest_path: Path) -> Path | None:
         state = builder(project_dir)
         if state is not None:
             stage_truth[key] = state
+    _sync_early_stage_confirmation_flags(project_dir, data, stage_truth)
     overview = build_creator_status_overview(project_dir, data, stage_truth)
     trusted_stage, allowed_next = _derive_project_stage(data, stage_truth)
     data["current_stage"] = trusted_stage

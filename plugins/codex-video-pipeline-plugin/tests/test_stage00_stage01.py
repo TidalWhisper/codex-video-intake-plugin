@@ -57,6 +57,7 @@ build_stage03_prompt_packet = load_module("build_stage03_prompt_packet_for_test"
 write_stage03_outputs = load_module("write_stage03_outputs_for_test", CHARACTER / "write_stage03_outputs.py")
 new_character_bible_template = load_module("new_character_bible_template_for_test", CHARACTER / "new_character_bible_template.py")
 run_stage03_codex_flow = load_module("run_stage03_codex_flow_for_test", CHARACTER / "run_stage03_codex_flow.py")
+stage03_local_semantics = load_module("stage03_local_semantics_for_test", CHARACTER / "stage03_local_semantics.py")
 validate_character_bible = load_module("validate_character_bible_for_test", CHARACTER / "validate_character_bible.py")
 build_stage04_prompt_packet = load_module("build_stage04_prompt_packet_for_test", KEYFRAME / "build_stage04_prompt_packet.py")
 write_stage04_outputs = load_module("write_stage04_outputs_for_test", KEYFRAME / "write_stage04_outputs.py")
@@ -93,6 +94,10 @@ run_stage01_from_locked_brief = load_module("run_stage01_from_locked_brief_for_t
 run_stage02_from_confirmed_script = load_module("run_stage02_from_confirmed_script_for_test", PIPELINE / "run_stage02_from_confirmed_script.py")
 run_stage03_from_confirmed_storyboard = load_module("run_stage03_from_confirmed_storyboard_for_test", PIPELINE / "run_stage03_from_confirmed_storyboard.py")
 run_stage04_from_confirmed_character_bible = load_module("run_stage04_from_confirmed_character_bible_for_test", PIPELINE / "run_stage04_from_confirmed_character_bible.py")
+confirm_stage01_and_continue = load_module("confirm_stage01_and_continue_for_test", PIPELINE / "confirm_stage01_and_continue.py")
+confirm_stage02_and_continue = load_module("confirm_stage02_and_continue_for_test", PIPELINE / "confirm_stage02_and_continue.py")
+confirm_stage03_and_continue = load_module("confirm_stage03_and_continue_for_test", PIPELINE / "confirm_stage03_and_continue.py")
+confirm_stage04_and_continue = load_module("confirm_stage04_and_continue_for_test", PIPELINE / "confirm_stage04_and_continue.py")
 pipeline_blueprints = load_module("pipeline_blueprints_for_test", ROOT / "scripts" / "pipeline_blueprints.py")
 
 
@@ -233,6 +238,7 @@ def seed_confirmed_stage_chain(project_dir: Path) -> dict[str, Path]:
         "status": "confirmed",
         "allowed_next_stage": "STAGE_02_STORYBOARD",
     })
+    script["settings"] = ["落日余辉海滩"]
     script_json.write_text(json.dumps(script, ensure_ascii=False, indent=2), encoding="utf-8")
 
     storyboard_json = storyboard_dir / "storyboard.json"
@@ -1019,6 +1025,13 @@ def test_validate_script_example_final() -> None:
     assert ok, errors
 
 
+def test_validate_script_load_json_accepts_utf8_bom(tmp_path: Path) -> None:
+    path = tmp_path / "script.json"
+    path.write_text("\ufeff" + json.dumps(json.loads((TEMPLATES / "script.example.json").read_text(encoding="utf-8")), ensure_ascii=False), encoding="utf-8")
+    data = validate_script.load_json(path)
+    assert data["stage"] == "STAGE_01_SCRIPT_GENERATION"
+
+
 def test_new_script_template_generates_final_ready_draft(tmp_path: Path) -> None:
     project_dir = tmp_path / "video_projects" / "video_20260528_103000_sunset_beach_girl"
     intake_dir = project_dir / "00_intake"
@@ -1268,13 +1281,40 @@ def test_run_stage01_codex_flow_generates_stage01_package_without_manual_llm_fil
     locked_brief = intake_dir / "project_brief.locked.json"
     locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
 
+    def fake_generate_stage01_llm_output(  # noqa: ANN001
+        *,
+        request_text,
+        schema_path,
+        llm_output_path,
+        output_message_path,
+        codex_bin,
+        cwd,
+    ):
+        assert "Stage 01" in request_text
+        assert schema_path.name == "stage01_llm_output.schema.json"
+        assert str(codex_bin)
+        assert cwd
+        llm_output = stage01_local_semantics.build_stage01_llm_output(brief)
+        llm_output_path.write_text(json.dumps(llm_output, ensure_ascii=False, indent=2), encoding="utf-8")
+        output_message_path.write_text(json.dumps(llm_output, ensure_ascii=False, indent=2), encoding="utf-8")
+        return llm_output
+
+    original_generate = run_stage01_codex_flow.generate_stage01_llm_output
+    original_resolve = run_stage01_codex_flow.resolve_codex_bin
+    run_stage01_codex_flow.generate_stage01_llm_output = fake_generate_stage01_llm_output
+    run_stage01_codex_flow.resolve_codex_bin = lambda value: "codex.cmd"  # noqa: E731
+
     script_json = script_dir / "script.json"
-    assert run_stage01_codex_flow.main([str(locked_brief), str(script_json)]) == 0
+    try:
+        assert run_stage01_codex_flow.main([str(locked_brief), str(script_json)]) == 0
+    finally:
+        run_stage01_codex_flow.generate_stage01_llm_output = original_generate
+        run_stage01_codex_flow.resolve_codex_bin = original_resolve
 
     assert (script_dir / "stage01_prompt_packet.json").exists()
     assert (script_dir / "stage01_llm_output.json").exists()
     assert (script_dir / "stage01_codex_generation_request.txt").exists()
-    assert "STAGE01_LOCAL_EXECUTION_MODE" in (script_dir / "stage01_codex_last_message.txt").read_text(encoding="utf-8")
+    assert (script_dir / "stage01_codex_last_message.txt").exists()
     script_data = json.loads(script_json.read_text(encoding="utf-8"))
     llm_output = json.loads((script_dir / "stage01_llm_output.json").read_text(encoding="utf-8"))
     assert script_data["title"] == llm_output["selected_title"]
@@ -1292,32 +1332,43 @@ def test_run_stage01_codex_flow_auto_repairs_failed_first_attempt(tmp_path: Path
     locked_brief = intake_dir / "project_brief.locked.json"
     locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    original_builder = run_stage01_codex_flow.build_stage01_llm_output
     calls = {"count": 0}
 
-    def flaky_local_builder(local_brief, prompt_packet=None, repair_packet=None):  # noqa: ANN001
+    def fake_generate_stage01_llm_output(  # noqa: ANN001
+        *,
+        request_text,
+        schema_path,
+        llm_output_path,
+        output_message_path,
+        codex_bin,
+        cwd,
+    ):
         calls["count"] += 1
         if calls["count"] == 1:
             bad_first_output = stage01_local_semantics.build_stage01_llm_output(
-                local_brief,
-                prompt_packet=prompt_packet,
-                repair_packet=repair_packet,
+                brief,
             )
             bad_first_output["characters"][0]["name"] = "城市景观规划师"
             bad_first_output["characters"][0]["identity_anchor"] = "长期被工作消耗的女性景观规划师"
             bad_first_output["settings"] = ["城市边缘"]
             bad_first_output["beats"] = bad_first_output["beats"][:1]
+            llm_output_path.write_text(json.dumps(bad_first_output, ensure_ascii=False, indent=2), encoding="utf-8")
+            output_message_path.write_text(json.dumps(bad_first_output, ensure_ascii=False, indent=2), encoding="utf-8")
             return bad_first_output
-        return original_builder(local_brief, prompt_packet=prompt_packet, repair_packet=repair_packet)
+        repaired_output = stage01_local_semantics.build_stage01_llm_output(brief)
+        llm_output_path.write_text(json.dumps(repaired_output, ensure_ascii=False, indent=2), encoding="utf-8")
+        output_message_path.write_text(json.dumps(repaired_output, ensure_ascii=False, indent=2), encoding="utf-8")
+        return repaired_output
 
-    monkeypatch.setattr(run_stage01_codex_flow, "build_stage01_llm_output", flaky_local_builder)
+    monkeypatch.setattr(run_stage01_codex_flow, "generate_stage01_llm_output", fake_generate_stage01_llm_output)
+    monkeypatch.setattr(run_stage01_codex_flow, "resolve_codex_bin", lambda value: "codex.cmd")
 
     script_json = script_dir / "script.json"
     assert run_stage01_codex_flow.main([str(locked_brief), str(script_json), "--max-repair-attempts", "1"]) == 0
 
     assert calls["count"] == 2
     assert (script_dir / "stage01_codex_repair_request_attempt_1.txt").exists()
-    assert "STAGE01_LOCAL_REPAIR_MODE" in (script_dir / "stage01_codex_repair_last_message_attempt_1.txt").read_text(encoding="utf-8")
+    assert (script_dir / "stage01_codex_repair_last_message_attempt_1.txt").exists()
     assert not (script_dir / "stage01_validation_errors.json").exists()
     assert not (script_dir / "stage01_repair_packet.json").exists()
     script_data = json.loads(script_json.read_text(encoding="utf-8"))
@@ -1325,7 +1376,351 @@ def test_run_stage01_codex_flow_auto_repairs_failed_first_attempt(tmp_path: Path
     assert all(str(section.get("music_cue") or "").startswith("song:") for section in script_data["script"]["sections"])
 
 
-def test_run_stage02_codex_flow_generates_storyboard_package_without_manual_llm_fill(tmp_path: Path) -> None:
+def test_stage01_formal_runner_no_longer_imports_local_semantics() -> None:
+    runner_path = SCRIPT / "run_stage01_codex_flow.py"
+    source = runner_path.read_text(encoding="utf-8")
+
+    assert "stage01_local_semantics" not in source
+    assert "build_stage01_llm_output" not in source
+    assert "STAGE01_LOCAL_EXECUTION_MODE" not in source
+    assert "STAGE01_LOCAL_REPAIR_MODE" not in source
+
+
+def test_stage01_formal_entry_chain_has_no_local_semantics_reference() -> None:
+    for path in [
+        PIPELINE / "run_stage01_from_locked_brief.py",
+        SCRIPT / "run_stage01_codex_flow.py",
+    ]:
+        source = path.read_text(encoding="utf-8")
+        assert "stage01_local_semantics" not in source
+        assert "build_stage01_llm_output" not in source
+        assert "STAGE01_LOCAL_EXECUTION_MODE" not in source
+        assert "STAGE01_LOCAL_REPAIR_MODE" not in source
+
+
+def test_stage02_formal_runner_no_longer_imports_local_semantics() -> None:
+    runner_path = STORYBOARD / "run_stage02_codex_flow.py"
+    source = runner_path.read_text(encoding="utf-8")
+
+    assert "stage02_local_semantics" not in source
+    assert "build_stage02_llm_output" not in source
+    assert "STAGE02_LOCAL_EXECUTION_MODE" not in source
+    assert "STAGE02_LOCAL_REPAIR_MODE" not in source
+
+
+def test_stage02_formal_entry_chain_has_no_local_semantics_reference() -> None:
+    for path in [
+        PIPELINE / "run_stage02_from_confirmed_script.py",
+        STORYBOARD / "run_stage02_codex_flow.py",
+    ]:
+        source = path.read_text(encoding="utf-8")
+        assert "stage02_local_semantics" not in source
+        assert "build_stage02_llm_output" not in source
+        assert "STAGE02_LOCAL_EXECUTION_MODE" not in source
+        assert "STAGE02_LOCAL_REPAIR_MODE" not in source
+
+
+def test_stage03_formal_runner_no_longer_imports_local_semantics() -> None:
+    runner_path = CHARACTER / "run_stage03_codex_flow.py"
+    source = runner_path.read_text(encoding="utf-8")
+
+    assert "stage03_local_semantics" not in source
+    assert "build_stage03_llm_output" not in source
+    assert "STAGE03_LOCAL_EXECUTION_MODE" not in source
+    assert "STAGE03_LOCAL_REPAIR_MODE" not in source
+
+
+def test_stage03_formal_entry_chain_has_no_local_semantics_reference() -> None:
+    for path in [
+        PIPELINE / "run_stage03_from_confirmed_storyboard.py",
+        CHARACTER / "run_stage03_codex_flow.py",
+    ]:
+        source = path.read_text(encoding="utf-8")
+        assert "stage03_local_semantics" not in source
+        assert "build_stage03_llm_output" not in source
+        assert "STAGE03_LOCAL_EXECUTION_MODE" not in source
+        assert "STAGE03_LOCAL_REPAIR_MODE" not in source
+
+
+def test_stage04_formal_runner_no_longer_imports_local_semantics() -> None:
+    runner_path = KEYFRAME / "run_stage04_codex_flow.py"
+    source = runner_path.read_text(encoding="utf-8")
+
+    assert "stage04_local_semantics" not in source
+    assert "build_stage04_llm_output" not in source
+    assert "STAGE04_LOCAL_EXECUTION_MODE" not in source
+    assert "STAGE04_LOCAL_REPAIR_MODE" not in source
+
+
+def test_stage04_formal_entry_chain_has_no_local_semantics_reference() -> None:
+    for path in [
+        PIPELINE / "run_stage04_from_confirmed_character_bible.py",
+        KEYFRAME / "run_stage04_codex_flow.py",
+    ]:
+        source = path.read_text(encoding="utf-8")
+        assert "stage04_local_semantics" not in source
+        assert "build_stage04_llm_output" not in source
+        assert "STAGE04_LOCAL_EXECUTION_MODE" not in source
+        assert "STAGE04_LOCAL_REPAIR_MODE" not in source
+
+
+def test_stage01_to_stage02_contract_preserves_beats_sections_and_anchors(tmp_path: Path) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260605_210000_contract_gate"
+    intake_dir = project_dir / "00_intake"
+    script_dir = project_dir / "01_script"
+    storyboard_dir = project_dir / "02_storyboard"
+    intake_dir.mkdir(parents=True, exist_ok=True)
+    script_dir.mkdir(parents=True, exist_ok=True)
+    storyboard_dir.mkdir(parents=True, exist_ok=True)
+
+    brief = load_rainy_store_brief(project_dir)
+    locked_brief = intake_dir / "project_brief.locked.json"
+    locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    llm_output = make_stage01_llm_output_for_rainy_store()
+    script_json = script_dir / "script.json"
+    script_payload = write_stage01_outputs.write_stage01_outputs(
+        brief,
+        llm_output,
+        locked_brief,
+        script_dir / "stage01_llm_output.json",
+        script_json,
+    )
+
+    stage02_packet = build_stage02_prompt_packet.build_packet(brief, script_payload, locked_brief, script_json)
+
+    assert script_payload["generation_meta"]["mode"] == "codex_llm_output"
+    assert stage02_packet["shot_plan"]["target_shot_count"] == len(script_payload["duration_plan"]["beats"])
+    assert stage02_packet["upstream_script"]["beats"] == script_payload["duration_plan"]["beats"]
+    assert stage02_packet["upstream_script"]["sections"] == script_payload["script"]["sections"]
+    assert stage02_packet["story_anchors"] == script_payload["story_anchors"]
+    assert stage02_packet["hard_constraints"]["voice_mode"] == script_payload["script"]["voice_mode"]
+    assert stage02_packet["hard_constraints"]["music_profile"] == script_payload["script"]["music_profile"]
+
+
+def test_stage01_formal_output_flows_through_stage02_formal_entry(tmp_path: Path, monkeypatch) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260605_213500_stage02_formal_flow"
+    intake_dir = project_dir / "00_intake"
+    script_dir = project_dir / "01_script"
+    storyboard_dir = project_dir / "02_storyboard"
+    intake_dir.mkdir(parents=True, exist_ok=True)
+    script_dir.mkdir(parents=True, exist_ok=True)
+    storyboard_dir.mkdir(parents=True, exist_ok=True)
+
+    brief = load_rainy_store_brief(project_dir)
+    locked_brief = intake_dir / "project_brief.locked.json"
+    locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    script_payload = write_stage01_outputs.write_stage01_outputs(
+        brief,
+        make_stage01_llm_output_for_rainy_store(),
+        locked_brief,
+        script_dir / "stage01_llm_output.json",
+        script_dir / "script.json",
+    )
+
+    def fake_generate_stage02_llm_output(  # noqa: ANN001
+        *,
+        request_text,
+        schema_path,
+        llm_output_path,
+        output_message_path,
+        codex_bin,
+        cwd,
+    ):
+        assert "Stage 02" in request_text
+        assert schema_path.name == "stage02_llm_output.schema.json"
+        assert str(codex_bin)
+        assert cwd
+        llm_output = make_stage02_llm_output_for_rainy_store()
+        llm_output_path.write_text(json.dumps(llm_output, ensure_ascii=False, indent=2), encoding="utf-8")
+        output_message_path.write_text(json.dumps(llm_output, ensure_ascii=False, indent=2), encoding="utf-8")
+        return llm_output
+
+    monkeypatch.setattr(run_stage02_codex_flow, "generate_stage02_llm_output", fake_generate_stage02_llm_output)
+    monkeypatch.setattr(run_stage02_codex_flow, "resolve_codex_bin", lambda value: "codex.cmd")
+    monkeypatch.setattr(run_stage02_from_confirmed_script, "run_stage02_codex_flow_main", run_stage02_codex_flow.main)
+
+    storyboard_json = storyboard_dir / "storyboard.json"
+    assert run_stage02_from_confirmed_script.main([
+        str(locked_brief),
+        str(script_dir / "script.json"),
+        str(storyboard_json),
+    ]) == 0
+
+    stage02_packet = json.loads((storyboard_dir / "stage02_prompt_packet.json").read_text(encoding="utf-8"))
+    storyboard_payload = json.loads(storyboard_json.read_text(encoding="utf-8"))
+
+    assert stage02_packet["story_anchors"] == script_payload["story_anchors"]
+    assert stage02_packet["upstream_script"]["sections"] == script_payload["script"]["sections"]
+    assert stage02_packet["upstream_script"]["beats"] == script_payload["duration_plan"]["beats"]
+    assert stage02_packet["shot_plan"]["target_shot_count"] == len(script_payload["duration_plan"]["beats"])
+    assert json.loads((storyboard_dir / "stage02_codex_last_message.txt").read_text(encoding="utf-8"))["self_check"]["matches_script"] is True
+    assert storyboard_payload["story_anchors"]["scene_label"] == script_payload["story_anchors"]["scene_label"]
+    assert storyboard_payload["story_anchors"]["key_props"][:2] == script_payload["story_anchors"]["key_props"][:2]
+
+
+def test_stage02_formal_output_flows_through_stage03_formal_entry(tmp_path: Path, monkeypatch) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260605_220500_stage03_formal_flow"
+    intake_dir = project_dir / "00_intake"
+    script_dir = project_dir / "01_script"
+    storyboard_dir = project_dir / "02_storyboard"
+    character_dir = project_dir / "03_characters"
+    intake_dir.mkdir(parents=True, exist_ok=True)
+    script_dir.mkdir(parents=True, exist_ok=True)
+    storyboard_dir.mkdir(parents=True, exist_ok=True)
+    character_dir.mkdir(parents=True, exist_ok=True)
+
+    brief = load_rainy_store_brief(project_dir)
+    locked_brief = intake_dir / "project_brief.locked.json"
+    locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    script_payload = write_stage01_outputs.write_stage01_outputs(
+        brief,
+        make_stage01_llm_output_for_rainy_store(),
+        locked_brief,
+        script_dir / "stage01_llm_output.json",
+        script_dir / "script.json",
+    )
+    storyboard_payload = write_stage02_outputs.write_stage02_outputs(
+        brief,
+        script_payload,
+        make_stage02_llm_output_for_rainy_store(),
+        locked_brief,
+        script_dir / "script.json",
+        storyboard_dir / "stage02_llm_output.json",
+        storyboard_dir / "storyboard.json",
+    )
+
+    def fake_generate_stage03_llm_output(  # noqa: ANN001
+        *,
+        request_text,
+        schema_path,
+        llm_output_path,
+        output_message_path,
+        codex_bin,
+        cwd,
+    ):
+        assert "Stage 03" in request_text
+        assert schema_path.name == "stage03_llm_output.schema.json"
+        assert str(codex_bin)
+        assert cwd
+        llm_output = make_stage03_llm_output_for_rainy_store()
+        llm_output_path.write_text(json.dumps(llm_output, ensure_ascii=False, indent=2), encoding="utf-8")
+        output_message_path.write_text(json.dumps(llm_output, ensure_ascii=False, indent=2), encoding="utf-8")
+        return llm_output
+
+    monkeypatch.setattr(run_stage03_codex_flow, "generate_stage03_llm_output", fake_generate_stage03_llm_output)
+    monkeypatch.setattr(run_stage03_codex_flow, "resolve_codex_bin", lambda value: "codex.cmd")
+    monkeypatch.setattr(run_stage03_from_confirmed_storyboard, "run_stage03_codex_flow_main", run_stage03_codex_flow.main)
+
+    character_json = character_dir / "character_bible.json"
+    assert run_stage03_from_confirmed_storyboard.main([
+        str(locked_brief),
+        str(script_dir / "script.json"),
+        str(storyboard_dir / "storyboard.json"),
+        str(character_json),
+    ]) == 0
+
+    stage03_packet = json.loads((character_dir / "stage03_prompt_packet.json").read_text(encoding="utf-8"))
+    character_payload = json.loads(character_json.read_text(encoding="utf-8"))
+
+    assert stage03_packet["story_anchors"] == storyboard_payload["story_anchors"]
+    assert stage03_packet["upstream_script"]["characters"] == script_payload["characters"]
+    assert stage03_packet["upstream_storyboard"]["shot_count"] == storyboard_payload["shot_count"]
+    assert json.loads((character_dir / "stage03_codex_last_message.txt").read_text(encoding="utf-8"))["self_check"]["matches_storyboard"] is True
+    assert character_payload["story_anchors"]["scene_label"] == storyboard_payload["story_anchors"]["scene_label"]
+    assert character_payload["story_anchors"]["key_props"][:2] == storyboard_payload["story_anchors"]["key_props"][:2]
+
+
+def test_stage03_formal_output_flows_through_stage04_formal_entry(tmp_path: Path, monkeypatch) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260605_221500_stage04_formal_flow"
+    intake_dir = project_dir / "00_intake"
+    script_dir = project_dir / "01_script"
+    storyboard_dir = project_dir / "02_storyboard"
+    character_dir = project_dir / "03_characters"
+    keyframe_dir = project_dir / "04_keyframes"
+    intake_dir.mkdir(parents=True, exist_ok=True)
+    script_dir.mkdir(parents=True, exist_ok=True)
+    storyboard_dir.mkdir(parents=True, exist_ok=True)
+    character_dir.mkdir(parents=True, exist_ok=True)
+    keyframe_dir.mkdir(parents=True, exist_ok=True)
+
+    brief = load_rainy_store_brief(project_dir)
+    locked_brief = intake_dir / "project_brief.locked.json"
+    locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    script_payload = write_stage01_outputs.write_stage01_outputs(
+        brief,
+        make_stage01_llm_output_for_rainy_store(),
+        locked_brief,
+        script_dir / "stage01_llm_output.json",
+        script_dir / "script.json",
+    )
+    storyboard_payload = write_stage02_outputs.write_stage02_outputs(
+        brief,
+        script_payload,
+        make_stage02_llm_output_for_rainy_store(),
+        locked_brief,
+        script_dir / "script.json",
+        storyboard_dir / "stage02_llm_output.json",
+        storyboard_dir / "storyboard.json",
+    )
+    character_payload = write_stage03_outputs.write_stage03_outputs(
+        brief,
+        script_payload,
+        storyboard_payload,
+        make_stage03_llm_output_for_rainy_store(),
+        locked_brief,
+        script_dir / "script.json",
+        storyboard_dir / "storyboard.json",
+        character_dir / "stage03_llm_output.json",
+        character_dir / "character_bible.json",
+    )
+
+    def fake_generate_stage04_llm_output(  # noqa: ANN001
+        *,
+        request_text,
+        schema_path,
+        llm_output_path,
+        output_message_path,
+        codex_bin,
+        cwd,
+    ):
+        assert "Stage 04" in request_text
+        assert schema_path.name == "stage04_llm_output.schema.json"
+        assert str(codex_bin)
+        assert cwd
+        llm_output = make_stage04_llm_output_for_rainy_store()
+        llm_output_path.write_text(json.dumps(llm_output, ensure_ascii=False, indent=2), encoding="utf-8")
+        output_message_path.write_text(json.dumps(llm_output, ensure_ascii=False, indent=2), encoding="utf-8")
+        return llm_output
+
+    monkeypatch.setattr(run_stage04_codex_flow, "generate_stage04_llm_output", fake_generate_stage04_llm_output)
+    monkeypatch.setattr(run_stage04_codex_flow, "resolve_codex_bin", lambda value: "codex.cmd")
+    monkeypatch.setattr(run_stage04_from_confirmed_character_bible, "run_stage04_codex_flow_main", run_stage04_codex_flow.main)
+
+    keyframe_json = keyframe_dir / "keyframe_prompts.json"
+    assert run_stage04_from_confirmed_character_bible.main([
+        str(locked_brief),
+        str(script_dir / "script.json"),
+        str(storyboard_dir / "storyboard.json"),
+        str(character_dir / "character_bible.json"),
+        str(keyframe_json),
+    ]) == 0
+
+    stage04_packet = json.loads((keyframe_dir / "stage04_prompt_packet.json").read_text(encoding="utf-8"))
+    keyframe_payload = json.loads(keyframe_json.read_text(encoding="utf-8"))
+
+    assert stage04_packet["story_anchors"] == character_payload["story_anchors"]
+    assert stage04_packet["upstream_storyboard"]["shot_count"] == storyboard_payload["shot_count"]
+    assert stage04_packet["upstream_character_bible"]["characters"] == character_payload["characters"]
+    assert json.loads((keyframe_dir / "stage04_codex_last_message.txt").read_text(encoding="utf-8"))["self_check"]["matches_storyboard"] is True
+    assert keyframe_payload["story_anchors"]["scene_label"] == character_payload["story_anchors"]["scene_label"]
+    assert keyframe_payload["story_anchors"]["key_props"][:2] == character_payload["story_anchors"]["key_props"][:2]
+
+
+def test_run_stage02_codex_flow_generates_storyboard_package_without_manual_llm_fill(tmp_path: Path, monkeypatch) -> None:
     project_dir = tmp_path / "video_projects" / "video_20260528_103000_sunset_beach_girl"
     intake_dir = project_dir / "00_intake"
     script_dir = project_dir / "01_script"
@@ -1351,11 +1746,33 @@ def test_run_stage02_codex_flow_generates_storyboard_package_without_manual_llm_
     script_json = script_dir / "script.json"
     script_json.write_text(json.dumps(script, ensure_ascii=False, indent=2), encoding="utf-8")
 
+    def fake_generate_stage02_llm_output(  # noqa: ANN001
+        *,
+        request_text,
+        schema_path,
+        llm_output_path,
+        output_message_path,
+        codex_bin,
+        cwd,
+    ):
+        assert "Stage 02" in request_text
+        assert schema_path.name == "stage02_llm_output.schema.json"
+        assert str(codex_bin)
+        assert cwd
+        llm_output = make_stage02_llm_output_from_example()
+        llm_output_path.write_text(json.dumps(llm_output, ensure_ascii=False, indent=2), encoding="utf-8")
+        output_message_path.write_text(json.dumps(llm_output, ensure_ascii=False, indent=2), encoding="utf-8")
+        return llm_output
+
+    monkeypatch.setattr(run_stage02_codex_flow, "generate_stage02_llm_output", fake_generate_stage02_llm_output)
+    monkeypatch.setattr(run_stage02_codex_flow, "resolve_codex_bin", lambda value: "codex.cmd")
+
     storyboard_json = storyboard_dir / "storyboard.json"
     assert run_stage02_codex_flow.main([str(locked_brief), str(script_json), str(storyboard_json)]) == 0
     assert (storyboard_dir / "stage02_prompt_packet.json").exists()
     assert (storyboard_dir / "stage02_llm_output.json").exists()
-    assert "STAGE02_LOCAL_EXECUTION_MODE" in (storyboard_dir / "stage02_codex_last_message.txt").read_text(encoding="utf-8")
+    assert (storyboard_dir / "stage02_codex_generation_request.txt").exists()
+    assert json.loads((storyboard_dir / "stage02_codex_last_message.txt").read_text(encoding="utf-8"))["self_check"]["matches_script"] is True
     storyboard_data = json.loads(storyboard_json.read_text(encoding="utf-8"))
     llm_output = json.loads((storyboard_dir / "stage02_llm_output.json").read_text(encoding="utf-8"))
     assert storyboard_data["shot_count"] > 0
@@ -1389,33 +1806,50 @@ def test_run_stage02_codex_flow_auto_repairs_failed_first_attempt(tmp_path: Path
     script_json = script_dir / "script.json"
     script_json.write_text(json.dumps(script, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    original_builder = run_stage02_codex_flow.build_stage02_llm_output
     calls = {"count": 0}
 
-    def flaky_local_builder(local_brief, local_script, prompt_packet=None, repair_packet=None):  # noqa: ANN001
+    def flaky_generate_stage02_llm_output(  # noqa: ANN001
+        *,
+        request_text,
+        schema_path,
+        llm_output_path,
+        output_message_path,
+        codex_bin,
+        cwd,
+    ):
+        assert "Stage 02" in request_text
+        assert schema_path.name == "stage02_llm_output.schema.json"
+        assert str(codex_bin)
+        assert cwd
         calls["count"] += 1
         if calls["count"] == 1:
-            bad_output = original_builder(local_brief, local_script, prompt_packet=prompt_packet, repair_packet=repair_packet)
+            bad_output = make_stage02_llm_output_from_example()
             bad_output["shots"] = bad_output["shots"][:1]
             bad_output["target_duration_sec"] = 30
+            llm_output_path.write_text(json.dumps(bad_output, ensure_ascii=False, indent=2), encoding="utf-8")
+            output_message_path.write_text(json.dumps(bad_output, ensure_ascii=False, indent=2), encoding="utf-8")
             return bad_output
-        return original_builder(local_brief, local_script, prompt_packet=prompt_packet, repair_packet=repair_packet)
+        repaired_output = make_stage02_llm_output_from_example()
+        llm_output_path.write_text(json.dumps(repaired_output, ensure_ascii=False, indent=2), encoding="utf-8")
+        output_message_path.write_text(json.dumps(repaired_output, ensure_ascii=False, indent=2), encoding="utf-8")
+        return repaired_output
 
-    monkeypatch.setattr(run_stage02_codex_flow, "build_stage02_llm_output", flaky_local_builder)
+    monkeypatch.setattr(run_stage02_codex_flow, "generate_stage02_llm_output", flaky_generate_stage02_llm_output)
+    monkeypatch.setattr(run_stage02_codex_flow, "resolve_codex_bin", lambda value: "codex.cmd")
 
     storyboard_json = storyboard_dir / "storyboard.json"
     assert run_stage02_codex_flow.main([str(locked_brief), str(script_json), str(storyboard_json), "--max-repair-attempts", "1"]) == 0
 
     assert calls["count"] == 2
     assert (storyboard_dir / "stage02_codex_repair_request_attempt_1.txt").exists()
-    assert "STAGE02_LOCAL_REPAIR_MODE" in (storyboard_dir / "stage02_codex_repair_last_message_attempt_1.txt").read_text(encoding="utf-8")
+    assert json.loads((storyboard_dir / "stage02_codex_repair_last_message_attempt_1.txt").read_text(encoding="utf-8"))["self_check"]["matches_script"] is True
     assert not (storyboard_dir / "stage02_validation_errors.json").exists()
     assert not (storyboard_dir / "stage02_repair_packet.json").exists()
     storyboard_data = json.loads(storyboard_json.read_text(encoding="utf-8"))
     assert storyboard_data["shot_count"] > 1
 
 
-def test_run_stage03_codex_flow_generates_character_bible_without_manual_llm_fill(tmp_path: Path) -> None:
+def test_run_stage03_codex_flow_generates_character_bible_without_manual_llm_fill(tmp_path: Path, monkeypatch) -> None:
     project_dir = tmp_path / "video_projects" / "video_20260528_103000_sunset_beach_girl"
     intake_dir = project_dir / "00_intake"
     script_dir = project_dir / "01_script"
@@ -1448,11 +1882,33 @@ def test_run_stage03_codex_flow_generates_character_bible_without_manual_llm_fil
     storyboard_json = storyboard_dir / "storyboard.json"
     storyboard_json.write_text(json.dumps(storyboard, ensure_ascii=False, indent=2), encoding="utf-8")
 
+    def fake_generate_stage03_llm_output(  # noqa: ANN001
+        *,
+        request_text,
+        schema_path,
+        llm_output_path,
+        output_message_path,
+        codex_bin,
+        cwd,
+    ):
+        assert "Stage 03" in request_text
+        assert schema_path.name == "stage03_llm_output.schema.json"
+        assert str(codex_bin)
+        assert cwd
+        llm_output = stage03_local_semantics.build_stage03_llm_output(brief, script, storyboard)
+        llm_output_path.write_text(json.dumps(llm_output, ensure_ascii=False, indent=2), encoding="utf-8")
+        output_message_path.write_text(json.dumps(llm_output, ensure_ascii=False, indent=2), encoding="utf-8")
+        return llm_output
+
+    monkeypatch.setattr(run_stage03_codex_flow, "generate_stage03_llm_output", fake_generate_stage03_llm_output)
+    monkeypatch.setattr(run_stage03_codex_flow, "resolve_codex_bin", lambda value: "codex.cmd")
+
     character_json = character_dir / "character_bible.json"
     assert run_stage03_codex_flow.main([str(locked_brief), str(script_json), str(storyboard_json), str(character_json)]) == 0
     assert (character_dir / "stage03_prompt_packet.json").exists()
     assert (character_dir / "stage03_llm_output.json").exists()
-    assert "STAGE03_LOCAL_EXECUTION_MODE" in (character_dir / "stage03_codex_last_message.txt").read_text(encoding="utf-8")
+    assert (character_dir / "stage03_codex_generation_request.txt").exists()
+    assert json.loads((character_dir / "stage03_codex_last_message.txt").read_text(encoding="utf-8"))["self_check"]["matches_storyboard"] is True
     character_data = json.loads(character_json.read_text(encoding="utf-8"))
     llm_output = json.loads((character_dir / "stage03_llm_output.json").read_text(encoding="utf-8"))
     assert character_data["characters"]
@@ -1498,44 +1954,49 @@ def test_run_stage03_codex_flow_auto_repairs_failed_first_attempt(tmp_path: Path
     storyboard_json = storyboard_dir / "storyboard.json"
     storyboard_json.write_text(json.dumps(storyboard, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    original_builder = run_stage03_codex_flow.build_stage03_llm_output
     calls = {"count": 0}
 
-    def flaky_local_builder(local_brief, local_script, local_storyboard, prompt_packet=None, repair_packet=None):  # noqa: ANN001
+    def flaky_generate_stage03_llm_output(  # noqa: ANN001
+        *,
+        request_text,
+        schema_path,
+        llm_output_path,
+        output_message_path,
+        codex_bin,
+        cwd,
+    ):
+        assert "Stage 03" in request_text
+        assert schema_path.name == "stage03_llm_output.schema.json"
+        assert str(codex_bin)
+        assert cwd
         calls["count"] += 1
         if calls["count"] == 1:
-            bad_output = original_builder(
-                local_brief,
-                local_script,
-                local_storyboard,
-                prompt_packet=prompt_packet,
-                repair_packet=repair_packet,
-            )
+            bad_output = stage03_local_semantics.build_stage03_llm_output(brief, script, storyboard)
             bad_output["characters"][0]["appearance"]["clothing"] = ""
+            llm_output_path.write_text(json.dumps(bad_output, ensure_ascii=False, indent=2), encoding="utf-8")
+            output_message_path.write_text(json.dumps(bad_output, ensure_ascii=False, indent=2), encoding="utf-8")
             return bad_output
-        return original_builder(
-            local_brief,
-            local_script,
-            local_storyboard,
-            prompt_packet=prompt_packet,
-            repair_packet=repair_packet,
-        )
+        repaired_output = stage03_local_semantics.build_stage03_llm_output(brief, script, storyboard)
+        llm_output_path.write_text(json.dumps(repaired_output, ensure_ascii=False, indent=2), encoding="utf-8")
+        output_message_path.write_text(json.dumps(repaired_output, ensure_ascii=False, indent=2), encoding="utf-8")
+        return repaired_output
 
-    monkeypatch.setattr(run_stage03_codex_flow, "build_stage03_llm_output", flaky_local_builder)
+    monkeypatch.setattr(run_stage03_codex_flow, "generate_stage03_llm_output", flaky_generate_stage03_llm_output)
+    monkeypatch.setattr(run_stage03_codex_flow, "resolve_codex_bin", lambda value: "codex.cmd")
 
     character_json = character_dir / "character_bible.json"
     assert run_stage03_codex_flow.main([str(locked_brief), str(script_json), str(storyboard_json), str(character_json), "--max-repair-attempts", "1"]) == 0
 
     assert calls["count"] == 2
     assert (character_dir / "stage03_codex_repair_request_attempt_1.txt").exists()
-    assert "STAGE03_LOCAL_REPAIR_MODE" in (character_dir / "stage03_codex_repair_last_message_attempt_1.txt").read_text(encoding="utf-8")
+    assert json.loads((character_dir / "stage03_codex_repair_last_message_attempt_1.txt").read_text(encoding="utf-8"))["self_check"]["matches_storyboard"] is True
     assert not (character_dir / "stage03_validation_errors.json").exists()
     assert not (character_dir / "stage03_repair_packet.json").exists()
     character_data = json.loads(character_json.read_text(encoding="utf-8"))
     assert character_data["characters"][0]["appearance"]["clothing"]
 
 
-def test_run_stage04_codex_flow_generates_keyframe_prompts_without_manual_llm_fill(tmp_path: Path) -> None:
+def test_run_stage04_codex_flow_generates_keyframe_prompts_without_manual_llm_fill(tmp_path: Path, monkeypatch) -> None:
     project_dir = tmp_path / "video_projects" / "video_20260528_103000_sunset_beach_girl"
     intake_dir = project_dir / "00_intake"
     script_dir = project_dir / "01_script"
@@ -1577,16 +2038,39 @@ def test_run_stage04_codex_flow_generates_keyframe_prompts_without_manual_llm_fi
     character_json = character_dir / "character_bible.json"
     character_json.write_text(json.dumps(character, ensure_ascii=False, indent=2), encoding="utf-8")
 
+    def fake_generate_stage04_llm_output(  # noqa: ANN001
+        *,
+        request_text,
+        schema_path,
+        llm_output_path,
+        output_message_path,
+        codex_bin,
+        cwd,
+    ):
+        assert "Stage 04" in request_text
+        assert schema_path.name == "stage04_llm_output.schema.json"
+        assert str(codex_bin)
+        assert cwd
+        llm_output = make_stage04_llm_output_from_example()
+        llm_output_path.write_text(json.dumps(llm_output, ensure_ascii=False, indent=2), encoding="utf-8")
+        output_message_path.write_text(json.dumps(llm_output, ensure_ascii=False, indent=2), encoding="utf-8")
+        return llm_output
+
+    monkeypatch.setattr(run_stage04_codex_flow, "generate_stage04_llm_output", fake_generate_stage04_llm_output)
+    monkeypatch.setattr(run_stage04_codex_flow, "resolve_codex_bin", lambda value: "codex.cmd")
+
     keyframe_json = keyframe_dir / "keyframe_prompts.json"
     assert run_stage04_codex_flow.main([str(locked_brief), str(script_json), str(storyboard_json), str(character_json), str(keyframe_json)]) == 0
     assert (keyframe_dir / "stage04_prompt_packet.json").exists()
     assert (keyframe_dir / "stage04_llm_output.json").exists()
-    assert "STAGE04_LOCAL_EXECUTION_MODE" in (keyframe_dir / "stage04_codex_last_message.txt").read_text(encoding="utf-8")
+    assert (keyframe_dir / "stage04_codex_generation_request.txt").exists()
+    assert json.loads((keyframe_dir / "stage04_codex_last_message.txt").read_text(encoding="utf-8"))["self_check"]["matches_storyboard"] is True
     keyframe_data = json.loads(keyframe_json.read_text(encoding="utf-8"))
     llm_output = json.loads((keyframe_dir / "stage04_llm_output.json").read_text(encoding="utf-8"))
     assert keyframe_data["shot_prompts"]
     assert len(keyframe_data["shot_prompts"]) == len(llm_output["shot_prompts"])
-    assert all(str(item.get("consistency_prompt") or "").startswith("Character identity anchor:") for item in keyframe_data["shot_prompts"])
+    assert all(str(item.get("consistency_prompt") or "").strip() for item in keyframe_data["shot_prompts"])
+    assert all(str(item.get("identity_anchor_prompt") or "").strip() for item in keyframe_data["shot_prompts"])
     assert keyframe_data["transition_prompts"]
 
 
@@ -1652,32 +2136,35 @@ def test_run_stage04_codex_flow_auto_repairs_failed_first_attempt(tmp_path: Path
     character_json = character_dir / "character_bible.json"
     character_json.write_text(json.dumps(character, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    original_builder = run_stage04_codex_flow.build_stage04_llm_output
     calls = {"count": 0}
 
-    def flaky_local_builder(local_brief, local_script, local_storyboard, local_character_bible, prompt_packet=None, repair_packet=None):  # noqa: ANN001
+    def flaky_generate_stage04_llm_output(  # noqa: ANN001
+        *,
+        request_text,
+        schema_path,
+        llm_output_path,
+        output_message_path,
+        codex_bin,
+        cwd,
+    ):
+        assert "Stage 04" in request_text
+        assert schema_path.name == "stage04_llm_output.schema.json"
+        assert str(codex_bin)
+        assert cwd
         calls["count"] += 1
         if calls["count"] == 1:
-            bad_output = original_builder(
-                local_brief,
-                local_script,
-                local_storyboard,
-                local_character_bible,
-                prompt_packet=prompt_packet,
-                repair_packet=repair_packet,
-            )
+            bad_output = make_stage04_llm_output_from_example()
             bad_output["shot_prompts"][0]["start_keyframe_prompt"] = ""
+            llm_output_path.write_text(json.dumps(bad_output, ensure_ascii=False, indent=2), encoding="utf-8")
+            output_message_path.write_text(json.dumps(bad_output, ensure_ascii=False, indent=2), encoding="utf-8")
             return bad_output
-        return original_builder(
-            local_brief,
-            local_script,
-            local_storyboard,
-            local_character_bible,
-            prompt_packet=prompt_packet,
-            repair_packet=repair_packet,
-        )
+        repaired_output = make_stage04_llm_output_from_example()
+        llm_output_path.write_text(json.dumps(repaired_output, ensure_ascii=False, indent=2), encoding="utf-8")
+        output_message_path.write_text(json.dumps(repaired_output, ensure_ascii=False, indent=2), encoding="utf-8")
+        return repaired_output
 
-    monkeypatch.setattr(run_stage04_codex_flow, "build_stage04_llm_output", flaky_local_builder)
+    monkeypatch.setattr(run_stage04_codex_flow, "generate_stage04_llm_output", flaky_generate_stage04_llm_output)
+    monkeypatch.setattr(run_stage04_codex_flow, "resolve_codex_bin", lambda value: "codex.cmd")
 
     keyframe_json = keyframe_dir / "keyframe_prompts.json"
     assert run_stage04_codex_flow.main([
@@ -1692,7 +2179,7 @@ def test_run_stage04_codex_flow_auto_repairs_failed_first_attempt(tmp_path: Path
 
     assert calls["count"] == 2
     assert (keyframe_dir / "stage04_codex_repair_request_attempt_1.txt").exists()
-    assert "STAGE04_LOCAL_REPAIR_MODE" in (keyframe_dir / "stage04_codex_repair_last_message_attempt_1.txt").read_text(encoding="utf-8")
+    assert json.loads((keyframe_dir / "stage04_codex_repair_last_message_attempt_1.txt").read_text(encoding="utf-8"))["self_check"]["matches_storyboard"] is True
     assert not (keyframe_dir / "stage04_validation_errors.json").exists()
     assert not (keyframe_dir / "stage04_repair_packet.json").exists()
     keyframe_data = json.loads(keyframe_json.read_text(encoding="utf-8"))
@@ -1700,7 +2187,7 @@ def test_run_stage04_codex_flow_auto_repairs_failed_first_attempt(tmp_path: Path
 
 
 def test_resolve_codex_bin_prefers_windows_cmd_over_powershell_shim(monkeypatch) -> None:
-    monkeypatch.setattr(run_stage01_codex_flow.sys, "platform", "win32")
+    monkeypatch.setattr(run_stage01_codex_flow.resolve_codex_bin.__globals__["sys"], "platform", "win32")
 
     def fake_which(name: str) -> str | None:
         mapping = {
@@ -1710,14 +2197,14 @@ def test_resolve_codex_bin_prefers_windows_cmd_over_powershell_shim(monkeypatch)
         }
         return mapping.get(name)
 
-    monkeypatch.setattr(run_stage01_codex_flow.shutil, "which", fake_which)
+    monkeypatch.setattr(run_stage01_codex_flow.resolve_codex_bin.__globals__["shutil"], "which", fake_which)
 
     resolved = run_stage01_codex_flow.resolve_codex_bin("codex")
     assert resolved.endswith("codex.cmd")
 
 
 def test_resolve_codex_bin_rejects_explicit_windows_powershell_shim(monkeypatch) -> None:
-    monkeypatch.setattr(run_stage01_codex_flow.sys, "platform", "win32")
+    monkeypatch.setattr(run_stage01_codex_flow.resolve_codex_bin.__globals__["sys"], "platform", "win32")
 
     try:
         run_stage01_codex_flow.resolve_codex_bin(r"C:\Tools\NodeJs\node-v24.15.0\codex.ps1")
@@ -1998,6 +2485,13 @@ def test_validate_storyboard_example_final() -> None:
     data = json.loads((TEMPLATES / "storyboard.example.json").read_text(encoding="utf-8"))
     ok, errors, warnings = validate_storyboard.validate(data, mode="final")
     assert ok, errors
+
+
+def test_validate_storyboard_load_json_accepts_utf8_bom(tmp_path: Path) -> None:
+    path = tmp_path / "storyboard.json"
+    path.write_text("\ufeff" + json.dumps(json.loads((TEMPLATES / "storyboard.example.json").read_text(encoding="utf-8")), ensure_ascii=False), encoding="utf-8")
+    data = validate_storyboard.load_json(path)
+    assert data["stage"] == "STAGE_02_STORYBOARD_GENERATION"
 
 
 def test_new_storyboard_template_generates_final_ready_draft(tmp_path: Path) -> None:
@@ -2951,6 +3445,112 @@ def test_show_creator_home_recommends_stage01_command_after_brief_lock(tmp_path:
     assert "RECOMMENDED_ENTRY_COMMAND: python skills/video-production-pipeline/scripts/run_stage01_from_locked_brief.py" in output
 
 
+def test_show_creator_home_recommends_stage01_confirm_command_after_script_generation(tmp_path: Path, capsys) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260605_200000_stage01_pending_confirm"
+    (project_dir / "01_script").mkdir(parents=True, exist_ok=True)
+    manifest_path = project_dir / "project_manifest.json"
+    manifest_path.write_text(json.dumps({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "current_stage": "STAGE_01_SCRIPT_GENERATION",
+        "status": "active",
+        "brief_locked": True,
+        "script_confirmed": False,
+        "allowed_next_stage": None,
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    script = json.loads((TEMPLATES / "script.example.json").read_text(encoding="utf-8"))
+    script["project_id"] = project_dir.name
+    (project_dir / "01_script" / "script.json").write_text(json.dumps(script, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    assert show_creator_home.main(["--project-dir", str(project_dir)]) == 0
+    output = capsys.readouterr().out
+    assert "RECOMMENDED_ENTRY_LABEL: 确认剧本并进入 Stage 02" in output
+    assert "confirm_stage01_and_continue.py" in output
+
+
+def test_show_creator_home_recommends_stage02_confirm_command_after_storyboard_generation(tmp_path: Path, capsys) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260605_200100_stage02_pending_confirm"
+    paths = seed_confirmed_stage_chain(project_dir)
+    manifest_path = project_dir / "project_manifest.json"
+    manifest_path.write_text(json.dumps({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "current_stage": "STAGE_02_STORYBOARD_GENERATION",
+        "status": "active",
+        "brief_locked": True,
+        "script_confirmed": True,
+        "storyboard_confirmed": False,
+        "allowed_next_stage": None,
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    storyboard = json.loads(paths["storyboard_json"].read_text(encoding="utf-8"))
+    storyboard["status"] = "draft"
+    storyboard["allowed_next_stage"] = None
+    paths["storyboard_json"].write_text(json.dumps(storyboard, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    assert show_creator_home.main(["--project-dir", str(project_dir)]) == 0
+    output = capsys.readouterr().out
+    assert "RECOMMENDED_ENTRY_LABEL: 确认分镜并进入 Stage 03" in output
+    assert "confirm_stage02_and_continue.py" in output
+
+
+def test_show_creator_home_recommends_stage03_confirm_command_after_character_generation(tmp_path: Path, capsys) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260605_200200_stage03_pending_confirm"
+    paths = seed_confirmed_stage_chain(project_dir)
+    manifest_path = project_dir / "project_manifest.json"
+    manifest_path.write_text(json.dumps({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "current_stage": "STAGE_03_CHARACTER_BIBLE_GENERATION",
+        "status": "active",
+        "brief_locked": True,
+        "script_confirmed": True,
+        "storyboard_confirmed": True,
+        "character_bible_confirmed": False,
+        "allowed_next_stage": None,
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    character = json.loads(paths["character_json"].read_text(encoding="utf-8"))
+    character["status"] = "draft"
+    character["allowed_next_stage"] = None
+    paths["character_json"].write_text(json.dumps(character, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    assert show_creator_home.main(["--project-dir", str(project_dir)]) == 0
+    output = capsys.readouterr().out
+    assert "RECOMMENDED_ENTRY_LABEL: 确认人物设定并进入 Stage 04" in output
+    assert "confirm_stage03_and_continue.py" in output
+
+
+def test_show_creator_home_recommends_stage04_confirm_command_after_keyframe_generation(tmp_path: Path, capsys) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260605_200300_stage04_pending_confirm"
+    paths = seed_confirmed_stage_chain(project_dir)
+    manifest_path = project_dir / "project_manifest.json"
+    manifest_path.write_text(json.dumps({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "current_stage": "STAGE_04_KEYFRAME_PROMPTS_GENERATION",
+        "status": "active",
+        "brief_locked": True,
+        "script_confirmed": True,
+        "storyboard_confirmed": True,
+        "character_bible_confirmed": True,
+        "keyframe_prompts_confirmed": False,
+        "allowed_next_stage": None,
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    keyframe = json.loads(paths["keyframe_json"].read_text(encoding="utf-8"))
+    keyframe["status"] = "draft"
+    keyframe["allowed_next_stage"] = None
+    keyframe["reference_image_status"]["all_present"] = True
+    keyframe["reference_image_status"]["existing_paths"] = ["03_characters/reference_images/CHAR_001_primary.png"]
+    keyframe["reference_image_status"]["missing_paths"] = []
+    keyframe["stage05_execution_readiness"]["safe_to_auto_generate"] = True
+    keyframe["stage05_execution_readiness"]["missing_reference_images"] = []
+    paths["keyframe_json"].write_text(json.dumps(keyframe, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    assert show_creator_home.main(["--project-dir", str(project_dir)]) == 0
+    output = capsys.readouterr().out
+    assert "RECOMMENDED_ENTRY_LABEL: 确认提示词并进入 Stage 05" in output
+    assert "confirm_stage04_and_continue.py" in output
+
+
 def test_continue_pipeline_dispatches_brief_locked_project_to_stage01_runner(tmp_path: Path, monkeypatch, capsys) -> None:
     project_dir = tmp_path / "video_projects" / "video_20260528_103000_sunset_beach_girl"
     intake_dir = project_dir / "00_intake"
@@ -3099,6 +3699,151 @@ def test_continue_pipeline_dispatches_character_confirmed_project_to_stage04_run
         str(paths["storyboard_json"]),
         str(paths["character_json"]),
         str(paths["keyframe_json"]),
+    ]
+
+
+def test_confirm_stage01_and_continue_updates_manifest_and_dispatches_stage02(tmp_path: Path, monkeypatch) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260605_201000_confirm_stage01"
+    paths = seed_confirmed_stage_chain(project_dir)
+    manifest_path = project_dir / "project_manifest.json"
+    manifest_path.write_text(json.dumps({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "current_stage": "STAGE_01_SCRIPT_GENERATION",
+        "status": "active",
+        "brief_locked": True,
+        "script_confirmed": False,
+        "storyboard_confirmed": False,
+        "allowed_next_stage": None,
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    called: dict[str, object] = {}
+
+    def fake_continue(argv):  # noqa: ANN001
+        called["argv"] = list(argv)
+        return 0
+
+    monkeypatch.setattr(confirm_stage01_and_continue.continue_pipeline, "main", fake_continue)
+    assert confirm_stage01_and_continue.main([str(project_dir)]) == 0
+    data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    script = json.loads(paths["script_json"].read_text(encoding="utf-8"))
+    assert data["current_stage"] == "STAGE_01_SCRIPT_CONFIRMED"
+    assert data["script_confirmed"] is True
+    assert data["allowed_next_stage"] == "STAGE_02_STORYBOARD"
+    assert script["status"] == "confirmed"
+    assert script["allowed_next_stage"] == "STAGE_02_STORYBOARD"
+    assert called["argv"] == ["--project-dir", str(project_dir)]
+
+
+def test_confirm_stage02_and_continue_updates_manifest_and_dispatches_stage03(tmp_path: Path, monkeypatch) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260605_201100_confirm_stage02"
+    paths = seed_confirmed_stage_chain(project_dir)
+    manifest_path = project_dir / "project_manifest.json"
+    manifest_path.write_text(json.dumps({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "current_stage": "STAGE_02_STORYBOARD_GENERATION",
+        "status": "active",
+        "brief_locked": True,
+        "script_confirmed": True,
+        "storyboard_confirmed": False,
+        "character_bible_confirmed": False,
+        "allowed_next_stage": None,
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    called: dict[str, object] = {}
+
+    def fake_continue(argv):  # noqa: ANN001
+        called["argv"] = list(argv)
+        return 0
+
+    monkeypatch.setattr(confirm_stage02_and_continue.continue_pipeline, "main", fake_continue)
+    assert confirm_stage02_and_continue.main([str(project_dir)]) == 0
+    data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    storyboard = json.loads(paths["storyboard_json"].read_text(encoding="utf-8"))
+    assert data["current_stage"] == "STAGE_02_STORYBOARD_CONFIRMED"
+    assert data["storyboard_confirmed"] is True
+    assert data["allowed_next_stage"] == "STAGE_03_CHARACTER_BIBLE"
+    assert storyboard["status"] == "confirmed"
+    assert storyboard["allowed_next_stage"] == "STAGE_03_CHARACTER_BIBLE"
+    assert called["argv"] == ["--project-dir", str(project_dir)]
+
+
+def test_confirm_stage03_and_continue_updates_manifest_and_dispatches_stage04(tmp_path: Path, monkeypatch) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260605_201200_confirm_stage03"
+    paths = seed_confirmed_stage_chain(project_dir)
+    manifest_path = project_dir / "project_manifest.json"
+    manifest_path.write_text(json.dumps({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "current_stage": "STAGE_03_CHARACTER_BIBLE_GENERATION",
+        "status": "active",
+        "brief_locked": True,
+        "script_confirmed": True,
+        "storyboard_confirmed": True,
+        "character_bible_confirmed": False,
+        "keyframe_prompts_confirmed": False,
+        "allowed_next_stage": None,
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    called: dict[str, object] = {}
+
+    def fake_continue(argv):  # noqa: ANN001
+        called["argv"] = list(argv)
+        return 0
+
+    monkeypatch.setattr(confirm_stage03_and_continue.continue_pipeline, "main", fake_continue)
+    assert confirm_stage03_and_continue.main([str(project_dir)]) == 0
+    data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    character = json.loads(paths["character_json"].read_text(encoding="utf-8"))
+    assert data["current_stage"] == "STAGE_03_CHARACTER_BIBLE_CONFIRMED"
+    assert data["character_bible_confirmed"] is True
+    assert data["allowed_next_stage"] == "STAGE_04_KEYFRAME_PROMPTS"
+    assert character["status"] == "confirmed"
+    assert character["allowed_next_stage"] == "STAGE_04_KEYFRAME_PROMPTS"
+    assert called["argv"] == ["--project-dir", str(project_dir)]
+
+
+def test_confirm_stage04_and_continue_updates_manifest_and_dispatches_stage05_scaffold(tmp_path: Path, monkeypatch) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260605_201300_confirm_stage04"
+    paths = seed_confirmed_stage_chain(project_dir)
+    manifest_path = project_dir / "project_manifest.json"
+    manifest_path.write_text(json.dumps({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "current_stage": "STAGE_04_KEYFRAME_PROMPTS_GENERATION",
+        "status": "active",
+        "brief_locked": True,
+        "script_confirmed": True,
+        "storyboard_confirmed": True,
+        "character_bible_confirmed": True,
+        "keyframe_prompts_confirmed": False,
+        "allowed_next_stage": None,
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    keyframe = json.loads(paths["keyframe_json"].read_text(encoding="utf-8"))
+    keyframe["reference_image_status"]["all_present"] = True
+    keyframe["reference_image_status"]["existing_paths"] = ["03_characters/reference_images/CHAR_001_primary.png"]
+    keyframe["reference_image_status"]["missing_paths"] = []
+    keyframe["stage05_execution_readiness"]["safe_to_auto_generate"] = True
+    keyframe["stage05_execution_readiness"]["missing_reference_images"] = []
+    paths["keyframe_json"].write_text(json.dumps(keyframe, ensure_ascii=False, indent=2), encoding="utf-8")
+    called: dict[str, object] = {}
+
+    def fake_stage05(argv):  # noqa: ANN001
+        called["argv"] = list(argv)
+        return 0
+
+    monkeypatch.setattr(confirm_stage04_and_continue.new_keyframe_image_jobs, "main", fake_stage05)
+    assert confirm_stage04_and_continue.main([str(project_dir)]) == 0
+    data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    keyframe = json.loads(paths["keyframe_json"].read_text(encoding="utf-8"))
+    assert data["current_stage"] == "STAGE_04_KEYFRAME_PROMPTS_CONFIRMED"
+    assert data["keyframe_prompts_confirmed"] is True
+    assert data["allowed_next_stage"] == "STAGE_05_KEYFRAME_IMAGES"
+    assert keyframe["status"] == "confirmed"
+    assert keyframe["allowed_next_stage"] == "STAGE_05_KEYFRAME_IMAGES"
+    assert called["argv"] == [
+        "new_keyframe_image_jobs.py",
+        str(project_dir / "00_intake" / "project_brief.locked.json"),
+        str(paths["keyframe_json"]),
+        str(project_dir / "05_images" / "keyframe_image_manifest.json"),
     ]
 
 

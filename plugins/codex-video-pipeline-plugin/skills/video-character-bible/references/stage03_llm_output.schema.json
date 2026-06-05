@@ -69,7 +69,17 @@
           "negative_consistency_prompt": {"type": "string"},
           "performance_profile": {
             "type": "object",
-            "additionalProperties": true
+            "additionalProperties": false,
+            "properties": {
+              "baseline_expression": {"type": "string"},
+              "movement_style": {"type": "string"},
+              "gesture_rules": {
+                "type": "array",
+                "items": {"type": "string"}
+              },
+              "dialogue_delivery": {"type": "string"},
+              "continuity_anchor": {"type": "string"}
+            }
           }
         }
       }
@@ -79,7 +89,7 @@
     },
     "self_check": {
       "type": "object",
-      "additionalProperties": true,
+      "additionalProperties": false,
       "required": [
         "matches_locked_brief",
         "matches_script",
@@ -91,6 +101,9 @@
         "matches_script": {"type": "boolean"},
         "matches_storyboard": {"type": "boolean"},
         "ready_for_keyframe_stage": {"type": "boolean"},
+        "reference_images_planned": {"type": "boolean"},
+        "reference_images_ready": {"type": "boolean"},
+        "safe_for_character_locked_image_generation": {"type": "boolean"},
         "notes": {
           "type": "array",
           "items": {"type": "string"}

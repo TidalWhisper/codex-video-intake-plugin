@@ -17,7 +17,17 @@
     "prompt_language": {"type": "string"},
     "visual_strategy": {
       "type": "object",
-      "additionalProperties": true
+      "additionalProperties": false,
+      "required": [
+        "keyframe_mode",
+        "video_mode",
+        "continuity_strategy"
+      ],
+      "properties": {
+        "keyframe_mode": {"type": "string"},
+        "video_mode": {"type": "string"},
+        "continuity_strategy": {"type": "string"}
+      }
     },
     "shot_prompts": {
       "type": "array",
@@ -54,7 +64,16 @@
           "intent_summary": {"type": "string"},
           "story_anchor_bundle": {
             "type": "object",
-            "additionalProperties": true
+            "additionalProperties": false,
+            "properties": {
+              "location": {"type": "string"},
+              "weather": {"type": "string"},
+              "key_prop": {"type": "string"},
+              "emotion": {"type": "string"},
+              "emotion_label": {"type": "string"},
+              "action": {"type": "string"},
+              "composition_focus": {"type": "string"}
+            }
           },
           "start_keyframe_prompt": {"type": "string"},
           "end_keyframe_prompt": {"type": "string"},
@@ -119,7 +138,7 @@
     "global_negative_prompt": {"type": "string"},
     "self_check": {
       "type": "object",
-      "additionalProperties": true,
+      "additionalProperties": false,
       "required": [
         "matches_locked_brief",
         "matches_script",
@@ -135,6 +154,8 @@
         "uses_character_consistency": {"type": "boolean"},
         "covers_all_storyboard_shots": {"type": "boolean"},
         "ready_for_image_generation": {"type": "boolean"},
+        "character_reference_images_ready": {"type": "boolean"},
+        "safe_for_auto_image_generation": {"type": "boolean"},
         "notes": {
           "type": "array",
           "items": {"type": "string"}

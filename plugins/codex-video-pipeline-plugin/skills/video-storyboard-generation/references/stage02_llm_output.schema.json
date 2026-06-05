@@ -63,7 +63,7 @@
     },
     "self_check": {
       "type": "object",
-      "additionalProperties": true,
+      "additionalProperties": false,
       "required": [
         "matches_locked_brief",
         "matches_script",
