@@ -50,13 +50,16 @@ def main(argv: list[str] | None = None) -> int:
     state_path = Path(args.state_json).resolve()
     if not str(args.user_reply or "").strip():
         return print_current_prompt(state_path)
-    return run_stage00_intake_turn_codex_flow_main([
+    exit_code = run_stage00_intake_turn_codex_flow_main([
         str(state_path),
         "--user-reply",
         str(args.user_reply),
         "--codex-bin",
         str(args.codex_bin),
     ])
+    if exit_code != 0:
+        return exit_code
+    return print_current_prompt(state_path)
 
 
 if __name__ == "__main__":

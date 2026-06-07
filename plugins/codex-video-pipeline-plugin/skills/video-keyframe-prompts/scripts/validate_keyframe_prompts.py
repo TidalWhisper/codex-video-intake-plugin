@@ -15,12 +15,13 @@ from typing import Any
 REQUIRED_TOP = [
     "schema_version", "stage", "status", "project_id", "source_brief", "source_script",
     "source_storyboard", "source_character_bible", "shot_prompts", "transition_prompts",
-    "global_negative_prompt", "self_check", "allowed_next_stage"
+    "prompt_language", "visual_strategy", "global_negative_prompt", "stage05_handoff", "self_check", "allowed_next_stage"
 ]
 REQUIRED_SHOT = [
     "shot_id", "duration_sec", "characters", "scene_summary", "start_keyframe_prompt",
     "end_keyframe_prompt", "motion_prompt", "camera_prompt", "lighting_prompt", "style_prompt",
-    "consistency_prompt", "negative_prompt", "image_generation_notes", "video_generation_notes", "dependencies"
+    "consistency_prompt", "identity_anchor_prompt", "negative_prompt", "image_generation_notes", "video_generation_notes",
+    "intent_summary", "story_anchor_bundle", "performance_prompt", "dialogue_delivery_prompt", "dependencies"
 ]
 REQUIRED_TRANSITION = [
     "transition_id", "from_shot_id", "to_shot_id", "transition_type", "transition_motion_prompt", "continuity_requirements"
@@ -45,6 +46,11 @@ def is_blank(v: Any) -> bool:
 def validate(data: dict[str, Any], mode: str = "final") -> tuple[bool, list[str], list[str]]:
     errors: list[str] = []
     warnings: list[str] = []
+    allowed_reference_paths = {
+        str(item).replace("\\", "/")
+        for item in ((data.get("reference_image_status") or {}).get("target_paths") or [])
+        if isinstance(item, str) and str(item).strip()
+    }
     for key in REQUIRED_TOP:
         if key not in data:
             errors.append(f"missing top-level key: {key}")
@@ -59,10 +65,16 @@ def validate(data: dict[str, Any], mode: str = "final") -> tuple[bool, list[str]
         errors.append("shot_prompts must be a list")
     if not isinstance(data.get("transition_prompts"), list):
         errors.append("transition_prompts must be a list")
+    if is_blank(data.get("prompt_language")):
+        errors.append("prompt_language must not be blank")
+    if not isinstance(data.get("visual_strategy"), dict):
+        errors.append("visual_strategy must be an object")
     if data.get("reference_image_status") is not None and not isinstance(data.get("reference_image_status"), dict):
         errors.append("reference_image_status must be an object when present")
     if data.get("stage05_execution_readiness") is not None and not isinstance(data.get("stage05_execution_readiness"), dict):
         errors.append("stage05_execution_readiness must be an object when present")
+    if not isinstance(data.get("stage05_handoff"), dict):
+        errors.append("stage05_handoff must be an object")
     if not isinstance(data.get("self_check"), dict):
         errors.append("self_check must be an object")
 
@@ -103,12 +115,28 @@ def validate(data: dict[str, Any], mode: str = "final") -> tuple[bool, list[str]
             for key in ["scene_summary", "start_keyframe_prompt", "end_keyframe_prompt", "motion_prompt", "camera_prompt", "lighting_prompt", "style_prompt", "consistency_prompt", "negative_prompt", "image_generation_notes", "video_generation_notes"]:
                 if is_blank(shot.get(key)):
                     errors.append(f"shot_prompts[{idx}].{key} must not be blank in final mode")
+            for key in ["intent_summary", "identity_anchor_prompt", "performance_prompt", "dialogue_delivery_prompt"]:
+                if is_blank(shot.get(key)):
+                    errors.append(f"shot_prompts[{idx}].{key} must not be blank in final mode")
+            if not isinstance(shot.get("story_anchor_bundle"), dict):
+                errors.append(f"shot_prompts[{idx}].story_anchor_bundle must be an object")
             deps = shot.get("dependencies")
             if not isinstance(deps, dict):
                 errors.append(f"shot_prompts[{idx}].dependencies must be an object")
             else:
                 if not isinstance(deps.get("reference_images"), list):
                     errors.append(f"shot_prompts[{idx}].dependencies.reference_images must be a list")
+                elif allowed_reference_paths:
+                    normalized_refs = {
+                        str(item).replace("\\", "/")
+                        for item in (deps.get("reference_images") or [])
+                        if isinstance(item, str) and str(item).strip()
+                    }
+                    if not normalized_refs.intersection(allowed_reference_paths):
+                        errors.append(
+                            f"shot_prompts[{idx}].dependencies.reference_images must reuse Stage 03 reference target path(s): "
+                            + ", ".join(sorted(allowed_reference_paths))
+                        )
 
     transitions = data.get("transition_prompts")
     if isinstance(transitions, list):
@@ -151,6 +179,15 @@ def validate(data: dict[str, Any], mode: str = "final") -> tuple[bool, list[str]
             value = self_check.get(key)
             if value is not None and not isinstance(value, bool):
                 errors.append(f"self_check.{key} must be a boolean when present")
+    stage05_handoff = data.get("stage05_handoff")
+    if isinstance(stage05_handoff, dict):
+        if not isinstance(stage05_handoff.get("ready_for_stage05"), bool):
+            errors.append("stage05_handoff.ready_for_stage05 must be a boolean")
+        if not isinstance(stage05_handoff.get("must_open_reference_entry"), bool):
+            errors.append("stage05_handoff.must_open_reference_entry must be a boolean")
+        for key in ["summary", "block_reason", "next_action"]:
+            if is_blank(stage05_handoff.get(key)):
+                errors.append(f"stage05_handoff.{key} must not be blank in final mode")
     reference_image_status = data.get("reference_image_status")
     if isinstance(reference_image_status, dict):
         for key in ["required", "all_present"]:

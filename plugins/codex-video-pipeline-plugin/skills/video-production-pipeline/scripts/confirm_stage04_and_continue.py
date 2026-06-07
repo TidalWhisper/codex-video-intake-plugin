@@ -8,11 +8,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "skills" / "video-keyframe-prompts" / "scripts"))
-sys.path.insert(0, str(ROOT / "skills" / "video-keyframe-images" / "scripts"))
 
 from pipeline_core.project_state import load_json_file, write_json_file  # noqa: E402
+import continue_pipeline  # noqa: E402
 import validate_keyframe_prompts  # noqa: E402
-import new_keyframe_image_jobs  # noqa: E402
 
 
 def _load(path: Path) -> dict:
@@ -69,12 +68,7 @@ def main(argv: list[str] | None = None) -> int:
     write_json_file(manifest_path, manifest_data)
 
     print(f"STAGE04_CONFIRMED: {project_dir}")
-    return new_keyframe_image_jobs.main([
-        "new_keyframe_image_jobs.py",
-        str(brief_path),
-        str(keyframe_path),
-        str(stage05_manifest_path),
-    ])
+    return continue_pipeline.main(["--project-dir", str(project_dir)])
 
 
 if __name__ == "__main__":

@@ -32,6 +32,33 @@ def ensure_locked_brief(brief: dict[str, Any]) -> None:
         raise SystemExit("ERROR: brief must allow Stage 01 generation")
 
 
+def ensure_confirmed_script(script: dict[str, Any]) -> None:
+    if script.get("stage") != "STAGE_01_SCRIPT_GENERATION":
+        raise SystemExit("ERROR: script.stage must be STAGE_01_SCRIPT_GENERATION")
+    status = str(script.get("status") or "").strip().lower()
+    allowed_next_stage = str(script.get("allowed_next_stage") or "").strip()
+    if status != "confirmed" or allowed_next_stage != "STAGE_02_STORYBOARD":
+        raise SystemExit("ERROR: Stage 04 requires a user-confirmed Stage 01 script")
+
+
+def ensure_confirmed_storyboard(storyboard: dict[str, Any]) -> None:
+    if storyboard.get("stage") != "STAGE_02_STORYBOARD_GENERATION":
+        raise SystemExit("ERROR: storyboard.stage must be STAGE_02_STORYBOARD_GENERATION")
+    status = str(storyboard.get("status") or "").strip().lower()
+    allowed_next_stage = str(storyboard.get("allowed_next_stage") or "").strip()
+    if status != "confirmed" or allowed_next_stage != "STAGE_03_CHARACTER_BIBLE":
+        raise SystemExit("ERROR: Stage 04 requires a user-confirmed Stage 02 storyboard")
+
+
+def ensure_confirmed_character_bible(character_bible: dict[str, Any]) -> None:
+    if character_bible.get("stage") != "STAGE_03_CHARACTER_BIBLE":
+        raise SystemExit("ERROR: character_bible.stage must be STAGE_03_CHARACTER_BIBLE")
+    status = str(character_bible.get("status") or "").strip().lower()
+    allowed_next_stage = str(character_bible.get("allowed_next_stage") or "").strip()
+    if status != "confirmed" or allowed_next_stage != "STAGE_04_KEYFRAME_PROMPTS":
+        raise SystemExit("ERROR: Stage 04 requires a user-confirmed Stage 03 character bible")
+
+
 def build_packet(
     brief: dict[str, Any],
     script: dict[str, Any],
@@ -75,11 +102,13 @@ def build_packet(
             "reference_image_required": bool(character_bible.get("reference_image_required")),
             "reference_image_status": dict(character_bible.get("reference_image_status") or {}),
             "stage05_execution_readiness": dict(character_bible.get("stage05_execution_readiness") or {}),
+            "reference_image_handoff": dict(character_bible.get("reference_image_handoff") or {}),
         },
         "prompt_policy": {
             "language": "English generation prompts with Chinese review notes",
             "must_preserve_character_identity": True,
             "must_cover_all_storyboard_shots": True,
+            "codex_must_decide_stage05_handoff": True,
         },
         "routing": routing_from_brief(brief),
         "schema_refs": {
@@ -105,6 +134,9 @@ def main(argv: list[str]) -> int:
     storyboard = load_json(storyboard_path)
     character_bible = load_json(character_path)
     ensure_locked_brief(brief)
+    ensure_confirmed_script(script)
+    ensure_confirmed_storyboard(storyboard)
+    ensure_confirmed_character_bible(character_bible)
     packet = build_packet(brief, script, storyboard, character_bible, brief_path, script_path, storyboard_path, character_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(packet, ensure_ascii=False, indent=2), encoding="utf-8")

@@ -101,6 +101,8 @@ GENERATION_STAGE_TO_SCOPE = {
 }
 
 LOCATION_HINTS = (
+    "废弃医院",
+    "医院",
     "川西的高原旷野",
     "川西高原旷野",
     "高原旷野",
@@ -172,6 +174,9 @@ TIME_HINTS = (
 )
 
 PROP_HINTS = (
+    "外卖箱",
+    "外卖袋",
+    "送餐地址",
     "最后一把伞",
     "雨伞",
     "伞",
@@ -187,6 +192,8 @@ PROP_HINTS = (
 )
 
 ROLE_SUFFIX_HINTS = (
+    "外卖员",
+    "骑手",
     "景观规划师",
     "规划师",
     "巡护员",
@@ -564,6 +571,9 @@ def _extract_location(idea: str) -> str:
         for prefix in [*WEATHER_HINTS, *TIME_HINTS]:
             if location.startswith(prefix):
                 location = location[len(prefix):].strip()
+        location = re.sub(r"^(?:一[家座栋间所]?|这家|那家)", "", location).strip()
+        if "医院" in location:
+            return "废弃医院" if "废弃" in location else "医院"
         if location:
             return location
     return ""

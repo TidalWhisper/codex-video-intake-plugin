@@ -6,6 +6,7 @@ Usage:
 """
 from __future__ import annotations
 import json
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -23,6 +24,22 @@ from pipeline_core.stage05_optimization_profiles import (  # noqa: E402
     resolve_stage05_workflow_optimization,
 )
 from pipeline_core.stage05_quality_gates import build_quality_gate, summarize_quality_review  # noqa: E402
+from pipeline_core.stage05_semantic_contract import (  # noqa: E402
+    apply_contract_overrides,
+    bootstrap_contract,
+    contract_job_items,
+    contract_card_spec,
+    contract_negative_prompt,
+    contract_provider_prompt,
+    contract_reference_images,
+    contract_repair_spec,
+    contract_review_spec,
+    defaults_contract,
+    job_contract,
+    load_stage05_semantic_contract,
+    provider_strategy_contract,
+    semantic_contract_summary,
+)
 from pipeline_core.requirement_compiler import compile_requirements, requested_output_allows_stage, stage_meets_requested_output  # noqa: E402
 from pipeline_core.stage05_route_registry import (  # noqa: E402
     RouteRegistryError,
@@ -188,6 +205,46 @@ def resolve_related_json(base_json: Path, raw: str | None) -> Path | None:
 
 def resolve_related_asset(base_json: Path, raw: str | None) -> Path | None:
     return resolve_related_json(base_json, raw)
+
+
+SHOT_SCOPED_REFERENCE_PATTERN = re.compile(
+    r"(?i)(from\s*s\d+\s*onward|s\d+\s*起|从\s*s\d+\s*开始)"
+)
+
+
+def _contains_shot_scoped_reference_clause(value: Any) -> bool:
+    return bool(SHOT_SCOPED_REFERENCE_PATTERN.search(str(value or "")))
+
+
+def _reference_plan_requires_refresh(character_bible: dict[str, Any]) -> bool:
+    reference_plan = character_bible.get("reference_image_plan") if isinstance(character_bible.get("reference_image_plan"), dict) else {}
+    for item in reference_plan.get("reference_images") or []:
+        if not isinstance(item, dict):
+            continue
+        for key in ("visual_consistency_prompt", "negative_consistency_prompt"):
+            if _contains_shot_scoped_reference_clause(item.get(key)):
+                return True
+    return False
+
+
+def _reference_bootstrap_receipt_path(prompts_path: Path, target_reference_path: str) -> Path:
+    resolved = resolve_related_asset(prompts_path, target_reference_path)
+    if resolved is None:
+        return (prompts_path.parent / target_reference_path).resolve().with_name(
+            f"{Path(target_reference_path).stem}_stage05a_receipt.json"
+        )
+    return resolved.with_name(f"{resolved.stem}_stage05a_receipt.json")
+
+
+def _has_sanitized_reference_bootstrap_receipt(prompts_path: Path, target_reference_path: str) -> bool:
+    receipt_path = _reference_bootstrap_receipt_path(prompts_path, target_reference_path)
+    if not receipt_path.exists() or not receipt_path.is_file():
+        return False
+    try:
+        receipt = load_json(receipt_path)
+    except SystemExit:
+        return False
+    return bool(receipt.get("sanitized_shot_scoped_reference_guidance"))
 
 
 def storyboard_lookup_from_prompts(prompts: dict, prompts_path: Path) -> dict[str, dict]:
@@ -707,6 +764,19 @@ def main(argv: list[str]) -> int:
         print("ERROR: keyframe_prompts.status must be draft or confirmed", file=sys.stderr)
         return 1
 
+    stage05_semantic_contract = load_stage05_semantic_contract(prompts)
+    stage05_semantic_contract_summary = semantic_contract_summary(stage05_semantic_contract)
+    stage05_defaults_contract = defaults_contract(stage05_semantic_contract)
+    stage05_provider_strategy_contract = provider_strategy_contract(stage05_semantic_contract)
+    stage05_bootstrap_contract = bootstrap_contract(stage05_semantic_contract)
+    stage05_contract_jobs = contract_job_items(stage05_semantic_contract)
+    contract_job_map_by_shot: dict[str, list[dict[str, Any]]] = {}
+    for item in stage05_contract_jobs:
+        shot_id = str(item.get("shot_id") or "").strip()
+        if not shot_id:
+            continue
+        contract_job_map_by_shot.setdefault(shot_id, []).append(dict(item))
+
     project_id = brief.get("project_id") or prompts.get("project_id") or out_path.parents[1].name
     aspect, resolution = parse_visual_spec(brief)
     route_resolution = resolve_stage05_route(brief, prompts)
@@ -754,6 +824,173 @@ def main(argv: list[str]) -> int:
     reference_bootstrap_style_positive_anchor = route_resolution.get("reference_bootstrap_style_positive_anchor")
     reference_bootstrap_style_negative_anchor = route_resolution.get("reference_bootstrap_style_negative_anchor")
     reference_bootstrap_style_selector = route_resolution.get("reference_bootstrap_style_selector")
+    if stage05_bootstrap_contract:
+        reference_bootstrap_resolution = apply_contract_overrides(
+            {
+                "workflow_mapping_key": reference_bootstrap_workflow_mapping_key,
+                "workflow_name": reference_bootstrap_workflow_name,
+                "comfyui_model_id": reference_bootstrap_comfyui_model_id,
+                "preferred_workflow_candidate": reference_bootstrap_preferred_workflow_candidate,
+                "preferred_workflow_source_ref": reference_bootstrap_preferred_workflow_source_ref,
+                "preferred_workflow_format": reference_bootstrap_preferred_workflow_format,
+                "style_preset_key": reference_bootstrap_style_preset_key,
+                "style_preset_label": reference_bootstrap_style_preset_label,
+                "style_positive_anchor": reference_bootstrap_style_positive_anchor,
+                "style_negative_anchor": reference_bootstrap_style_negative_anchor,
+                "style_selector": reference_bootstrap_style_selector,
+                "target_reference_image_path": None,
+            },
+            stage05_bootstrap_contract,
+            allowed_keys=[
+                "workflow_mapping_key",
+                "workflow_name",
+                "comfyui_model_id",
+                "preferred_workflow_candidate",
+                "preferred_workflow_source_ref",
+                "preferred_workflow_format",
+                "style_preset_key",
+                "style_preset_label",
+                "style_positive_anchor",
+                "style_negative_anchor",
+                "style_selector",
+                "target_reference_image_path",
+            ],
+        )
+        reference_bootstrap_workflow_mapping_key = str(
+            reference_bootstrap_resolution.get("workflow_mapping_key") or reference_bootstrap_workflow_mapping_key
+        )
+        reference_bootstrap_workflow_name = str(
+            reference_bootstrap_resolution.get("workflow_name") or reference_bootstrap_workflow_name
+        )
+        reference_bootstrap_comfyui_model_id = (
+            reference_bootstrap_resolution.get("comfyui_model_id") or reference_bootstrap_comfyui_model_id
+        )
+        reference_bootstrap_preferred_workflow_candidate = (
+            reference_bootstrap_resolution.get("preferred_workflow_candidate")
+            or reference_bootstrap_preferred_workflow_candidate
+        )
+        reference_bootstrap_preferred_workflow_source_ref = (
+            reference_bootstrap_resolution.get("preferred_workflow_source_ref")
+            or reference_bootstrap_preferred_workflow_source_ref
+        )
+        reference_bootstrap_preferred_workflow_format = (
+            reference_bootstrap_resolution.get("preferred_workflow_format")
+            or reference_bootstrap_preferred_workflow_format
+        )
+        reference_bootstrap_style_preset_key = reference_bootstrap_resolution.get("style_preset_key")
+        reference_bootstrap_style_preset_label = reference_bootstrap_resolution.get("style_preset_label")
+        reference_bootstrap_style_positive_anchor = reference_bootstrap_resolution.get("style_positive_anchor")
+        reference_bootstrap_style_negative_anchor = reference_bootstrap_resolution.get("style_negative_anchor")
+        reference_bootstrap_style_selector = reference_bootstrap_resolution.get("style_selector")
+    if stage05_defaults_contract:
+        stage05_defaults_resolution = apply_contract_overrides(
+            {
+                "stage05_mode": stage05_mode,
+                "stage05_route_key": stage05_route_key,
+                "style_family": style_family,
+                "comfyui_workflow_mapping_key": comfyui_workflow_mapping_key,
+                "comfyui_workflow_name": comfyui_workflow_name,
+                "comfyui_model_id": comfyui_model_id,
+                "preferred_comfyui_workflow_candidate": preferred_comfyui_workflow_candidate,
+                "preferred_comfyui_model_candidate": preferred_comfyui_model_candidate,
+                "preferred_comfyui_workflow_source_ref": preferred_comfyui_workflow_source_ref,
+                "preferred_comfyui_workflow_format": preferred_comfyui_workflow_format,
+                "preferred_comfyui_workflow_custom_node_dependencies": preferred_comfyui_workflow_custom_node_dependencies,
+                "preferred_comfyui_workflow_import_blockers": preferred_comfyui_workflow_import_blockers,
+                "comfyui_style_preset_key": comfyui_style_preset_key,
+                "comfyui_style_preset_label": comfyui_style_preset_label,
+                "comfyui_style_positive_anchor": comfyui_style_positive_anchor,
+                "comfyui_style_negative_anchor": comfyui_style_negative_anchor,
+                "comfyui_style_selector": comfyui_style_selector,
+                "comfyui_control_mode": declared_comfyui_control_mode,
+                "prompt_composition_mode": "codex_contract",
+            },
+            stage05_defaults_contract,
+            allowed_keys=[
+                "stage05_mode",
+                "stage05_route_key",
+                "style_family",
+                "comfyui_workflow_mapping_key",
+                "comfyui_workflow_name",
+                "comfyui_model_id",
+                "preferred_comfyui_workflow_candidate",
+                "preferred_comfyui_model_candidate",
+                "preferred_comfyui_workflow_source_ref",
+                "preferred_comfyui_workflow_format",
+                "preferred_comfyui_workflow_custom_node_dependencies",
+                "preferred_comfyui_workflow_import_blockers",
+                "comfyui_style_preset_key",
+                "comfyui_style_preset_label",
+                "comfyui_style_positive_anchor",
+                "comfyui_style_negative_anchor",
+                "comfyui_style_selector",
+                "comfyui_control_mode",
+                "prompt_composition_mode",
+            ],
+        )
+        stage05_mode = str(stage05_defaults_resolution.get("stage05_mode") or stage05_mode)
+        stage05_route_key = str(stage05_defaults_resolution.get("stage05_route_key") or stage05_route_key)
+        style_family = str(stage05_defaults_resolution.get("style_family") or style_family)
+        comfyui_workflow_mapping_key = str(stage05_defaults_resolution.get("comfyui_workflow_mapping_key") or comfyui_workflow_mapping_key)
+        comfyui_workflow_name = str(stage05_defaults_resolution.get("comfyui_workflow_name") or comfyui_workflow_name)
+        comfyui_model_id = stage05_defaults_resolution.get("comfyui_model_id") or comfyui_model_id
+        preferred_comfyui_workflow_candidate = (
+            stage05_defaults_resolution.get("preferred_comfyui_workflow_candidate")
+            or preferred_comfyui_workflow_candidate
+        )
+        preferred_comfyui_model_candidate = (
+            stage05_defaults_resolution.get("preferred_comfyui_model_candidate")
+            or preferred_comfyui_model_candidate
+        )
+        preferred_comfyui_workflow_source_ref = (
+            stage05_defaults_resolution.get("preferred_comfyui_workflow_source_ref")
+            or preferred_comfyui_workflow_source_ref
+        )
+        preferred_comfyui_workflow_format = (
+            stage05_defaults_resolution.get("preferred_comfyui_workflow_format")
+            or preferred_comfyui_workflow_format
+        )
+        preferred_comfyui_workflow_custom_node_dependencies = (
+            stage05_defaults_resolution.get("preferred_comfyui_workflow_custom_node_dependencies")
+            or preferred_comfyui_workflow_custom_node_dependencies
+        )
+        preferred_comfyui_workflow_import_blockers = (
+            stage05_defaults_resolution.get("preferred_comfyui_workflow_import_blockers")
+            or preferred_comfyui_workflow_import_blockers
+        )
+        comfyui_style_preset_key = stage05_defaults_resolution.get("comfyui_style_preset_key")
+        comfyui_style_preset_label = stage05_defaults_resolution.get("comfyui_style_preset_label")
+        comfyui_style_positive_anchor = stage05_defaults_resolution.get("comfyui_style_positive_anchor")
+        comfyui_style_negative_anchor = stage05_defaults_resolution.get("comfyui_style_negative_anchor")
+        comfyui_style_selector = stage05_defaults_resolution.get("comfyui_style_selector")
+        declared_comfyui_control_mode = str(
+            stage05_defaults_resolution.get("comfyui_control_mode") or declared_comfyui_control_mode
+        )
+        route_resolution.update(
+            {
+                "route_key": stage05_route_key,
+                "style_family": style_family,
+                "stage05_mode": stage05_mode,
+                "comfyui_workflow_mapping_key": comfyui_workflow_mapping_key,
+                "comfyui_workflow_name": comfyui_workflow_name,
+                "comfyui_model_id": comfyui_model_id,
+                "preferred_comfyui_workflow_candidate": preferred_comfyui_workflow_candidate,
+                "preferred_comfyui_model_candidate": preferred_comfyui_model_candidate,
+                "preferred_comfyui_workflow_source_ref": preferred_comfyui_workflow_source_ref,
+                "preferred_comfyui_workflow_format": preferred_comfyui_workflow_format,
+                "preferred_comfyui_workflow_custom_node_dependencies": preferred_comfyui_workflow_custom_node_dependencies,
+                "preferred_comfyui_workflow_import_blockers": preferred_comfyui_workflow_import_blockers,
+                "comfyui_style_preset_key": comfyui_style_preset_key,
+                "comfyui_style_preset_label": comfyui_style_preset_label,
+                "comfyui_style_positive_anchor": comfyui_style_positive_anchor,
+                "comfyui_style_negative_anchor": comfyui_style_negative_anchor,
+                "comfyui_style_selector": comfyui_style_selector,
+                "comfyui_control_mode": declared_comfyui_control_mode,
+                "resolution_mode": "codex_contract_mainline",
+                "workflow_mapping_resolution": "codex_contract_mainline",
+                "semantic_source": "codex_contract",
+            }
+        )
     route_entry: dict | None = None
     if route_resolution.get("used_registry") is True:
         try:
@@ -767,19 +1004,40 @@ def main(argv: list[str]) -> int:
     )
     reference_image_status = prompts.get("reference_image_status") if isinstance(prompts.get("reference_image_status"), dict) else {}
     stage05_execution_readiness = prompts.get("stage05_execution_readiness") if isinstance(prompts.get("stage05_execution_readiness"), dict) else {}
-    reference_guidance_requested = bool(
-        stage05_execution_readiness.get("reference_image_required")
-        or compiled.get("continuity_mode") == "character_locked"
-    )
-    reference_guidance_ready = bool(reference_guidance_requested and reference_image_status.get("all_present"))
+    if "required" in stage05_bootstrap_contract:
+        reference_guidance_requested = bool(stage05_bootstrap_contract.get("required"))
+    else:
+        reference_guidance_requested = bool(
+            stage05_execution_readiness.get("reference_image_required")
+            or compiled.get("continuity_mode") == "character_locked"
+        )
+    source_character_bible_path = resolve_related_json(prompts_path, str(prompts.get("source_character_bible") or "")) if prompts.get("source_character_bible") else None
+    reference_bootstrap_refresh_required = False
+    if source_character_bible_path and source_character_bible_path.exists():
+        try:
+            reference_bootstrap_refresh_required = _reference_plan_requires_refresh(load_json(source_character_bible_path))
+        except SystemExit:
+            reference_bootstrap_refresh_required = False
     primary_reference_image_path = ""
     if isinstance(reference_image_status.get("target_paths"), list):
         for item in reference_image_status["target_paths"]:
             if isinstance(item, str) and item.strip():
                 primary_reference_image_path = str(item).replace("\\", "/")
                 break
+    bootstrap_target_reference_image_path = str(
+        stage05_bootstrap_contract.get("target_reference_image_path") or ""
+    ).strip()
+    if bootstrap_target_reference_image_path:
+        primary_reference_image_path = bootstrap_target_reference_image_path.replace("\\", "/")
     if not primary_reference_image_path:
         primary_reference_image_path = "03_characters/reference_images/CHAR_001_primary.png"
+    if reference_bootstrap_refresh_required and _has_sanitized_reference_bootstrap_receipt(prompts_path, primary_reference_image_path):
+        reference_bootstrap_refresh_required = False
+    reference_guidance_ready = bool(
+        reference_guidance_requested
+        and reference_image_status.get("all_present")
+        and not reference_bootstrap_refresh_required
+    )
     workflow_mapping_path: str | None = None
     workflow_mapping_capabilities = {
         "supports_reference_images": False,
@@ -802,16 +1060,26 @@ def main(argv: list[str]) -> int:
         and "reference_guided" in (workflow_mapping_capabilities.get("supported_control_modes") or [])
     )
     workflow_capability_gaps: list[str] = []
-    if reference_guidance_requested and not reference_guidance_ready:
+    if reference_guidance_requested and not bool(reference_image_status.get("all_present")):
         workflow_capability_gaps.append("reference_images_missing")
     if reference_guidance_requested and workflow_mapping_capabilities.get("supports_reference_images") is not True:
         workflow_capability_gaps.append("selected_workflow_does_not_accept_reference_images")
     if reference_guidance_requested and not reference_guidance_ready:
         workflow_capability_gaps.append("reference_bootstrap_required_before_stage05b")
+    if reference_bootstrap_refresh_required:
+        workflow_capability_gaps.append("reference_bootstrap_refresh_required")
     comfyui_control_mode = "reference_guided" if reference_guidance_active else declared_comfyui_control_mode
     quality_contract = build_quality_contract(brief, compiled)
     quality_targets = build_stage_quality_targets("STAGE_05", quality_contract)
     provider_priority = list((compiled.get("provider_preferences") or {}).get("stage05_provider_priority") or ["comfyui_txt2img", "manual"])
+    if stage05_provider_strategy_contract:
+        provider_priority = [
+            str(item).strip()
+            for item in (
+                [stage05_provider_strategy_contract.get("primary"), *(stage05_provider_strategy_contract.get("fallback") or [])]
+            )
+            if str(item or "").strip()
+        ] or provider_priority
     keyframes_dir = out_path.parent / "keyframes"
     keyframes_dir.mkdir(parents=True, exist_ok=True)
     project_root = out_path.parent.parent
@@ -827,12 +1095,38 @@ def main(argv: list[str]) -> int:
             continue
         shot_id = shot.get("shot_id") or f"S{idx+1:03d}"
         storyboard_shot = storyboard_by_shot.get(str(shot_id), {})
-        frame_plan = classify_stage05_frame_plan(shot, storyboard_shot)
-        shot_frame_requirements[str(shot_id)] = list(frame_plan["required_roles"])
-        frame_specs: list[tuple[str, str | None]] = [("start", "start_keyframe_prompt")]
-        if frame_plan["requires_mid"]:
-            frame_specs.append(("mid", None))
-        frame_specs.append(("end", "end_keyframe_prompt"))
+        contract_items_for_shot = contract_job_map_by_shot.get(str(shot_id), [])
+        if stage05_contract_jobs and not contract_items_for_shot:
+            print(
+                f"ERROR: stage05_semantic_contract is active but shot {shot_id} has no explicit Stage05 jobs",
+                file=sys.stderr,
+            )
+            return 1
+        if contract_items_for_shot:
+            frame_plan_bundle = build_stage05_story_bundle(shot, storyboard_shot)
+            contract_frame_roles = [
+                str(item.get("frame_role") or "").strip().lower()
+                for item in contract_items_for_shot
+                if str(item.get("frame_role") or "").strip().lower() in {"start", "mid", "end"}
+            ]
+            ordered_roles = [role for role in ["start", "mid", "end"] if role in contract_frame_roles]
+            shot_frame_requirements[str(shot_id)] = ordered_roles
+            frame_specs = [(role, None) for role in ordered_roles]
+            frame_plan = {
+                "bundle": frame_plan_bundle,
+                "generation_profile": {
+                    "route_hint": "",
+                },
+                "required_roles": ordered_roles,
+                "requires_mid": "mid" in ordered_roles,
+            }
+        else:
+            frame_plan = classify_stage05_frame_plan(shot, storyboard_shot)
+            shot_frame_requirements[str(shot_id)] = list(frame_plan["required_roles"])
+            frame_specs = [("start", "start_keyframe_prompt")]
+            if frame_plan["requires_mid"]:
+                frame_specs.append(("mid", None))
+            frame_specs.append(("end", "end_keyframe_prompt"))
         identity_anchor_prompt = build_identity_anchor_fallback(
             shot,
             storyboard_shot,
@@ -846,15 +1140,21 @@ def main(argv: list[str]) -> int:
         for frame_role, prompt_key in frame_specs:
             image_id = f"IMG_{shot_id}_{frame_role.upper()}"
             output_path = keyframes_dir / f"{shot_id}_{frame_role}.png"
+            shot_job_contract = job_contract(stage05_semantic_contract, str(shot_id), frame_role)
+            semantic_source = "codex_contract" if shot_job_contract else "legacy_python_fallback"
             dependencies = shot.get("dependencies") if isinstance(shot.get("dependencies"), dict) else {}
             reference_images = [
                 str(item).replace("\\", "/")
                 for item in (dependencies.get("reference_images") or [])
                 if isinstance(item, str) and str(item).strip()
             ]
-            route_hint = str(frame_plan["generation_profile"].get("route_hint") or "").strip()
+            route_hint = str(
+                shot_job_contract.get("stage06_route_hint")
+                or frame_plan["generation_profile"].get("route_hint")
+                or ""
+            ).strip()
             secondary_reference_images: list[str] = []
-            if route_hint == INTERACTION_HANDOFF_ROUTE_HINT:
+            if route_hint == INTERACTION_HANDOFF_ROUTE_HINT and not shot_job_contract:
                 secondary_reference_images = interaction_handoff_secondary_reference_images(
                     project_root=project_root,
                     keyframes_dir=keyframes_dir,
@@ -865,6 +1165,10 @@ def main(argv: list[str]) -> int:
             for candidate in secondary_reference_images:
                 if candidate not in effective_reference_images:
                     effective_reference_images.append(candidate)
+            explicit_reference_images = contract_reference_images(shot_job_contract)
+            if explicit_reference_images:
+                effective_reference_images = [str(item).replace("\\", "/") for item in explicit_reference_images]
+                secondary_reference_images = []
             missing_reference_images = [
                 str(item).replace("\\", "/")
                 for item in effective_reference_images
@@ -878,16 +1182,32 @@ def main(argv: list[str]) -> int:
                     global_subject=global_subject,
                     aspect_ratio=aspect,
                 )
-                if frame_role == "mid"
+                if frame_role == "mid" and not shot_job_contract
                 else (shot.get(prompt_key) or "")
             )
-            prompt_text = str(prompt_text or "").strip()
+            if shot_job_contract:
+                prompt_text = str(
+                    shot_job_contract.get("prompt")
+                    or shot_job_contract.get("provider_prompt")
+                    or prompt_text
+                    or ""
+                ).strip()
+            else:
+                prompt_text = str(prompt_text or "").strip()
             negative_prompt = str(shot.get("negative_prompt") or prompts.get("global_negative_prompt") or "").strip()
+            explicit_provider_prompt = contract_provider_prompt(shot_job_contract)
+            explicit_negative_prompt = contract_negative_prompt(shot_job_contract)
+            if explicit_negative_prompt:
+                negative_prompt = explicit_negative_prompt
             selected_workflow_mapping_key = comfyui_workflow_mapping_key
             selected_workflow_name = comfyui_workflow_name
             selected_model_id = comfyui_model_id
             selected_preferred_workflow_candidate = preferred_comfyui_workflow_candidate
+            selected_preferred_model_candidate = preferred_comfyui_model_candidate
             selected_preferred_workflow_source_ref = preferred_comfyui_workflow_source_ref
+            selected_preferred_workflow_format = preferred_comfyui_workflow_format
+            selected_preferred_workflow_custom_node_dependencies = preferred_comfyui_workflow_custom_node_dependencies
+            selected_preferred_workflow_import_blockers = preferred_comfyui_workflow_import_blockers
             selected_control_mode = comfyui_control_mode
             selected_reference_guidance_active = reference_guidance_active
             selected_workflow_capability_gaps = list(workflow_capability_gaps)
@@ -896,12 +1216,99 @@ def main(argv: list[str]) -> int:
             selected_style_positive_anchor = comfyui_style_positive_anchor
             selected_style_negative_anchor = comfyui_style_negative_anchor
             selected_style_selector = comfyui_style_selector
+            if shot_job_contract:
+                job_runtime_overrides = apply_contract_overrides(
+                    {
+                        "comfyui_workflow_mapping_key": selected_workflow_mapping_key,
+                        "comfyui_workflow_name": selected_workflow_name,
+                        "comfyui_model_id": selected_model_id,
+                        "preferred_comfyui_workflow_candidate": selected_preferred_workflow_candidate,
+                        "preferred_comfyui_model_candidate": preferred_comfyui_model_candidate,
+                        "preferred_comfyui_workflow_source_ref": selected_preferred_workflow_source_ref,
+                        "preferred_comfyui_workflow_format": preferred_comfyui_workflow_format,
+                        "preferred_comfyui_workflow_custom_node_dependencies": preferred_comfyui_workflow_custom_node_dependencies,
+                        "preferred_comfyui_workflow_import_blockers": preferred_comfyui_workflow_import_blockers,
+                        "comfyui_control_mode": selected_control_mode,
+                        "reference_guidance_active": selected_reference_guidance_active,
+                        "workflow_capability_gaps": selected_workflow_capability_gaps,
+                        "comfyui_style_preset_key": selected_style_preset_key,
+                        "comfyui_style_preset_label": selected_style_preset_label,
+                        "comfyui_style_positive_anchor": selected_style_positive_anchor,
+                        "comfyui_style_negative_anchor": selected_style_negative_anchor,
+                        "comfyui_style_selector": selected_style_selector,
+                    },
+                    shot_job_contract,
+                    allowed_keys=[
+                        "comfyui_workflow_mapping_key",
+                        "comfyui_workflow_name",
+                        "comfyui_model_id",
+                        "preferred_comfyui_workflow_candidate",
+                        "preferred_comfyui_model_candidate",
+                        "preferred_comfyui_workflow_source_ref",
+                        "preferred_comfyui_workflow_format",
+                        "preferred_comfyui_workflow_custom_node_dependencies",
+                        "preferred_comfyui_workflow_import_blockers",
+                        "comfyui_control_mode",
+                        "reference_guidance_active",
+                        "workflow_capability_gaps",
+                        "comfyui_style_preset_key",
+                        "comfyui_style_preset_label",
+                        "comfyui_style_positive_anchor",
+                        "comfyui_style_negative_anchor",
+                        "comfyui_style_selector",
+                    ],
+                )
+                selected_workflow_mapping_key = str(
+                    job_runtime_overrides.get("comfyui_workflow_mapping_key") or selected_workflow_mapping_key
+                )
+                selected_workflow_name = str(
+                    job_runtime_overrides.get("comfyui_workflow_name") or selected_workflow_name
+                )
+                selected_model_id = job_runtime_overrides.get("comfyui_model_id") or selected_model_id
+                selected_preferred_workflow_candidate = (
+                    job_runtime_overrides.get("preferred_comfyui_workflow_candidate")
+                    or selected_preferred_workflow_candidate
+                )
+                selected_preferred_model_candidate = (
+                    job_runtime_overrides.get("preferred_comfyui_model_candidate")
+                    or selected_preferred_model_candidate
+                )
+                selected_preferred_workflow_source_ref = (
+                    job_runtime_overrides.get("preferred_comfyui_workflow_source_ref")
+                    or selected_preferred_workflow_source_ref
+                )
+                selected_preferred_workflow_format = (
+                    job_runtime_overrides.get("preferred_comfyui_workflow_format")
+                    or selected_preferred_workflow_format
+                )
+                selected_preferred_workflow_custom_node_dependencies = (
+                    job_runtime_overrides.get("preferred_comfyui_workflow_custom_node_dependencies")
+                    or selected_preferred_workflow_custom_node_dependencies
+                )
+                selected_preferred_workflow_import_blockers = (
+                    job_runtime_overrides.get("preferred_comfyui_workflow_import_blockers")
+                    or selected_preferred_workflow_import_blockers
+                )
+                selected_control_mode = str(
+                    job_runtime_overrides.get("comfyui_control_mode") or selected_control_mode
+                )
+                selected_reference_guidance_active = bool(
+                    job_runtime_overrides.get("reference_guidance_active")
+                )
+                selected_workflow_capability_gaps = list(
+                    job_runtime_overrides.get("workflow_capability_gaps") or selected_workflow_capability_gaps
+                )
+                selected_style_preset_key = job_runtime_overrides.get("comfyui_style_preset_key")
+                selected_style_preset_label = job_runtime_overrides.get("comfyui_style_preset_label")
+                selected_style_positive_anchor = job_runtime_overrides.get("comfyui_style_positive_anchor")
+                selected_style_negative_anchor = job_runtime_overrides.get("comfyui_style_negative_anchor")
+                selected_style_selector = job_runtime_overrides.get("comfyui_style_selector")
             style_preset_override_key = route_style_preset_override_key(
                 route_key=stage05_route_key,
                 shot_prompt=shot,
                 storyboard_shot=storyboard_shot,
             )
-            if route_entry and style_preset_override_key:
+            if route_entry and style_preset_override_key and not shot_job_contract:
                 override_preset = resolve_named_style_preset(route_entry, style_preset_override_key)
                 if (
                     override_preset.get("positive_anchor")
@@ -914,7 +1321,9 @@ def main(argv: list[str]) -> int:
                     selected_style_negative_anchor = override_preset.get("negative_anchor")
                     selected_style_selector = override_preset.get("style_selector") or selected_style_selector
             prompt_composition_mode = "legacy_stage04_full_prompt"
-            if _is_original_zimage_ui_workflow(selected_preferred_workflow_source_ref):
+            if shot_job_contract:
+                prompt_composition_mode = "codex_contract"
+            elif _is_original_zimage_ui_workflow(selected_preferred_workflow_source_ref):
                 prompt_text = sanitize_stage04_prompt_for_zimage(
                     prompt_text,
                     shot_prompt=shot,
@@ -922,7 +1331,7 @@ def main(argv: list[str]) -> int:
                 )
                 prompt_composition_mode = "zimage_skill_aligned"
             reference_bundle_mode = "primary_only"
-            if route_hint == INTERACTION_HANDOFF_ROUTE_HINT:
+            if route_hint == INTERACTION_HANDOFF_ROUTE_HINT and not shot_job_contract:
                 prompt_text = ", ".join(
                     part
                     for part in [
@@ -941,38 +1350,55 @@ def main(argv: list[str]) -> int:
                 )
                 if secondary_reference_images:
                     reference_bundle_mode = "primary_plus_context_frame"
+            elif explicit_reference_images:
+                reference_bundle_mode = "codex_contract"
+            elif shot_job_contract and str(shot_job_contract.get("reference_bundle_mode") or "").strip():
+                reference_bundle_mode = str(shot_job_contract.get("reference_bundle_mode") or "").strip()
             job = {
                 "image_id": image_id,
                 "shot_id": shot_id,
                 "frame_role": frame_role,
+                "semantic_source": semantic_source,
                 "stage05_mode": stage05_mode,
                 "source_prompt_ref": f"{prompts_ref}#{shot_id}.{frame_role}",
                 "prompt": prompt_text,
+                "provider_prompt": explicit_provider_prompt,
                 "negative_prompt": negative_prompt,
                 "consistency_prompt": effective_consistency_prompt,
                 "identity_anchor_prompt": identity_anchor_prompt,
                 "style_prompt": shot.get("style_prompt") or "",
                 "lighting_prompt": shot.get("lighting_prompt") or "",
                 "camera_prompt": shot.get("camera_prompt") or "",
+                "scene_summary": shot.get("scene_summary") or "",
+                "intent_summary": shot.get("intent_summary") or "",
+                "story_anchor_bundle": frame_plan["bundle"],
                 "reference_images": effective_reference_images,
-                "secondary_reference_images": secondary_reference_images,
+                "secondary_reference_images": secondary_reference_images or [
+                    str(item).replace("\\", "/")
+                    for item in (shot_job_contract.get("secondary_reference_images") or [])
+                    if isinstance(item, str) and str(item).strip()
+                ],
                 "reference_bundle_mode": reference_bundle_mode,
                 "primary_reference_image_path": primary_reference_image_path,
                 "missing_reference_images": missing_reference_images,
                 "stage06_route_hint": route_hint,
-                "stage06_requires_mid_guide": frame_plan["requires_mid"],
+                "stage06_requires_mid_guide": bool(
+                    shot_job_contract.get("stage06_requires_mid_guide")
+                    if shot_job_contract
+                    else frame_plan["requires_mid"]
+                ),
                 "stage05_route_key": stage05_route_key,
                 "style_family": style_family,
                 "comfyui_workflow_mapping_key": selected_workflow_mapping_key,
                 "comfyui_workflow_name": selected_workflow_name,
                 "comfyui_model_id": selected_model_id,
                 "preferred_comfyui_workflow_candidate": selected_preferred_workflow_candidate,
-                "preferred_comfyui_model_candidate": preferred_comfyui_model_candidate,
+                "preferred_comfyui_model_candidate": selected_preferred_model_candidate,
                 "route_migration_state": route_migration_state,
                 "preferred_comfyui_workflow_source_ref": selected_preferred_workflow_source_ref,
-                "preferred_comfyui_workflow_format": preferred_comfyui_workflow_format,
-                "preferred_comfyui_workflow_custom_node_dependencies": preferred_comfyui_workflow_custom_node_dependencies,
-                "preferred_comfyui_workflow_import_blockers": preferred_comfyui_workflow_import_blockers,
+                "preferred_comfyui_workflow_format": selected_preferred_workflow_format,
+                "preferred_comfyui_workflow_custom_node_dependencies": selected_preferred_workflow_custom_node_dependencies,
+                "preferred_comfyui_workflow_import_blockers": selected_preferred_workflow_import_blockers,
                 "comfyui_style_preset_key": selected_style_preset_key,
                 "comfyui_style_preset_label": selected_style_preset_label,
                 "comfyui_style_positive_anchor": selected_style_positive_anchor,
@@ -1003,7 +1429,36 @@ def main(argv: list[str]) -> int:
                 "errors": [],
                 "notes": "",
             }
-            job["quality_gate"] = build_quality_gate(job)
+            review_spec = contract_review_spec(shot_job_contract)
+            repair_spec = contract_repair_spec(shot_job_contract)
+            card_spec = contract_card_spec(shot_job_contract)
+            quality_gate = build_quality_gate(job)
+            if review_spec:
+                quality_gate = apply_contract_overrides(
+                    quality_gate,
+                    review_spec,
+                    allowed_keys=[
+                        "risk_tags",
+                        "control_mode",
+                        "requires_manual_review",
+                        "manual_review_status",
+                        "reason",
+                        "creator_risk_summary",
+                        "creator_repair_suggestions",
+                        "review_priority_score",
+                        "review_priority_label",
+                        "review_priority_bucket",
+                        "review_checklist",
+                        "review_focus",
+                        "auto_repair_recommended",
+                        "semantic_source",
+                    ],
+                )
+            job["quality_gate"] = quality_gate
+            if repair_spec:
+                job["auto_repair_plan"] = dict(repair_spec)
+            if card_spec:
+                job["creator_review_card"] = dict(card_spec)
             if job["quality_gate"]["requires_manual_review"]:
                 job["notes"] = (
                     "Manual review required before Stage 06: "
@@ -1014,6 +1469,11 @@ def main(argv: list[str]) -> int:
             jobs.append(job)
 
     quality_review = summarize_quality_review(jobs)
+    image_provider_strategy = (
+        dict(stage05_provider_strategy_contract)
+        if stage05_provider_strategy_contract
+        else provider_strategy_from_brief(brief)
+    )
     top_level_style_preset_key = comfyui_style_preset_key
     top_level_style_preset_label = comfyui_style_preset_label
     top_level_style_positive_anchor = comfyui_style_positive_anchor
@@ -1052,11 +1512,21 @@ def main(argv: list[str]) -> int:
         self_check_notes.append(
             "Run Stage05-A first to generate and backfill the primary reference image before Stage05-B storyboard generation."
         )
+    if reference_bootstrap_refresh_required:
+        self_check_notes.append(
+            "Stage05-A will refresh the primary reference image because the current Stage 03 reference guidance still contains shot-scoped prop clauses such as 'from S004 onward'."
+        )
 
     reference_bootstrap = {
         "stage05_mode": STAGE05_MODE_REFERENCE_BOOTSTRAP,
         "required": reference_guidance_requested,
         "ready": reference_guidance_ready,
+        "refresh_required": reference_bootstrap_refresh_required,
+        "semantic_source": (
+            "codex_contract"
+            if stage05_bootstrap_contract
+            else "legacy_python_fallback"
+        ),
         "target_reference_image_path": primary_reference_image_path,
         "workflow_mapping_key": reference_bootstrap_workflow_mapping_key,
         "workflow_name": reference_bootstrap_workflow_name,
@@ -1079,7 +1549,9 @@ def main(argv: list[str]) -> int:
         "source_brief": str(brief_path).replace("\\", "/"),
         "source_keyframe_prompts": str(prompts_path).replace("\\", "/"),
         "created_at": datetime.now(timezone.utc).isoformat(),
-        "image_provider_strategy": provider_strategy_from_brief(brief),
+        "image_provider_strategy": image_provider_strategy,
+        "stage05_semantic_contract": stage05_semantic_contract,
+        "stage05_semantic_contract_summary": stage05_semantic_contract_summary,
         "compiled_requirements": compiled,
         "quality_contract": quality_contract,
         "quality_targets": quality_targets,

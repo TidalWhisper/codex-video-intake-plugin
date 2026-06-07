@@ -113,6 +113,30 @@ def test_build_auto_repair_plan_enables_reference_guided_second_pass_for_interac
     assert "umbrella_prop_contact" in plan["target_failure_modes"]
 
 
+def test_build_auto_repair_plan_enables_reference_guided_second_pass_for_storefront_branding() -> None:
+    job = {
+        "image_id": "IMG_S003_END",
+        "prompt": "young woman pauses outside a convenience store glass door under warm light",
+        "negative_prompt": "no logo, no brand wordmark, no readable storefront sign",
+        "comfyui_control_mode": "reference_guided",
+    }
+    gate = stage05_quality_gates.build_quality_gate(job)
+    plan = stage05_quality_gates.build_auto_repair_plan(job, gate)
+    assert "storefront_branding" in gate["risk_tags"]
+    assert gate["requires_manual_review"] is True
+    assert gate["auto_repair_recommended"] is True
+    assert plan["enabled"] is True
+    assert plan["mode"] == "two_pass_reference_guided_repair"
+    assert plan["pass_count"] == 2
+    assert "storefront_branding" in plan["target_failure_modes"]
+    assert any("upper storefront fascia" in item for item in plan["repair_prompt_sections"])
+    assert any("colored glass-door stripe" in item for item in plan["repair_prompt_sections"])
+    assert any("sale-card panels" in item for item in plan["repair_prompt_sections"])
+    assert any("dark header lettering above light box" in item for item in plan["repair_negative_hints"])
+    assert any("tri-color door decal" in item for item in plan["repair_negative_hints"])
+    assert any("colorful promo poster on glass door" in item for item in plan["repair_negative_hints"])
+
+
 def test_summarize_quality_review_counts_mixed_scene_matrix() -> None:
     jobs = [
         {"image_id": "IMG_SAFE", "prompt": "cinematic beach walk at sunset", "comfyui_control_mode": "prompt_only"},

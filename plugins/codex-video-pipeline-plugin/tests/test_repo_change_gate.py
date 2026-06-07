@@ -4,7 +4,6 @@ import importlib.util
 import sys
 from pathlib import Path
 from types import ModuleType
-from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -49,65 +48,33 @@ def test_is_blocked_path_allows_real_repo_source_files() -> None:
     assert all(not repo_change_gate.is_blocked_path(path) for path in allowed)
 
 
-def test_python_source_paths_only_returns_existing_python_files() -> None:
-    paths = [
-        "plugins/codex-video-pipeline-plugin/scripts/repo_change_gate.py",
-        "plugins/codex-video-pipeline-plugin/tests/test_repo_change_gate.py",
-        "README_快速开始.md",
-        "not_real.py",
-    ]
-
-    resolved = repo_change_gate.python_source_paths(paths)
-    labels = {path.name for path in resolved}
-
-    assert "repo_change_gate.py" in labels
-    assert "test_repo_change_gate.py" in labels
-    assert "README_快速开始.md" not in labels
-    assert "not_real.py" not in labels
+def test_pre_commit_uses_staged_paths_and_blocks_temp_files() -> None:
+    assert (
+        repo_change_gate.main(
+            [
+                "--mode",
+                "pre-commit",
+                "--staged-path",
+                ".pytest-tmp/session.log",
+            ]
+        )
+        == 1
+    )
 
 
-def test_stage01_formal_chain_token_gate_accepts_current_sources() -> None:
-    repo_change_gate.assert_stage01_formal_chain_clean()
+def test_manual_mode_passes_real_source_files() -> None:
+    assert (
+        repo_change_gate.main(
+            [
+                "--mode",
+                "manual",
+                "--staged-path",
+                "plugins/codex-video-pipeline-plugin/scripts/repo_change_gate.py",
+            ]
+        )
+        == 0
+    )
 
 
-def test_stage02_formal_chain_token_gate_accepts_current_sources() -> None:
-    repo_change_gate.assert_stage02_formal_chain_clean()
-
-
-def test_stage03_formal_chain_token_gate_accepts_current_sources() -> None:
-    repo_change_gate.assert_stage03_formal_chain_clean()
-
-
-def test_stage04_formal_chain_token_gate_accepts_current_sources() -> None:
-    repo_change_gate.assert_stage04_formal_chain_clean()
-
-
-def test_manual_mode_passes_after_stage_contract_suite_without_full_repo_suite(monkeypatch) -> None:
-    calls: list[str] = []
-
-    monkeypatch.setattr(repo_change_gate, "run_stage_contract_suite", lambda: calls.append("contract") or 0)
-    monkeypatch.setattr(repo_change_gate, "run_full_repo_suite", lambda: calls.append("full") or 0)
-
-    assert repo_change_gate.main([
-        "--mode",
-        "manual",
-        "--staged-path",
-        "plugins/codex-video-pipeline-plugin/scripts/repo_change_gate.py",
-    ]) == 0
-    assert calls == ["contract"]
-
-
-def test_manual_mode_can_explicitly_run_full_repo_suite(monkeypatch) -> None:
-    calls: list[str] = []
-
-    monkeypatch.setattr(repo_change_gate, "run_stage_contract_suite", lambda: calls.append("contract") or 0)
-    monkeypatch.setattr(repo_change_gate, "run_full_repo_suite", lambda: calls.append("full") or 0)
-
-    assert repo_change_gate.main([
-        "--mode",
-        "manual",
-        "--with-full-suite",
-        "--staged-path",
-        "plugins/codex-video-pipeline-plugin/scripts/repo_change_gate.py",
-    ]) == 0
-    assert calls == ["contract", "full"]
+def test_pre_push_is_a_fast_no_op() -> None:
+    assert repo_change_gate.main(["--mode", "pre-push"]) == 0

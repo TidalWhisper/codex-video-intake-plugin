@@ -46,6 +46,15 @@ def write_text(path: Path, content: str) -> None:
     path.write_text(content.rstrip() + "\n", encoding="utf-8")
 
 
+def refresh_manifest_prompt_patch_artifacts(manifest_path: Path, data: dict[str, Any]) -> dict[str, Any]:
+    # Rebuild review/prompt-patch artifacts from the current runtime code before
+    # selecting rerun targets, so D-mode auto-reruns never keep using a stale
+    # prompt_patch_plan.json from an older storefront-repair rule set.
+    run_comfyui_txt2img.update_manifest_state(data, manifest_path)
+    write_json(manifest_path, data)
+    return data
+
+
 def top_patch_items(manifest_path: Path, data: dict[str, Any]) -> list[dict[str, Any]]:
     plan_path = manifest_path.parent / "prompt_patch_plan.json"
     if plan_path.exists():
@@ -303,6 +312,7 @@ def main(argv: list[str] | None = None) -> int:
 
     manifest_path = Path(args.manifest_json)
     data = load_json(manifest_path)
+    data = refresh_manifest_prompt_patch_artifacts(manifest_path, data)
     items = top_patch_items(manifest_path, data)
     if args.image_id:
         items = [item for item in items if isinstance(item, dict) and str(item.get("image_id") or "").strip() == args.image_id]

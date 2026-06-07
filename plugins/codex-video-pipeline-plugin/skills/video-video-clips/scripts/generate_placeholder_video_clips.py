@@ -117,17 +117,18 @@ def main() -> int:
         data["self_check"]["notes"].append(
             "formal_progression_blocker:source Stage 05 still requires review or missing evidence; Stage 06 placeholder output remains draft_only."
         )
-    data["formal_promotion_status"] = "ready_for_formal_progression" if all_generated and stage05_ready else ("draft_only" if generated > 0 else "pending")
+    data["formal_promotion_status"] = "pending_confirmation" if all_generated and stage05_ready else ("draft_only" if generated > 0 else "pending")
     data["status"] = "generated" if all_generated else ("in_progress" if generated > 0 else "draft")
     data["allowed_next_stage"] = next_stage_after("STAGE_06_VIDEO_CLIPS", routing, "STAGE_07_AUDIO") if all_generated and stage05_ready else None
+    data["confirmed_by_user"] = False
     data["updated_at"] = datetime.now(timezone.utc).isoformat()
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     if all_generated and stage05_ready:
         update_project_manifest_for_stage(
             path,
-            current_stage="STAGE_06_VIDEO_CLIPS_CONFIRMED",
+            current_stage="STAGE_06_VIDEO_CLIPS",
             allowed_next_stage=data["allowed_next_stage"],
-            flags={"video_clips_confirmed": True},
+            flags={"video_clips_confirmed": False},
             status="active",
         )
     print(f"PLACEHOLDER VIDEO CLIPS GENERATED: {generated}/{expected}")

@@ -13,6 +13,7 @@ from typing import Any
 from PIL import Image, ImageFilter
 
 THIS_DIR = Path(__file__).resolve().parent
+PLUGIN_ROOT = THIS_DIR.parent.parent
 if str(THIS_DIR) not in sys.path:
     sys.path.insert(0, str(THIS_DIR))
 if str(THIS_DIR.parent) not in sys.path:
@@ -49,6 +50,16 @@ from workflow_mapping import apply_node_inputs, load_mapped_workflow, load_workf
 AUTO_ROUTED_WORKFLOW_NAMES = {"", "auto", "txt2img_keyframe"}
 QWEN_NEXTSCENE_WORKFLOW_MAPPING_KEYS = {"stage05_realistic_cinematic_qwen_edit_nextscene_local"}
 QWEN_REFERENCE_TARGET_SIZES = (512, 768, 1024, 1344, 1536, 2048)
+
+
+def playwright_node_modules_dir() -> Path:
+    preferred = PLUGIN_ROOT / ".tmp-playwright" / "node_modules"
+    fallback = Path.cwd() / ".tmp-playwright" / "node_modules"
+    if preferred.exists():
+        return preferred
+    if fallback.exists():
+        return fallback
+    return preferred
 
 
 def request_record(
@@ -121,6 +132,19 @@ def _record_provider_decision(
         "details": details or {},
         "created_at": utc_now(),
     })
+
+
+def _persist_stage05_progress(
+    manifest_path: Path,
+    data: dict[str, Any],
+    request_manifest: dict[str, Any],
+    requests_path: Path,
+) -> None:
+    update_manifest_state(data, manifest_path)
+    write_json(manifest_path, data)
+    request_manifest["generated_at"] = utc_now()
+    write_json(requests_path, request_manifest)
+
 
 def stable_seed(job: dict[str, Any]) -> int:
     raw_seed = job.get("seed")
@@ -777,6 +801,10 @@ def main(argv: list[str] | None = None) -> int:
     for job in runnable_jobs:
         request_item = requests_by_id[job["image_id"]]
         request_item["requested_at"] = utc_now()
+        request_item["status"] = "submitting"
+        job["provider"] = "comfyui_txt2img"
+        job["status"] = "submitting"
+        _persist_stage05_progress(manifest_path, data, request_manifest, requests_path)
         try:
             workflow_name = resolve_workflow_mapping_key_for_job(job, str(args.workflow_name or ""))
             workflow_display_name = resolve_workflow_display_name_for_job(job, workflow_name)
@@ -822,7 +850,7 @@ def main(argv: list[str] | None = None) -> int:
                 submission_payload = comfyui_ui_workflow.convert_ui_workflow_to_prompt(
                     patched_workflow,
                     base_url=settings["base_url"],
-                    node_modules_dir=(Path.cwd() / ".tmp-playwright" / "node_modules"),
+                    node_modules_dir=playwright_node_modules_dir(),
                 )
                 workflow = submission_payload["prompt"]
                 extra_data = submission_payload.get("extra_data")
@@ -837,6 +865,9 @@ def main(argv: list[str] | None = None) -> int:
                 request_item["staged_reference_images"] = staged_reference_images
             submitted = client.submit_prompt(workflow, extra_data=extra_data)
             request_item["prompt_id"] = submitted["prompt_id"]
+            request_item["status"] = "running"
+            job["status"] = "running"
+            _persist_stage05_progress(manifest_path, data, request_manifest, requests_path)
             history_entry = client.wait_for_prompt(
                 str(submitted["prompt_id"]),
                 poll_interval=args.poll_interval,
@@ -883,7 +914,7 @@ def main(argv: list[str] | None = None) -> int:
                         repair_submission_payload = comfyui_ui_workflow.convert_ui_workflow_to_prompt(
                             patched_repair_workflow,
                             base_url=settings["base_url"],
-                            node_modules_dir=(Path.cwd() / ".tmp-playwright" / "node_modules"),
+                            node_modules_dir=playwright_node_modules_dir(),
                         )
                         repair_workflow = repair_submission_payload["prompt"]
                         repair_extra_data = repair_submission_payload.get("extra_data")
@@ -966,21 +997,22 @@ def main(argv: list[str] | None = None) -> int:
                 "repair_status": repair_status,
                 **output_dimensions,
             })
+            _persist_stage05_progress(manifest_path, data, request_manifest, requests_path)
         except ComfyUIError as exc:
             failed = True
             append_error(job, "comfyui_txt2img", str(exc))
+            job["provider"] = "comfyui_txt2img"
+            job["status"] = "failed"
             request_item.update({
                 "status": "failed",
                 "completed_at": utc_now(),
                 "error_message": str(exc),
             })
+            _persist_stage05_progress(manifest_path, data, request_manifest, requests_path)
             if args.fail_fast:
                 break
 
-    update_manifest_state(data, manifest_path)
-    write_json(manifest_path, data)
-    request_manifest["generated_at"] = utc_now()
-    write_json(requests_path, request_manifest)
+    _persist_stage05_progress(manifest_path, data, request_manifest, requests_path)
 
     if failed or missing_reference_blocks_by_image_id or preflight_blocks_by_image_id:
         print(f"COMFYUI TXT2IMG COMPLETED WITH FAILURES: {manifest_path}")

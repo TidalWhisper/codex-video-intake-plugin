@@ -32,6 +32,24 @@ def ensure_locked_brief(brief: dict[str, Any]) -> None:
         raise SystemExit("ERROR: brief must allow Stage 01 generation")
 
 
+def ensure_confirmed_script(script: dict[str, Any]) -> None:
+    if script.get("stage") != "STAGE_01_SCRIPT_GENERATION":
+        raise SystemExit("ERROR: script.stage must be STAGE_01_SCRIPT_GENERATION")
+    status = str(script.get("status") or "").strip().lower()
+    allowed_next_stage = str(script.get("allowed_next_stage") or "").strip()
+    if status != "confirmed" or allowed_next_stage != "STAGE_02_STORYBOARD":
+        raise SystemExit("ERROR: Stage 03 requires a user-confirmed Stage 01 script")
+
+
+def ensure_confirmed_storyboard(storyboard: dict[str, Any]) -> None:
+    if storyboard.get("stage") != "STAGE_02_STORYBOARD_GENERATION":
+        raise SystemExit("ERROR: storyboard.stage must be STAGE_02_STORYBOARD_GENERATION")
+    status = str(storyboard.get("status") or "").strip().lower()
+    allowed_next_stage = str(storyboard.get("allowed_next_stage") or "").strip()
+    if status != "confirmed" or allowed_next_stage != "STAGE_03_CHARACTER_BIBLE":
+        raise SystemExit("ERROR: Stage 03 requires a user-confirmed Stage 02 storyboard")
+
+
 def build_packet(
     brief: dict[str, Any],
     script: dict[str, Any],
@@ -74,8 +92,9 @@ def build_packet(
             "shots": storyboard_shots,
         },
         "reference_image_policy": {
-            "reference_image_required_default": True,
-            "character_locked_stage05_requires_ready_reference_images": True,
+            "codex_must_decide_reference_image_required": True,
+            "reference_entry_path": "03_characters/reference_image_start_here.md",
+            "stage05_entry_path": "04_keyframes/stage05_start_here.md",
         },
         "routing": routing_from_brief(brief),
         "schema_refs": {
@@ -99,6 +118,8 @@ def main(argv: list[str]) -> int:
     script = load_json(script_path)
     storyboard = load_json(storyboard_path)
     ensure_locked_brief(brief)
+    ensure_confirmed_script(script)
+    ensure_confirmed_storyboard(storyboard)
     packet = build_packet(brief, script, storyboard, brief_path, script_path, storyboard_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(packet, ensure_ascii=False, indent=2), encoding="utf-8")

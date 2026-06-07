@@ -78,6 +78,68 @@ def test_sync_project_truth_demotes_optimistic_manifest_to_stage05_review_requir
     assert overview_json["recommended_entry"]["label"] == "打开 Stage 05 审图工作台"
 
 
+def test_sync_project_truth_keeps_stage05_in_progress_while_rerun_replaces_existing_outputs(tmp_path: Path) -> None:
+    project_dir = tmp_path / "video_projects" / "creator_trial_20260606_store_rerun"
+    (project_dir / "05_images").mkdir(parents=True, exist_ok=True)
+    manifest_path = project_dir / "project_manifest.json"
+    manifest_path.write_text(json.dumps({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "current_stage": "STAGE_05_KEYFRAME_IMAGES",
+        "status": "blocked",
+        "brief_locked": True,
+        "script_confirmed": True,
+        "storyboard_confirmed": True,
+        "character_bible_confirmed": True,
+        "keyframe_prompts_confirmed": True,
+        "allowed_next_stage": None,
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    (project_dir / "05_images" / "keyframe_image_manifest.json").write_text(json.dumps({
+        "stage": "STAGE_05_KEYFRAME_IMAGES",
+        "status": "generated",
+        "project_id": project_dir.name,
+        "image_provider_strategy": {"primary": "comfyui_txt2img", "fallback": ["manual"]},
+        "jobs": [
+            {
+                "image_id": "IMG_S003_START",
+                "provider": "comfyui_txt2img",
+                "status": "running",
+                "evidence": {"file_exists": True, "file_size_bytes": 975401},
+            },
+            {
+                "image_id": "IMG_S003_END",
+                "provider": "comfyui_txt2img",
+                "status": "succeeded",
+                "evidence": {"file_exists": True, "file_size_bytes": 1114733},
+            },
+        ],
+        "quality_review": {
+            "blocking_image_ids": ["IMG_S003_START"],
+            "next_review_image_ids": ["IMG_S003_START"],
+            "manual_review_cleared": False,
+        },
+        "self_check": {
+            "all_required_images_exist": True,
+            "manual_review_cleared": False,
+            "ready_for_video_clip_generation": False,
+        },
+        "creator_runtime_status": {
+            "headline": "Stage 05 关键帧仍在生成中。",
+            "detail": "当前已有 2 / 2 张关键帧落盘，仍有 1 个生成任务在提交或执行中。",
+        },
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    assert project_state.sync_project_manifest_truth(manifest_path) == manifest_path
+
+    synced = json.loads(manifest_path.read_text(encoding="utf-8"))
+    stage05_truth = synced["state_truth"]["stage_states"]["stage05"]
+    assert stage05_truth["normalized_status"] == "in_progress"
+    assert stage05_truth["current_blocker"] == "Stage 05 仍有 1 个关键帧生成/重生任务在执行中。"
+    assert "仍有 1 个生成/重生任务在执行中" in stage05_truth["current_result"]
+    assert synced["creator_status_overview"]["current_blocker"] == "Stage 05 仍有 1 个关键帧生成/重生任务在执行中。"
+    assert synced["creator_status_overview"]["next_action"].startswith("等待当前 Stage 05")
+
+
 def test_sync_project_truth_marks_placeholder_stage06_as_non_confirmed(tmp_path: Path) -> None:
     project_dir = tmp_path / "video_projects" / "real_smoke"
     (project_dir / "05_images").mkdir(parents=True, exist_ok=True)
@@ -288,6 +350,35 @@ def test_sync_project_truth_marks_stage01_generated_as_pending_confirmation(tmp_
     assert "待用户确认" in script_step["current_result"]
     assert "Stage 02" in script_step["current_blocker"]
     assert script_step["next_action"] == "确认剧本内容。"
+
+
+def test_sync_project_truth_keeps_stage01_generation_when_no_script_artifact_exists(tmp_path: Path) -> None:
+    project_dir = tmp_path / "video_projects" / "stage01_dispatch_without_outputs"
+    (project_dir / "01_script").mkdir(parents=True, exist_ok=True)
+    manifest_path = project_dir / "project_manifest.json"
+    manifest_path.write_text(json.dumps({
+        "project_id": project_dir.name,
+        "project_title": "深夜便利店暖光",
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "current_stage": "STAGE_01_SCRIPT_GENERATION",
+        "status": "active",
+        "brief_locked": True,
+        "script_confirmed": False,
+        "allowed_next_stage": "STAGE_01_SCRIPT_GENERATION",
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    assert project_state.sync_project_manifest_truth(manifest_path) == manifest_path
+
+    synced = json.loads(manifest_path.read_text(encoding="utf-8"))
+    overview = synced["creator_status_overview"]
+    script_step = next(step for step in overview["steps"] if step["step"] == "剧本")
+    assert synced["current_stage"] == "STAGE_01_SCRIPT_GENERATION"
+    assert synced["allowed_next_stage"] == "STAGE_01_SCRIPT_GENERATION"
+    assert overview["trusted_stage"] == "STAGE_01_SCRIPT_GENERATION"
+    assert script_step["status"] == "current"
+    assert script_step["current_result"] == "Stage 01 自动剧本生成尚未执行。"
+    assert script_step["next_action"] == "运行 Stage 01 自动剧本生成。"
+    assert "run_stage01_from_locked_brief.py" in script_step["command"]
 
 
 def test_sync_project_truth_marks_stage02_dispatch_failure_as_rerunnable(tmp_path: Path) -> None:

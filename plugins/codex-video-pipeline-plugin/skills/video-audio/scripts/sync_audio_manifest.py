@@ -158,6 +158,8 @@ def main() -> int:
     data["updated_at"] = datetime.now(timezone.utc).isoformat()
     if all_audio:
         data["allowed_next_stage"] = next_stage_after("STAGE_07_AUDIO", routing, "STAGE_08_ASSEMBLY")
+        data["confirmed_by_user"] = False
+        data["formal_promotion_status"] = "pending_confirmation"
         self_check.setdefault("notes", [])
         self_check["notes"] = [
             note for note in self_check["notes"]
@@ -170,13 +172,14 @@ def main() -> int:
         )
         update_project_manifest_for_stage(
             path,
-            current_stage="STAGE_07_AUDIO_CONFIRMED",
+            current_stage="STAGE_07_AUDIO",
             allowed_next_stage=data["allowed_next_stage"],
-            flags={"audio_confirmed": True},
+            flags={"audio_confirmed": False},
             status="active",
         )
     else:
         data["allowed_next_stage"] = None
+        data["confirmed_by_user"] = False
         try:
             provider_config, _ = load_provider_config(root=ROOT)
             comfyui_result = check_comfyui_server(provider_config, timeout=8)

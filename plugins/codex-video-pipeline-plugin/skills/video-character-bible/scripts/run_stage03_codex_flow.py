@@ -9,11 +9,15 @@ from typing import Any
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PLUGIN_ROOT = Path(__file__).resolve().parents[3]
-REPO_ROOT = Path(__file__).resolve().parents[5]
 sys.path.insert(0, str(SCRIPT_DIR))
 sys.path.insert(0, str(PLUGIN_ROOT / "scripts"))
 
-from build_stage03_prompt_packet import build_packet, ensure_locked_brief  # noqa: E402
+from build_stage03_prompt_packet import (  # noqa: E402
+    build_packet,
+    ensure_confirmed_script,
+    ensure_confirmed_storyboard,
+    ensure_locked_brief,
+)
 import new_character_bible_template  # noqa: E402
 from pipeline_core.codex_flow import (  # noqa: E402
     build_generation_request,
@@ -80,6 +84,8 @@ def main(argv: list[str] | None = None) -> int:
     script = load_json(script_path)
     storyboard = load_json(storyboard_path)
     ensure_locked_brief(brief)
+    ensure_confirmed_script(script)
+    ensure_confirmed_storyboard(storyboard)
 
     prompt_packet_path = out_dir / "stage03_prompt_packet.json"
     prompt_packet = build_packet(brief, script, storyboard, brief_path, script_path, storyboard_path)
@@ -107,7 +113,7 @@ def main(argv: list[str] | None = None) -> int:
         llm_output_path=llm_output_path,
         output_message_path=generation_last_message_path,
         codex_bin=resolved_codex_bin,
-        cwd=REPO_ROOT,
+        cwd=PLUGIN_ROOT,
     )
 
     total_attempts = max(0, int(args.max_repair_attempts))
@@ -145,7 +151,7 @@ def main(argv: list[str] | None = None) -> int:
             llm_output_path=llm_output_path,
             output_message_path=repair_last_message_path,
             codex_bin=resolved_codex_bin,
-            cwd=REPO_ROOT,
+            cwd=PLUGIN_ROOT,
         )
 
     print(f"STAGE03_CODEX_FLOW_FAILED: {out_path}", file=sys.stderr)

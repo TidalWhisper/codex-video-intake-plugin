@@ -14,11 +14,11 @@ from typing import Any
 
 REQUIRED_TOP = [
     "schema_version", "stage", "status", "project_id", "source_brief", "source_script", "source_storyboard",
-    "characters", "reference_image_required", "self_check", "allowed_next_stage"
+    "characters", "reference_image_required", "reference_image_handoff", "self_check", "allowed_next_stage"
 ]
 REQUIRED_CHARACTER = [
     "character_id", "name", "role", "age", "gender_presentation", "appearance", "personality",
-    "emotional_arc", "voice_profile", "visual_consistency_prompt", "negative_consistency_prompt"
+    "emotional_arc", "voice_profile", "visual_consistency_prompt", "negative_consistency_prompt", "performance_profile"
 ]
 REQUIRED_APPEARANCE = ["face", "hair", "body", "clothing", "accessories"]
 CHAR_ID_RE = re.compile(r"^CHAR_\d{3}$")
@@ -108,6 +108,16 @@ def validate(data: dict[str, Any], mode: str = "final") -> tuple[bool, list[str]
                     errors.append(f"characters[{idx}].voice_profile.needed must be a boolean")
                 if is_blank(vp.get("suggested_voice")):
                     errors.append(f"characters[{idx}].voice_profile.suggested_voice must not be blank in final mode")
+            performance_profile = ch.get("performance_profile")
+            if not isinstance(performance_profile, dict):
+                errors.append(f"characters[{idx}].performance_profile must be an object")
+            else:
+                for key in ["baseline_expression", "movement_style", "dialogue_delivery", "continuity_anchor"]:
+                    if is_blank(performance_profile.get(key)):
+                        errors.append(f"characters[{idx}].performance_profile.{key} must not be blank in final mode")
+                gesture_rules = performance_profile.get("gesture_rules")
+                if not isinstance(gesture_rules, list) or not gesture_rules or any(is_blank(item) for item in gesture_rules):
+                    errors.append(f"characters[{idx}].performance_profile.gesture_rules must be a non-empty list of strings")
 
     self_check = data.get("self_check")
     if isinstance(self_check, dict):
@@ -118,6 +128,18 @@ def validate(data: dict[str, Any], mode: str = "final") -> tuple[bool, list[str]
             value = self_check.get(key)
             if value is not None and not isinstance(value, bool):
                 errors.append(f"self_check.{key} must be a boolean when present")
+    reference_handoff = data.get("reference_image_handoff")
+    if not isinstance(reference_handoff, dict):
+        errors.append("reference_image_handoff must be an object")
+    else:
+        if not isinstance(reference_handoff.get("ready_for_stage05"), bool):
+            errors.append("reference_image_handoff.ready_for_stage05 must be a boolean")
+        for key in ["summary", "next_action"]:
+            if is_blank(reference_handoff.get(key)):
+                errors.append(f"reference_image_handoff.{key} must not be blank in final mode")
+        capture_focus = reference_handoff.get("capture_focus")
+        if not isinstance(capture_focus, list) or any(is_blank(item) for item in capture_focus):
+            errors.append("reference_image_handoff.capture_focus must be a list of non-blank strings")
     reference_status = data.get("reference_image_status")
     if isinstance(reference_status, dict):
         for key in ["required", "all_present"]:

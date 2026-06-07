@@ -14,8 +14,6 @@ from stage00_intake_common import (  # noqa: E402
     QUESTION_KEYS,
     canonical_question_block,
     load_or_create_state,
-    load_text,
-    references_dir,
     utc_now,
 )
 
@@ -28,11 +26,22 @@ def ensure_collecting_state(state: dict[str, Any]) -> None:
         raise SystemExit("ERROR: Stage 00 intake is already draft_ready; use Stage 00-B next")
 
 
+def compact_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: compact_value(item)
+            for key, item in value.items()
+            if item is not None
+        }
+    if isinstance(value, list):
+        return [compact_value(item) for item in value if item is not None]
+    return value
+
+
 def build_packet(state: dict[str, Any], state_path: Path, user_reply: str) -> dict[str, Any]:
     ensure_collecting_state(state)
     current_question_key = str(state.get("current_question_key") or "")
     current_question = int(state.get("current_question") or 1)
-    refs = references_dir()
     return {
         "packet_version": "0.1.0",
         "stage_label": "Stage 00-A",
@@ -47,16 +56,14 @@ def build_packet(state: dict[str, Any], state_path: Path, user_reply: str) -> di
             "missing_required_fields": list(state.get("missing_required_fields") or []),
             "required_fields_complete": bool(state.get("required_fields_complete")),
         },
-        "answers_so_far": dict(state.get("answers") or {}),
-        "user_answers_so_far": dict(state.get("user_answers") or {}),
-        "normalized_so_far": dict(state.get("normalized") or {}),
+        "answers_so_far": compact_value(dict(state.get("answers") or {})),
+        "user_answers_so_far": compact_value(dict(state.get("user_answers") or {})),
+        "normalized_so_far": compact_value(dict(state.get("normalized") or {})),
         "user_reply_raw": user_reply,
         "canonical_context": {
             "question_order": list(QUESTION_KEYS),
             "current_question_block": canonical_question_block(current_question_key),
             "final_confirmation_block": canonical_question_block("final_confirmation"),
-            "first_layer_options_markdown": load_text(refs / "first_layer_options.md").strip(),
-            "question_blocks_markdown": load_text(refs / "stage00_question_blocks.md").strip(),
         },
         "behavior_rules": [
             "Interpret only the current Stage 00 question unless the user explicitly includes a direct correction for a prior answer.",
@@ -68,7 +75,10 @@ def build_packet(state: dict[str, Any], state_path: Path, user_reply: str) -> di
         "schema_refs": {
             "llm_output_schema": "skills/video-project-intake/references/stage00_intake_turn_output.schema.json",
             "generation_prompt": "skills/video-project-intake/references/stage00_intake_generation_prompt.md",
+            "repair_prompt": "skills/video-project-intake/references/stage00_intake_repair_prompt.md",
             "intake_state_schema": "skills/video-project-intake/references/intake_state.schema.json",
+            "canonical_options": "skills/video-project-intake/references/first_layer_options.md",
+            "canonical_question_blocks": "skills/video-project-intake/references/stage00_question_blocks.md",
         },
     }
 

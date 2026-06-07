@@ -9,11 +9,16 @@ from typing import Any
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PLUGIN_ROOT = Path(__file__).resolve().parents[3]
-REPO_ROOT = Path(__file__).resolve().parents[5]
 sys.path.insert(0, str(SCRIPT_DIR))
 sys.path.insert(0, str(PLUGIN_ROOT / "scripts"))
 
-from build_stage04_prompt_packet import build_packet, ensure_locked_brief  # noqa: E402
+from build_stage04_prompt_packet import (  # noqa: E402
+    build_packet,
+    ensure_confirmed_character_bible,
+    ensure_confirmed_script,
+    ensure_confirmed_storyboard,
+    ensure_locked_brief,
+)
 import new_keyframe_prompts_template  # noqa: E402
 from pipeline_core.codex_flow import (  # noqa: E402
     build_generation_request,
@@ -49,13 +54,25 @@ def generate_stage04_llm_output(
     codex_bin: str,
     cwd: Path,
 ) -> dict[str, Any]:
-    run_codex_exec(
-        request_text,
-        schema_path,
-        output_message_path,
-        codex_bin=codex_bin,
-        cwd=cwd,
-    )
+    try:
+        run_codex_exec(
+            request_text,
+            schema_path,
+            output_message_path,
+            codex_bin=codex_bin,
+            cwd=cwd,
+            timeout_seconds=360,
+            max_transient_retries=4,
+        )
+    except SystemExit as exc:
+        if output_message_path.exists():
+            raw = output_message_path.read_text(encoding="utf-8").strip()
+            if raw:
+                try:
+                    return write_codex_output_json(output_message_path, llm_output_path)
+                except SystemExit:
+                    pass
+        raise exc
     return write_codex_output_json(output_message_path, llm_output_path)
 
 
@@ -83,6 +100,9 @@ def main(argv: list[str] | None = None) -> int:
     storyboard = load_json(storyboard_path)
     character_bible = load_json(character_path)
     ensure_locked_brief(brief)
+    ensure_confirmed_script(script)
+    ensure_confirmed_storyboard(storyboard)
+    ensure_confirmed_character_bible(character_bible)
 
     prompt_packet_path = out_dir / "stage04_prompt_packet.json"
     prompt_packet = build_packet(brief, script, storyboard, character_bible, brief_path, script_path, storyboard_path, character_path)
@@ -110,7 +130,7 @@ def main(argv: list[str] | None = None) -> int:
         llm_output_path=llm_output_path,
         output_message_path=generation_last_message_path,
         codex_bin=resolved_codex_bin,
-        cwd=REPO_ROOT,
+        cwd=PLUGIN_ROOT,
     )
 
     total_attempts = max(0, int(args.max_repair_attempts))
@@ -149,7 +169,7 @@ def main(argv: list[str] | None = None) -> int:
             llm_output_path=llm_output_path,
             output_message_path=repair_last_message_path,
             codex_bin=resolved_codex_bin,
-            cwd=REPO_ROOT,
+            cwd=PLUGIN_ROOT,
         )
 
     print(f"STAGE04_CODEX_FLOW_FAILED: {out_path}", file=sys.stderr)

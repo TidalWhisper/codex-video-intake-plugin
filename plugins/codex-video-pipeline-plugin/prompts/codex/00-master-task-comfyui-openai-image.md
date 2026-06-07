@@ -1,23 +1,19 @@
-# Codex 总任务：接入 GPT Image 2 与 ComfyUI 真实 Provider
+# Codex 总任务：历史 Provider 接入提示文件
 
-你正在修改 `codex-video-intake-plugin`。
+本文件不再是当前仓库的权威计划文档。
 
-请先阅读：
+使用前必须先读取：
 
-- `docs/CURRENT_PROVIDER_STATUS.md`
-- `docs/DEVELOPMENT_PLAN_COMFYUI_AND_OPENAI_IMAGE.md`
+- `../../.codex/current-task-contract.md`
 - `docs/PROVIDER_INTEGRATION_CONTRACTS.md`
 - `docs/COMFYUI_WORKFLOW_EXPORT_GUIDE.md`
+- `docs/CODEX_LOCAL_TASK_RUNBOOK.md`
 
-目标：把 Stage 05-07 从 placeholder 框架升级为真实 provider 调用。
+当前约束：
 
-硬规则：
+1. 以当前任务契约为准，不得回退到已删除的旧计划口径。
+2. 主实施者不运行任何测试。
+3. 唯一允许的测试由监督者 Agent 从 `$video-production-pipeline` 入口执行。
+4. 不允许把本文件当成新的总路线文档。
 
-1. 不允许破坏 Stage 00-09 现有结构。
-2. 不允许跳过 manifest。
-3. 不允许没有真实文件就写 success。
-4. 不允许把 API key 写入仓库。
-5. ComfyUI 节点 ID 必须走 `config/workflow_node_mapping.yaml`。
-6. 每次改完必须运行 `run_all_tests.cmd`。
-
-先做 v1.2.0：Provider 配置与健康检查。不要一上来写所有功能。
+如果本文件中的内容与当前任务契约冲突，以当前任务契约为准。

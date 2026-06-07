@@ -14,7 +14,12 @@ from pipeline_core.project_state import load_json_file, update_project_manifest_
 from pipeline_core.requirement_compiler import compile_requirements, requested_output_allows_stage  # noqa: E402
 from pipeline_core.codex_flow import structured_validation_errors  # noqa: E402
 import validate_character_bible as validate_character_bible_module  # noqa: E402
-from build_stage03_prompt_packet import build_packet, ensure_locked_brief  # noqa: E402
+from build_stage03_prompt_packet import (  # noqa: E402
+    build_packet,
+    ensure_confirmed_script,
+    ensure_confirmed_storyboard,
+    ensure_locked_brief,
+)
 from build_stage03_repair_packet import build_repair_packet  # noqa: E402
 from write_stage03_outputs import write_stage03_outputs  # noqa: E402
 
@@ -71,11 +76,11 @@ def main(argv: list[str]) -> int:
     if not allow_beyond_scope and not requested_output_allows_stage("STAGE_03", compiled):
         print("ERROR: requested output scope does not allow Stage 03. Re-run with --allow-beyond-requested-scope to override.", file=sys.stderr)
         return 1
-    if script.get("stage") != "STAGE_01_SCRIPT_GENERATION":
-        print("ERROR: script.stage must be STAGE_01_SCRIPT_GENERATION", file=sys.stderr)
-        return 1
-    if storyboard.get("stage") != "STAGE_02_STORYBOARD_GENERATION":
-        print("ERROR: storyboard.stage must be STAGE_02_STORYBOARD_GENERATION", file=sys.stderr)
+    try:
+        ensure_confirmed_script(script)
+        ensure_confirmed_storyboard(storyboard)
+    except SystemExit as exc:
+        print(str(exc), file=sys.stderr)
         return 1
 
     out_path.parent.mkdir(parents=True, exist_ok=True)

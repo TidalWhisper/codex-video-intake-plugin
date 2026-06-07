@@ -1131,6 +1131,27 @@ def test_build_provider_prompt_adds_clean_artwork_guardrails_for_game_cg() -> No
     assert "title card" in prompt
 
 
+def test_build_provider_prompt_pushes_storefront_branding_into_glass_door_glow_instead_of_full_header() -> None:
+    job = {
+        "prompt": "young woman pauses outside a convenience store glass door under warm light",
+        "negative_prompt": "low resolution, no logo, no brand wordmark, no readable storefront sign",
+        "consistency_prompt": "same young woman, same commuter outfit",
+        "camera_prompt": "slow push from her profile toward the glowing storefront",
+        "reference_images": ["03_characters/reference_images/CHAR_001_primary.png"],
+        "preferred_comfyui_workflow_source_ref": "F:/ComfyUI/ComfyUI/user/default/workflows/AI漫剧制作/AI漫剧-16宫格分镜图生成-QwenEdit+NextScene（自动分镜）-V1版.json",
+    }
+    prompt = run_comfyui_txt2img.build_provider_prompt(job)
+    negative = run_comfyui_txt2img.effective_negative_prompt(job)
+    assert "Favor warm interior light through the glass doors" in prompt
+    assert "crop or blur the top fascia" in prompt
+    assert "no colored glass-door stripe" in prompt
+    assert "Do not leave colorful promo posters" in prompt
+    assert "backlit rectangular storefront marquee" in negative
+    assert "dark header lettering above light box" in negative
+    assert "tri-color door decal" in negative
+    assert "colorful promo poster on glass door" in negative
+
+
 def test_run_comfyui_txt2img_dry_run_writes_request_manifest_only(tmp_path: Path) -> None:
     manifest_json = _prepare_manifest(tmp_path)
     mapping_path, workflow_paths = _write_mapping_and_workflow(tmp_path)
@@ -1215,9 +1236,11 @@ def test_run_comfyui_txt2img_ui_graph_route_converts_original_workflow(monkeypat
     manifest_json.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
 
     captured_workflows: list[dict] = []
+    captured_node_modules_dirs: list[Path | None] = []
 
     def _fake_convert(workflow: dict, *, base_url: str, script_path=None, node_modules_dir=None) -> dict:
         captured_workflows.append(workflow)
+        captured_node_modules_dirs.append(Path(node_modules_dir) if node_modules_dir is not None else None)
         return {
             "prompt": {
                 "9": {
@@ -1270,6 +1293,7 @@ def test_run_comfyui_txt2img_ui_graph_route_converts_original_workflow(monkeypat
     assert second_nodes["248"]["widgets_values"][0] == 1344
     assert first_nodes["9"]["widgets_values"][0] == "Stage05/IMG_S001_START"
     assert second_nodes["9"]["widgets_values"][0] == "Stage05/IMG_S001_END"
+    assert captured_node_modules_dirs == [ROOT / ".tmp-playwright" / "node_modules"] * 2
     submitted_payload = _FakeComfyTxt2ImgHandler.requests[0]
     assert "extra_data" in submitted_payload
     request_manifest = json.loads((manifest_json.parent / "comfyui_image_requests.json").read_text(encoding="utf-8"))
@@ -1483,6 +1507,85 @@ def test_run_comfyui_txt2img_runs_auto_repair_second_pass_for_risky_prompt(monke
         server.shutdown()
         thread.join(timeout=5)
         server.server_close()
+
+
+def test_run_comfyui_txt2img_runs_reference_guided_auto_repair_second_pass_for_storefront_branding(monkeypatch, tmp_path: Path) -> None:
+    manifest_json = _prepare_manifest(tmp_path)
+    manifest = json.loads(manifest_json.read_text(encoding="utf-8"))
+    risky_job = manifest["jobs"][0]
+    risky_job["prompt"] = "young woman pauses outside a convenience store glass door under warm light"
+    risky_job["negative_prompt"] = "low resolution, no logo, no brand wordmark, no readable storefront sign"
+    risky_job["comfyui_control_mode"] = "reference_guided"
+    risky_job["quality_gate"] = {
+        "risk_tags": ["storefront_branding"],
+        "control_mode": "reference_guided",
+        "requires_manual_review": True,
+        "manual_review_status": "pending",
+        "reason": "Convenience-store storefront scenes can still hallucinate chain-sign identity marks even when the prompt says no branding. Review signage and facade treatment carefully before Stage 06.",
+    }
+    manifest["jobs"] = [risky_job]
+    manifest["summary"]["expected_image_count"] = 1
+    manifest["summary"]["shot_count"] = 1
+    manifest_json.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    mapping_path, _ = _write_mapping_and_workflow(tmp_path)
+    output_root = tmp_path / "comfy_output"
+    _patch_ui_graph_conversion(monkeypatch)
+    server, thread = _start_server("success", output_root=output_root)
+    try:
+        config_path = _write_config(tmp_path, base_url=f"http://127.0.0.1:{server.server_port}", output_root=output_root)
+        assert run_comfyui_txt2img.main([
+            str(manifest_json),
+            "--config", str(config_path),
+            "--mapping", str(mapping_path),
+            "--image-id", risky_job["image_id"],
+            "--poll-interval", "0.01",
+            "--max-wait-seconds", "2",
+        ]) == 0
+        data = json.loads(manifest_json.read_text(encoding="utf-8"))
+        job = data["jobs"][0]
+        assert job["auto_repair_status"] == "auto_second_pass_succeeded"
+        assert "repair=auto_second_pass_succeeded" in job["notes"]
+        request_manifest = json.loads((manifest_json.parent / "comfyui_image_requests.json").read_text(encoding="utf-8"))
+        assert request_manifest["requests"][0]["auto_repair_plan"]["enabled"] is True
+        assert request_manifest["requests"][0]["auto_repair_plan"]["mode"] == "two_pass_reference_guided_repair"
+        assert len(request_manifest["requests"][0]["pass_history"]) == 2
+        assert len(_FakeComfyTxt2ImgHandler.requests) == 2
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
+
+
+def test_update_manifest_state_keeps_stage05_in_progress_while_rerun_reuses_existing_output(tmp_path: Path) -> None:
+    manifest_json = _prepare_manifest(tmp_path)
+    data = json.loads(manifest_json.read_text(encoding="utf-8"))
+    running_job = data["jobs"][0]
+    running_job["provider"] = "comfyui_txt2img"
+    running_job["status"] = "running"
+    running_job["auto_repair_status"] = "not_needed"
+    output_path = Path(running_job["output_path"])
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    _write_test_png(output_path, size=(768, 1368))
+    running_job["evidence"] = {
+        "file_path": str(output_path).replace("\\", "/"),
+        "file_exists": True,
+        "file_size_bytes": output_path.stat().st_size,
+        "created_at": "2026-06-06T09:27:25.306761+00:00",
+    }
+    data["jobs"] = [running_job]
+    data["summary"]["expected_image_count"] = 1
+    data["summary"]["generated_image_count"] = 1
+    data["self_check"]["all_required_images_exist"] = True
+    data["self_check"]["manual_review_cleared"] = False
+    data["self_check"]["ready_for_video_clip_generation"] = False
+
+    run_comfyui_txt2img.update_manifest_state(data, manifest_json)
+
+    assert data["status"] == "in_progress"
+    assert data["creator_runtime_status"]["headline"] == "Stage 05 关键帧仍在生成中。"
+    assert "仍有 1 个生成任务在提交或执行中" in data["creator_runtime_status"]["detail"]
+    assert "Stage 05 generation is still active for 1 keyframe job(s)." in data["self_check"]["notes"]
 
 
 def test_run_comfyui_txt2img_blocks_missing_character_reference_before_generation(tmp_path: Path) -> None:

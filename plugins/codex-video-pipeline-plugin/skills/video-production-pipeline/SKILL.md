@@ -32,6 +32,39 @@ $video-qa-delivery
 
 Those stage skills are internal/recovery skills. They exist for debugging, reruns, and manual repair when a stage fails.
 
+## Immediate Invocation Rule
+
+When the user invokes:
+
+```text
+$video-production-pipeline
+```
+
+you must treat that as a direct request to enter the official business flow immediately.
+
+On the first assistant turn for this invocation:
+
+1. Do not start with repo preflight.
+2. Do not start with contract summary.
+3. Do not start with startup explanation.
+4. Do not start with cleanup narration.
+5. Do not start with “I will first inspect...” style meta commentary.
+6. Immediately follow the official entry chain by running:
+
+```bash
+python skills/video-production-pipeline/scripts/continue_pipeline.py
+```
+
+7. Surface the official current prompt or gate from that chain directly.
+
+If the runtime state is blank, the first visible business output must be the official Stage 00 Question 1 prompt.
+
+If the runtime state is already inside Stage 00, the first visible business output must be the official current Stage 00 prompt or confirmation gate.
+
+If the runtime state is already inside a later stage review gate, the first visible business output must be that official review gate.
+
+Do not replace the official prompt with your own summary, paraphrase, or setup explanation.
+
 For Stage 00 specifically, the official runtime chain is now:
 
 ```text
@@ -178,7 +211,42 @@ python skills/video-production-pipeline/scripts/show_creator_home.py
 
 Use that result as the default creator-facing status view, then continue the pipeline from the first incomplete gate.
 
+If the synced project is already at:
+
+- `STAGE_01_SCRIPT_REVIEW`
+- `STAGE_02_STORYBOARD_REVIEW`
+- `STAGE_03_CHARACTER_BIBLE_REVIEW`
+
+do not rerun generation for that stage. Re-surface the existing official review gate from the current project artifacts, keep the user at that gate, and wait for the formal `A/B/...` choice.
+
 If there are multiple possible latest projects and the target is ambiguous, ask the user to choose a project directory.
+
+For Stage 00 specifically, do not synthesize the next question, do not synthesize the brief confirmation page, and do not summarize raw intake state into an ad hoc confirmation gate.
+
+If Stage 00 is still active, the only allowed way to surface the next official prompt is to call:
+
+```bash
+python skills/video-production-pipeline/scripts/run_stage00_controller.py --state-json <intake_state.json>
+```
+
+with no `--user-reply` when you need the canonical next prompt.
+
+If the current Stage 00 state is already `draft_ready`, you must still call that controller with no `--user-reply` first. That controller is responsible for materializing:
+
+- `<project_dir>/00_intake/project_brief.draft.json`
+- `stage00_brief_confirmation_summary.*`
+
+and then printing the official `A / B / C` confirmation gate.
+
+Do not read `intake_state.json` and then manually print only:
+
+```text
+A. 确认
+B. 修改
+C. 重填
+```
+
+because that bypasses the Stage 00-B materialization step and can leave the project directory without the required draft brief artifact.
 
 ## Stage 00-A: one-question intake
 
@@ -210,6 +278,7 @@ Before asking any Stage 00 question, reread these two sources and follow them ex
 `first_layer_options.md` is the canonical normalization map.
 `stage00_question_blocks.md` is the canonical user-visible menu text.
 Do not invent an alternate Stage 00 menu, do not remap option letters, and do not paraphrase the choice list into a different taxonomy.
+When resuming an in-progress Stage 00 intake, also do not restate the question from memory or from state fields. Re-run `run_stage00_controller.py` without `--user-reply` and print the controller output verbatim.
 
 Question 1: story idea.
 Question 2: target duration.
@@ -427,7 +496,9 @@ The character bible must:
 1. Identify all primary recurring characters, and optionally important supporting characters.
 2. For each major character, lock identity, appearance, clothing, emotional arc, and voice suggestions.
 3. Provide a `visual_consistency_prompt` and a `negative_consistency_prompt`.
-4. Mark whether reference-image generation will be needed in later stages.
+4. Provide a complete `performance_profile` for each major character.
+5. Mark whether reference-image generation will be needed in later stages.
+6. Provide `reference_image_handoff` guidance so the creator-facing recovery path stays Codex-led.
 
 Validate:
 
@@ -503,6 +574,7 @@ The prompt package must:
 4. Preserve character consistency using `character_bible.json`.
 5. Create transition-motion prompts between adjacent shots where useful.
 6. Prepare for Stage 05 image generation without actually generating images.
+7. Provide `stage05_handoff` guidance so Stage 05 readiness language stays Codex-led.
 
 Validate:
 
@@ -526,7 +598,7 @@ E. 修改负面提示词
 F. 重新生成 Stage 04 提示词包
 ```
 
-If `stage05_execution_readiness.safe_to_auto_generate = false`, explicitly tell the user to open:
+If `stage05_handoff.ready_for_stage05 = false` or `stage05_handoff.must_open_reference_entry = true`, explicitly tell the user to open:
 
 ```text
 <project_dir>/04_keyframes/stage05_start_here.md

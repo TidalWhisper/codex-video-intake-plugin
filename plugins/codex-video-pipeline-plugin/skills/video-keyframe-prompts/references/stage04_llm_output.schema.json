@@ -4,9 +4,12 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
+    "prompt_language",
+    "visual_strategy",
     "shot_prompts",
     "transition_prompts",
     "global_negative_prompt",
+    "stage05_handoff",
     "self_check"
   ],
   "properties": {
@@ -40,6 +43,8 @@
           "duration_sec",
           "characters",
           "scene_summary",
+          "intent_summary",
+          "story_anchor_bundle",
           "start_keyframe_prompt",
           "end_keyframe_prompt",
           "motion_prompt",
@@ -47,9 +52,12 @@
           "lighting_prompt",
           "style_prompt",
           "consistency_prompt",
+          "identity_anchor_prompt",
           "negative_prompt",
           "image_generation_notes",
           "video_generation_notes",
+          "performance_prompt",
+          "dialogue_delivery_prompt",
           "dependencies"
         ],
         "properties": {
@@ -136,6 +144,24 @@
       }
     },
     "global_negative_prompt": {"type": "string"},
+    "stage05_handoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ready_for_stage05",
+        "summary",
+        "block_reason",
+        "next_action",
+        "must_open_reference_entry"
+      ],
+      "properties": {
+        "ready_for_stage05": {"type": "boolean"},
+        "summary": {"type": "string"},
+        "block_reason": {"type": "string"},
+        "next_action": {"type": "string"},
+        "must_open_reference_entry": {"type": "boolean"}
+      }
+    },
     "self_check": {
       "type": "object",
       "additionalProperties": false,

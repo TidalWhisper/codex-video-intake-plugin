@@ -280,19 +280,6 @@ def _ensure_draft_materialized(
     return project_dir
 
 
-def _normalize_confirmation_reply(reply: str) -> str:
-    normalized = reply.strip().upper()
-    if normalized in {"A", "B", "C"}:
-        return normalized
-    if reply.strip() in {"确认", "同意", "进入下一步", "开始剧本生成"}:
-        return "A"
-    if reply.strip() in {"修改", "修改某一项"}:
-        return "B"
-    if reply.strip() in {"重填", "重新填写", "重新开始"}:
-        return "C"
-    return normalized
-
-
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     state_path = Path(args.state_json).resolve()
@@ -353,7 +340,7 @@ def main(argv: list[str] | None = None) -> int:
     if not user_reply:
         return _print_confirmation_prompt(project_dir)
 
-    confirmation_reply = _normalize_confirmation_reply(user_reply)
+    confirmation_reply = user_reply.strip().upper()
     if confirmation_reply == "A":
         return run_stage00_lock_and_continue.main([str(project_dir)])
     if confirmation_reply == "B":

@@ -1331,6 +1331,16 @@ def test_run_stage01_codex_flow_auto_repairs_failed_first_attempt(tmp_path: Path
     brief = load_music_video_plateau_brief(project_dir)
     locked_brief = intake_dir / "project_brief.locked.json"
     locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+    project_manifest = project_dir / "project_manifest.json"
+    project_manifest.write_text(json.dumps({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "current_stage": "STAGE_00_BRIEF_LOCKED",
+        "status": "active",
+        "brief_locked": True,
+        "script_confirmed": False,
+        "allowed_next_stage": "STAGE_01_SCRIPT_GENERATION",
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
 
     calls = {"count": 0}
 
@@ -1374,6 +1384,12 @@ def test_run_stage01_codex_flow_auto_repairs_failed_first_attempt(tmp_path: Path
     script_data = json.loads(script_json.read_text(encoding="utf-8"))
     assert script_data["generation_meta"]["mode"] == "codex_llm_output"
     assert all(str(section.get("music_cue") or "").startswith("song:") for section in script_data["script"]["sections"])
+    synced_manifest = json.loads(project_manifest.read_text(encoding="utf-8"))
+    assert synced_manifest["current_stage"] == "STAGE_01_SCRIPT_GENERATION"
+    overview = synced_manifest["creator_status_overview"]
+    script_step = next(step for step in overview["steps"] if step["step"] == "剧本")
+    assert script_step["status"] == "generated"
+    assert "confirm_stage01_and_continue.py" in script_step["command"]
 
 
 def test_stage01_formal_runner_no_longer_imports_local_semantics() -> None:
@@ -1739,6 +1755,17 @@ def test_run_stage02_codex_flow_generates_storyboard_package_without_manual_llm_
     })
     locked_brief = intake_dir / "project_brief.locked.json"
     locked_brief.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+    project_manifest = project_dir / "project_manifest.json"
+    project_manifest.write_text(json.dumps({
+        "project_id": project_dir.name,
+        "project_dir": str(project_dir).replace("\\", "/"),
+        "current_stage": "STAGE_01_SCRIPT_CONFIRMED",
+        "status": "active",
+        "brief_locked": True,
+        "script_confirmed": True,
+        "storyboard_confirmed": False,
+        "allowed_next_stage": "STAGE_02_STORYBOARD",
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
 
     script = json.loads((TEMPLATES / "script.example.json").read_text(encoding="utf-8"))
     script["project_id"] = project_dir.name
@@ -1847,6 +1874,12 @@ def test_run_stage02_codex_flow_auto_repairs_failed_first_attempt(tmp_path: Path
     assert not (storyboard_dir / "stage02_repair_packet.json").exists()
     storyboard_data = json.loads(storyboard_json.read_text(encoding="utf-8"))
     assert storyboard_data["shot_count"] > 1
+    synced_manifest = json.loads(project_manifest.read_text(encoding="utf-8"))
+    assert synced_manifest["current_stage"] == "STAGE_02_STORYBOARD_GENERATION"
+    overview = synced_manifest["creator_status_overview"]
+    storyboard_step = next(step for step in overview["steps"] if step["step"] == "分镜")
+    assert storyboard_step["status"] == "generated"
+    assert "confirm_stage02_and_continue.py" in storyboard_step["command"]
 
 
 def test_run_stage03_codex_flow_generates_character_bible_without_manual_llm_fill(tmp_path: Path, monkeypatch) -> None:
@@ -4950,6 +4983,124 @@ def test_rerun_top_prompt_patches_invokes_stage05_runner_in_priority_order(tmp_p
     assert fully_approved_manifest["allowed_next_stage"] == "STAGE_06_VIDEO_CLIPS"
 
 
+def test_rerun_top_prompt_patches_refreshes_stale_prompt_patch_plan_before_selecting_items(tmp_path: Path) -> None:
+    project_dir = tmp_path / "video_projects" / "storefront_refresh_case"
+    images_dir = project_dir / "05_images"
+    images_dir.mkdir(parents=True, exist_ok=True)
+    manifest_json = images_dir / "keyframe_image_manifest.json"
+    manifest_data = {
+        "project_id": project_dir.name,
+        "stage": "STAGE_05_KEYFRAME_IMAGES",
+        "status": "generated",
+        "image_provider_strategy": {"primary": "comfyui_txt2img", "fallback": ["manual"]},
+        "routing": {"legacy_mode": False},
+        "jobs": [
+            {
+                "image_id": "IMG_S003_START",
+                "shot_id": "S003",
+                "frame_role": "start",
+                "prompt": "young woman pauses outside a convenience store glass door under warm light",
+                "negative_prompt": "low resolution, no logo, no brand wordmark, no readable storefront sign",
+                "consistency_prompt": "same young woman, same commuter outfit",
+                "camera_prompt": "slow push from her profile toward the glowing storefront",
+                "reference_images": ["03_characters/reference_images/CHAR_001_primary.png"],
+                "preferred_comfyui_workflow_source_ref": "F:/ComfyUI/ComfyUI/user/default/workflows/AI漫剧制作/AI漫剧-16宫格分镜图生成-QwenEdit+NextScene（自动分镜）-V1版.json",
+                "comfyui_control_mode": "reference_guided",
+                "provider": "comfyui_txt2img",
+                "status": "succeeded",
+                "output_path": str((images_dir / "keyframes" / "S003_start.png").resolve()).replace("\\", "/"),
+                "evidence": {
+                    "file_path": str((images_dir / "keyframes" / "S003_start.png").resolve()).replace("\\", "/"),
+                    "file_exists": True,
+                    "file_size_bytes": 3,
+                },
+                "auto_repair_plan": {
+                    "enabled": True,
+                    "mode": "two_pass_reference_guided_repair",
+                    "target_failure_modes": ["storefront_branding"],
+                    "repair_prompt_sections": ["OLD storefront rule"],
+                    "repair_negative_hints": ["OLD marquee rule"],
+                    "pass_count": 2,
+                },
+                "creator_review_card": {
+                    "headline": "旧版 storefront review card",
+                    "suggestions": ["OLD storefront rule"],
+                },
+                "auto_repair_status": "auto_second_pass_succeeded",
+            }
+        ],
+        "quality_review": {
+            "review_queue": [
+                {
+                    "image_id": "IMG_S003_START",
+                    "shot_id": "S003",
+                    "frame_role": "start",
+                    "priority_label": "中优先级复核",
+                    "priority_score": 88,
+                    "review_focus": "先查有没有可读店招，再查有没有连锁便利店标准配色横条，最后确认暖光是否只是氛围而不是品牌露出。",
+                    "checklist": [],
+                    "risk_summary": "这类便利店镜头最容易偷偷长出连锁店招、三色横条和可读品牌字样。",
+                    "suggestions": [],
+                    "manual_review_status": "pending",
+                    "auto_repair_status": "auto_second_pass_succeeded",
+                }
+            ],
+            "top_review_cards": [
+                {
+                    "rank": 1,
+                    "image_id": "IMG_S003_START",
+                    "priority_label": "中优先级复核",
+                    "priority_score": 88,
+                    "review_focus": "先查有没有可读店招，再查有没有连锁便利店标准配色横条，最后确认暖光是否只是氛围而不是品牌露出。",
+                    "quick_fix": "把便利店外立面改成无字灯箱。",
+                }
+            ],
+            "blocking_image_ids": ["IMG_S003_START"],
+            "next_review_image_ids": ["IMG_S003_START"],
+            "manual_review_cleared": False,
+            "risky_image_count": 1,
+            "pending_count": 1,
+        },
+        "self_check": {
+            "all_required_images_exist": True,
+            "manual_review_cleared": False,
+            "ready_for_video_clip_generation": False,
+        },
+    }
+    (images_dir / "keyframes").mkdir(parents=True, exist_ok=True)
+    (images_dir / "keyframes" / "S003_start.png").write_bytes(b"png")
+    manifest_json.write_text(json.dumps(manifest_data, ensure_ascii=False, indent=2), encoding="utf-8")
+    stale_plan = {
+        "project_id": project_dir.name,
+        "top_prompt_patches": [
+            {
+                "image_id": "IMG_S003_START",
+                "prompt_patch_sections": ["OLD storefront rule"],
+                "negative_prompt_additions": ["OLD marquee rule"],
+            }
+        ],
+        "all_prompt_patches": [
+            {
+                "image_id": "IMG_S003_START",
+                "prompt_patch_sections": ["OLD storefront rule"],
+                "negative_prompt_additions": ["OLD marquee rule"],
+            }
+        ],
+    }
+    (images_dir / "prompt_patch_plan.json").write_text(json.dumps(stale_plan, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    assert rerun_top_prompt_patches.main([str(manifest_json), "--dry-run", "--image-id", "IMG_S003_START"]) == 0
+
+    refreshed_plan = json.loads((images_dir / "prompt_patch_plan.json").read_text(encoding="utf-8"))
+    refreshed_patch = refreshed_plan["top_prompt_patches"][0]
+    assert any("upper storefront fascia" in item for item in refreshed_patch["prompt_patch_sections"])
+    assert any("dark header lettering above light box" in item for item in refreshed_patch["negative_prompt_additions"])
+    refreshed_manifest = json.loads(manifest_json.read_text(encoding="utf-8"))
+    refreshed_job = refreshed_manifest["jobs"][0]
+    assert any("upper storefront fascia" in item for item in refreshed_job["auto_repair_plan"]["repair_prompt_sections"])
+    assert any("dark header lettering above light box" in item for item in refreshed_job["auto_repair_plan"]["repair_negative_hints"])
+
+
 def test_rerun_top_prompt_patches_switches_to_comfyui_when_openai_unavailable(tmp_path: Path, monkeypatch) -> None:
     project_dir = tmp_path / "video_projects" / "video_20260531_stage05_auto_repair_comfy"
     intake_dir = project_dir / "00_intake"
@@ -5944,3 +6095,60 @@ def test_new_video_clip_jobs_ignores_template_leaked_story_anchors(tmp_path: Pat
     assert "gentle camera movement" not in data["jobs"][0]["motion_prompt"]
     assert "可见的身体位移" in data["jobs"][0]["motion_prompt"]
     assert "最后一把伞" in data["jobs"][0]["motion_prompt"]
+
+
+def test_continue_pipeline_stage05_review_gate_resyncs_manifest_before_judging(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    project_dir = tmp_path / "video_projects" / "video_20260606_stage05_resync"
+    images_dir = project_dir / "05_images"
+    images_dir.mkdir(parents=True, exist_ok=True)
+    manifest_path = images_dir / "keyframe_image_manifest.json"
+    manifest_path.write_text(json.dumps({
+        "schema_version": "0.6.0",
+        "stage": "STAGE_05_KEYFRAME_IMAGES",
+        "status": "draft",
+        "project_id": project_dir.name,
+        "stage05_mode": "reference_guided_storyboard",
+        "summary": {
+            "expected_image_count": 6,
+            "generated_image_count": 0,
+        },
+        "quality_review": {
+            "pending_count": 0,
+            "manual_review_cleared": True,
+        },
+        "self_check": {
+            "all_required_images_exist": False,
+            "manual_review_cleared": True,
+            "ready_for_video_clip_generation": False,
+        },
+        "creator_runtime_status": {
+            "headline": "stale-before-sync",
+            "detail": "",
+        },
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    called = {"count": 0}
+
+    def fake_sync(argv: list[str] | None = None) -> int:
+        called["count"] += 1
+        data = json.loads(manifest_path.read_text(encoding="utf-8"))
+        data["status"] = "generated"
+        data["summary"]["generated_image_count"] = 6
+        data["self_check"]["all_required_images_exist"] = True
+        data["self_check"]["ready_for_video_clip_generation"] = True
+        data["creator_runtime_status"] = {"headline": "", "detail": ""}
+        manifest_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        return 0
+
+    monkeypatch.setattr(continue_pipeline.sync_keyframe_image_manifest, "main", fake_sync)
+
+    assert continue_pipeline._stage05_review_gate(project_dir, manifest_path) == 0
+    output = capsys.readouterr().out
+    assert called["count"] == 1
+    assert "PIPELINE_REVIEW_STAGE: STAGE_05_KEYFRAME_IMAGES_REVIEW" in output
+    assert "- 已落盘图片数：6" in output
+    assert "- 是否可进入 Stage 06：是" in output

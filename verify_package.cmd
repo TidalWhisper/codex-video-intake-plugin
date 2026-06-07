@@ -15,5 +15,10 @@ if not exist "%PLUGIN%skills\video-audio\scripts\validate_audio_manifest.py" ech
 if not exist "%PLUGIN%skills\video-assembly\scripts\validate_assembly_manifest.py" echo [ERROR] Stage 08 validator missing & exit /b 1
 if not exist "%PLUGIN%skills\video-qa-delivery\scripts\validate_qa_manifest.py" echo [ERROR] Stage 09 validator missing & exit /b 1
 if not exist "%ROOT%CODEX_START_HERE.md" echo [ERROR] root CODEX_START_HERE.md missing & exit /b 1
-if not exist "%PLUGIN%docs\00_CODEX_MASTER_PLAN.md" echo [ERROR] plugin master plan missing & exit /b 1
+if not exist "%ROOT%.codex\current-task-contract.md" echo [ERROR] current task contract missing & exit /b 1
+if not exist "%PLUGIN%docs\PROVIDER_INTEGRATION_CONTRACTS.md" echo [ERROR] provider contracts doc missing & exit /b 1
+if not exist "%PLUGIN%docs\COMFYUI_WORKFLOW_EXPORT_GUIDE.md" echo [ERROR] workflow export guide missing & exit /b 1
+if not exist "%PLUGIN%docs\CODEX_LOCAL_TASK_RUNBOOK.md" echo [ERROR] local task runbook missing & exit /b 1
+if not exist "%PLUGIN%docs\STAGE00_STAGE02_ARCHITECTURE_CONTRACT.md" echo [ERROR] Stage00-Stage02 contract missing & exit /b 1
+if not exist "%PLUGIN%docs\STAGE05_MAINLINE_GUARDRAILS.md" echo [ERROR] Stage05 guardrails missing & exit /b 1
 echo [OK] Wrapper package structure looks valid.

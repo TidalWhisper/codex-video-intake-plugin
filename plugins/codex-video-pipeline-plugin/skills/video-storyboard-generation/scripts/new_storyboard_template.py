@@ -14,7 +14,7 @@ from pipeline_core.project_state import load_json_file, update_project_manifest_
 from pipeline_core.requirement_compiler import compile_requirements, requested_output_allows_stage  # noqa: E402
 from pipeline_core.codex_flow import structured_validation_errors  # noqa: E402
 import validate_storyboard as validate_storyboard_module  # noqa: E402
-from build_stage02_prompt_packet import build_packet, ensure_locked_brief  # noqa: E402
+from build_stage02_prompt_packet import build_packet, ensure_confirmed_script, ensure_locked_brief  # noqa: E402
 from build_stage02_repair_packet import build_repair_packet  # noqa: E402
 from write_stage02_outputs import write_stage02_outputs  # noqa: E402
 
@@ -65,14 +65,11 @@ def main(argv: list[str]) -> int:
     brief = load_json(brief_path)
     script = load_json(script_path)
     ensure_locked_brief(brief)
+    ensure_confirmed_script(script)
     compiled = compile_requirements(brief)
     if not allow_beyond_scope and not requested_output_allows_stage("STAGE_02", compiled):
         print("ERROR: requested output scope does not allow Stage 02. Re-run with --allow-beyond-requested-scope to override.", file=sys.stderr)
         return 1
-    if script.get("stage") != "STAGE_01_SCRIPT_GENERATION":
-        print("ERROR: script.stage must be STAGE_01_SCRIPT_GENERATION", file=sys.stderr)
-        return 1
-
     out_path.parent.mkdir(parents=True, exist_ok=True)
     prompt_packet_path = out_path.parent / "stage02_prompt_packet.json"
     write_json(prompt_packet_path, build_packet(brief, script, brief_path, script_path))

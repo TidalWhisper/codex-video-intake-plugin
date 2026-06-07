@@ -28,7 +28,7 @@ def load_json(path: Path) -> dict[str, Any]:
 
 
 def ensure_shape(data: dict[str, Any]) -> None:
-    required = ["characters", "reference_image_required", "self_check"]
+    required = ["characters", "reference_image_required", "reference_image_handoff", "self_check"]
     missing = [key for key in required if key not in data]
     if missing:
         raise SystemExit(f"ERROR: missing required keys in llm output: {', '.join(missing)}")
@@ -41,6 +41,7 @@ def write_text(path: Path, content: str) -> None:
 def write_reference_image_start_here(
     stage03_dir: Path,
     *,
+    reference_handoff: dict[str, Any],
     reference_plan: dict[str, Any],
     reference_status: dict[str, Any],
     stage05_execution_readiness: dict[str, Any],
@@ -48,11 +49,13 @@ def write_reference_image_start_here(
     reference_dir = stage03_dir / "reference_images"
     reference_dir.mkdir(parents=True, exist_ok=True)
     missing_paths = reference_status.get("missing_paths") if isinstance(reference_status.get("missing_paths"), list) else []
+    capture_focus = reference_handoff.get("capture_focus") if isinstance(reference_handoff.get("capture_focus"), list) else []
     lines = [
         "# 角色参考图补齐入口",
         "",
         "这一步是给普通创作者准备的默认入口，不需要先理解 manifest。",
         "",
+        f"- 当前判断摘要：{str(reference_handoff.get('summary') or '').strip() or '未提供'}",
         f"- 角色参考图是否已齐：{'是' if reference_status.get('all_present') else '否'}",
         f"- 是否可安全自动进入 Stage 05：{'是' if stage05_execution_readiness.get('safe_to_auto_generate') else '否'}",
         f"- 参考图目录：`{str(reference_dir).replace(chr(92), '/')}`",
@@ -62,20 +65,15 @@ def write_reference_image_start_here(
     ]
     if missing_paths:
         lines.extend([
-            "- 请先为主角补一张清晰、正面的角色参考图。",
-            "- 建议优先保证脸型、发型、服装轮廓和主要随身物一眼可认。",
+            f"- {str(reference_handoff.get('next_action') or '').strip() or '先补齐角色参考图，再继续后续阶段。'}",
+            "- 这次补图要优先保住这些识别锚点：",
+            *[f"  - {str(item).strip()}" for item in capture_focus if str(item).strip()],
             "- 把图片放到下面这些目标路径里：",
             *[f"  - `{path_text}`" for path_text in missing_paths],
-            "",
-            "## 放好以后",
-            "",
-            "- 继续进入 Stage 04 / Stage 05 时，系统会自动重新检查这些参考图。",
-            "- 如果后面 Stage 05 已经先出过一版关键帧，也可以用已有关键帧回填角色参考图。",
         ])
     else:
         lines.extend([
-            "- 当前角色参考图已经就绪。",
-            "- 可以继续进入 Stage 04，并在确认后安全自动进入 Stage 05。",
+            f"- {str(reference_handoff.get('next_action') or '').strip() or '当前角色参考图已经就绪，可以继续进入下一阶段。'}",
         ])
     write_text(stage03_dir / "reference_image_start_here.md", "\n".join(lines))
 
@@ -84,6 +82,7 @@ def write_stage03_companions(
     out_path: Path,
     template: dict[str, Any],
     *,
+    reference_handoff: dict[str, Any],
     reference_plan: dict[str, Any],
     reference_status: dict[str, Any],
     stage05_execution_readiness: dict[str, Any],
@@ -125,16 +124,15 @@ def write_stage03_companions(
         f"- 角色参考图就绪：{'是' if reference_status.get('all_present') else '否'}",
         f"- 是否准备好进入 Stage 04：{'是' if ((template.get('self_check') or {}).get('ready_for_keyframe_stage')) else '否'}",
         f"- 是否准备好安全自动进入 Stage 05：{'是' if stage05_execution_readiness.get('safe_to_auto_generate') else '否'}",
-        (
-            "- 下一步：先补齐这些角色参考图，再进入安全自动 Stage 05："
-            + "、".join(str(path_text) for path_text in missing_paths)
-        ) if missing_paths else "- 下一步：待用户确认后进入 Stage 04。",
+        f"- 当前判断：{str(reference_handoff.get('summary') or '').strip() or '未提供'}",
+        f"- 下一步：{str(reference_handoff.get('next_action') or '').strip() or ('待用户确认后进入 Stage 04。' if not missing_paths else '先补角色参考图。')}",
     ]
     write_text(out_path.parent / "character_bible.md", "\n".join(bible_lines))
     write_text(out_path.parent / "character_review.md", "\n".join(review_lines))
     (out_path.parent / "reference_image_plan.json").write_text(json.dumps(reference_plan, ensure_ascii=False, indent=2), encoding="utf-8")
     write_reference_image_start_here(
         out_path.parent,
+        reference_handoff=reference_handoff,
         reference_plan=reference_plan,
         reference_status=reference_status,
         stage05_execution_readiness=stage05_execution_readiness,
@@ -153,44 +151,25 @@ def build_character_bible_payload(
 ) -> dict[str, Any]:
     ensure_shape(llm_output)
     characters = [item for item in list(llm_output.get("characters") or []) if isinstance(item, dict)]
-    for character in characters:
-        performance_profile = character.get("performance_profile") if isinstance(character.get("performance_profile"), dict) else {}
-        appearance = character.get("appearance") if isinstance(character.get("appearance"), dict) else {}
-        accessories = str(appearance.get("accessories") or "").strip()
-        continuity_parts = [
-            str(character.get("name") or "").strip(),
-            str(appearance.get("hair") or "").strip(),
-            str(appearance.get("clothing") or "").strip(),
-            accessories,
-        ]
-        continuity_anchor = " / ".join(part for part in continuity_parts if part)
-        if "baseline_expression" not in performance_profile:
-            emotional_arc = character.get("emotional_arc") if isinstance(character.get("emotional_arc"), list) else []
-            performance_profile["baseline_expression"] = str((emotional_arc or ["平静"])[0] or "平静")
-        performance_profile.setdefault("movement_style", "慢、轻、克制，以真实呼吸带动作")
-        gesture_rules = performance_profile.get("gesture_rules") if isinstance(performance_profile.get("gesture_rules"), list) else []
-        if not gesture_rules:
-            performance_profile["gesture_rules"] = [
-                "动作幅度偏小，让情绪通过呼吸和眼神出来",
-                "表情变化自然克制，不靠夸张五官表演",
-                "跨镜头保持身体姿态和停顿节奏稳定",
-            ]
-        performance_profile.setdefault("dialogue_delivery", "自然、克制、可停顿")
-        performance_profile.setdefault("continuity_anchor", continuity_anchor or str(character.get("name") or "角色连续性"))
-        character["performance_profile"] = performance_profile
+    reference_handoff = dict(llm_output.get("reference_image_handoff") or {})
     compiled, quality_contract, quality_targets = strategy_bundle(brief, "STAGE_03")
     anchors = resolve_upstream_story_anchors(storyboard, script)
-    reference_plan = build_reference_image_plan(str(brief.get("project_id") or storyboard.get("project_id") or ""), characters)
+    reference_plan = build_reference_image_plan(
+        str(brief.get("project_id") or storyboard.get("project_id") or ""),
+        characters,
+        required=bool(llm_output.get("reference_image_required")),
+    )
     reference_status = build_reference_image_status(out_path.parent, reference_plan)
     stage05_execution_readiness = build_stage05_execution_readiness(
         continuity_mode=str(compiled.get("continuity_mode") or ""),
         reference_image_required=bool(llm_output.get("reference_image_required")),
         reference_image_status=reference_status,
+        stage05_ready_from_codex=bool(reference_handoff.get("ready_for_stage05")),
     )
     self_check = dict(llm_output.get("self_check") or {})
     self_check["reference_images_planned"] = bool(reference_plan.get("reference_images"))
     self_check["reference_images_ready"] = bool(reference_status.get("all_present"))
-    self_check["safe_for_character_locked_image_generation"] = bool(stage05_execution_readiness.get("safe_to_auto_generate"))
+    self_check["safe_for_character_locked_image_generation"] = bool(reference_handoff.get("ready_for_stage05"))
     notes = self_check.get("notes") if isinstance(self_check.get("notes"), list) else []
     missing_paths = reference_status.get("missing_paths") if isinstance(reference_status.get("missing_paths"), list) else []
     if missing_paths:
@@ -209,6 +188,7 @@ def build_character_bible_payload(
         "source_storyboard": str(storyboard_path.resolve()).replace("\\", "/"),
         "characters": characters,
         "reference_image_required": bool(llm_output.get("reference_image_required")),
+        "reference_image_handoff": reference_handoff,
         "reference_image_plan": reference_plan,
         "reference_image_status": reference_status,
         "stage05_execution_readiness": stage05_execution_readiness,
@@ -241,6 +221,7 @@ def write_stage03_outputs(
     write_stage03_companions(
         out_path,
         payload,
+        reference_handoff=payload["reference_image_handoff"],
         reference_plan=payload["reference_image_plan"],
         reference_status=payload["reference_image_status"],
         stage05_execution_readiness=payload["stage05_execution_readiness"],

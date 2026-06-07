@@ -32,6 +32,15 @@ def ensure_locked_brief(brief: dict[str, Any]) -> None:
         raise SystemExit("ERROR: brief must allow Stage 01 generation")
 
 
+def ensure_confirmed_script(script: dict[str, Any]) -> None:
+    if script.get("stage") != "STAGE_01_SCRIPT_GENERATION":
+        raise SystemExit("ERROR: script.stage must be STAGE_01_SCRIPT_GENERATION")
+    status = str(script.get("status") or "").strip().lower()
+    allowed_next_stage = str(script.get("allowed_next_stage") or "").strip()
+    if status != "confirmed" or allowed_next_stage != "STAGE_02_STORYBOARD":
+        raise SystemExit("ERROR: Stage 02 requires a user-confirmed Stage 01 script")
+
+
 def build_packet(brief: dict[str, Any], script: dict[str, Any], brief_path: Path, script_path: Path) -> dict[str, Any]:
     normalized = normal_brief(brief)
     duration = int(normalized.get("target_duration_sec") or (script.get("duration_plan") or {}).get("target_duration_sec") or 30)
@@ -99,6 +108,7 @@ def main(argv: list[str]) -> int:
     brief = load_json(brief_path)
     script = load_json(script_path)
     ensure_locked_brief(brief)
+    ensure_confirmed_script(script)
     packet = build_packet(brief, script, brief_path, script_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(packet, ensure_ascii=False, indent=2), encoding="utf-8")

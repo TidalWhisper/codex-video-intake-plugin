@@ -9,6 +9,9 @@ from typing import Any
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
+PLUGIN_ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(PLUGIN_ROOT / "scripts"))
+from build_stage00_intake_repair_packet import build_repair_packet  # noqa: E402
 from stage00_intake_common import (  # noqa: E402
     QUESTION_KEY_TO_INDEX,
     canonical_question_block,
@@ -17,6 +20,7 @@ from stage00_intake_common import (  # noqa: E402
     utc_now,
 )
 import validate_stage00_intake_state as validate_stage00_intake_state_module  # noqa: E402
+from pipeline_core.codex_flow import structured_validation_errors  # noqa: E402
 
 REQUIRED_KEYS = [
     "answered_question_key",
@@ -42,8 +46,25 @@ def ensure_shape(data: dict[str, Any]) -> None:
 
 def merge_dict(target: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
     merged = dict(target)
-    merged.update(patch)
+    for key, value in patch.items():
+        if value is None:
+            continue
+        merged[key] = value
     return merged
+
+
+def compact_dict(data: dict[str, Any]) -> dict[str, Any]:
+    output: dict[str, Any] = {}
+    for key, value in data.items():
+        if value is None:
+            continue
+        if isinstance(value, dict):
+            nested = compact_dict(value)
+            if nested:
+                output[key] = nested
+            continue
+        output[key] = value
+    return output
 
 
 def write_state(state_path: Path, llm_output: dict[str, Any], output_state_path: Path | None = None) -> dict[str, Any]:
@@ -63,14 +84,14 @@ def write_state(state_path: Path, llm_output: dict[str, Any], output_state_path:
     answers[answered_question_key] = answer_entry
     state["answers"] = answers
 
-    state["user_answers"] = merge_dict(
+    state["user_answers"] = compact_dict(merge_dict(
         dict(state.get("user_answers") or {}),
         dict(llm_output.get("user_answers_patch") or {}),
-    )
-    state["normalized"] = merge_dict(
+    ))
+    state["normalized"] = compact_dict(merge_dict(
         dict(state.get("normalized") or {}),
         dict(llm_output.get("normalized_patch") or {}),
-    )
+    ))
     state["missing_required_fields"] = list(llm_output.get("missing_required_fields") or [])
     state["required_fields_complete"] = bool(llm_output.get("required_fields_complete"))
     state["status"] = str(llm_output.get("status") or "collecting")
@@ -97,14 +118,27 @@ def write_state(state_path: Path, llm_output: dict[str, Any], output_state_path:
 
     state["updated_at"] = utc_now()
 
-    ok, errors, warnings = validate_stage00_intake_state_module.validate(state, output_state_path or state_path)
+    final_path = output_state_path or state_path
+    ok, errors, warnings = validate_stage00_intake_state_module.validate(state, final_path)
     if not ok:
-        raise SystemExit("ERROR: Stage 00 intake state validation failed after write:\n- " + "\n- ".join(errors))
+        intake_dir = final_path.parent
+        validation_errors = structured_validation_errors(errors)
+        validation_errors_path = intake_dir / "stage00_intake_validation_errors.json"
+        validation_errors_path.write_text(
+            json.dumps({"errors": validation_errors}, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        llm_output_path = intake_dir / "stage00_intake_turn_llm_output.json"
+        repair_packet = build_repair_packet(state, llm_output, state_path, llm_output_path, validation_errors)
+        repair_packet_path = intake_dir / "stage00_intake_repair_packet.json"
+        repair_packet_path.write_text(json.dumps(repair_packet, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(f"STAGE00_INTAKE_VALIDATION_FAILED: {final_path}", file=sys.stderr)
+        print(f"STAGE00_INTAKE_REPAIR_PACKET_CREATED: {repair_packet_path}", file=sys.stderr)
+        raise SystemExit(1)
     if warnings:
         for warning in warnings:
             print(f"WARNING: {warning}")
 
-    final_path = output_state_path or state_path
     final_path.parent.mkdir(parents=True, exist_ok=True)
     final_path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
     return state

@@ -58,6 +58,31 @@ def try_load_source_brief(source_brief: Any) -> dict[str, Any] | None:
         return None
 
 
+def explicit_brief_subject(brief: dict[str, Any]) -> str:
+    subject = brief.get("explicit_subject")
+    if isinstance(subject, str) and subject.strip():
+        return subject.strip()
+    normalized = brief.get("normalized") if isinstance(brief.get("normalized"), dict) else {}
+    subject = normalized.get("subject")
+    if isinstance(subject, str) and subject.strip():
+        return subject.strip()
+    return ""
+
+
+def explicit_brief_scene(brief: dict[str, Any]) -> str:
+    normalized = brief.get("normalized") if isinstance(brief.get("normalized"), dict) else {}
+    for key in ["scene", "scene_label", "location"]:
+        value = normalized.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    story_anchors = brief.get("story_anchors") if isinstance(brief.get("story_anchors"), dict) else {}
+    for key in ["scene_label", "location"]:
+        value = story_anchors.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
 def music_cue_matches_profile(cue: Any, profile: str) -> bool:
     text = str(cue or "").strip().lower()
     if not profile:
@@ -166,8 +191,8 @@ def validate(data: dict[str, Any], mode: str = "final") -> tuple[bool, list[str]
     if source_brief:
         expected = extract_story_anchors(source_brief, 1).to_dict()
         expected_age = str(expected.get("subject_age") or "").strip()
-        expected_subject = str(expected.get("subject") or "").strip()
-        expected_scene = str(expected.get("scene_label") or "").strip()
+        expected_subject = explicit_brief_subject(source_brief) or str(expected.get("subject") or "").strip()
+        expected_scene = explicit_brief_scene(source_brief)
 
         if expected_age and isinstance(characters, list) and characters:
             first_age = str((characters[0] or {}).get("age") or "").strip()
@@ -179,7 +204,7 @@ def validate(data: dict[str, Any], mode: str = "final") -> tuple[bool, list[str]
             if expected_subject not in first_name:
                 errors.append(f"characters[0].name must preserve explicit brief subject identity: expected {expected_subject}")
 
-        if expected_scene and expected_scene not in {"故事现场", "古风场景", "未来感场景"} and isinstance(settings, list):
+        if expected_scene and isinstance(settings, list):
             normalized_settings = [str(item or "").strip() for item in settings]
             if not any(expected_scene in item or item in expected_scene for item in normalized_settings):
                 errors.append(f"settings must preserve explicit brief scene: expected {expected_scene}")

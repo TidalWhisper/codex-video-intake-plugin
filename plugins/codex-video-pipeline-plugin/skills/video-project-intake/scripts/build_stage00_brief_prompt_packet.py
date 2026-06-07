@@ -11,17 +11,27 @@ from typing import Any
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
 from stage00_intake_common import (  # noqa: E402
+    canonical_question_block,
     ensure_draft_ready_state,
     load_or_create_state,
-    load_text,
-    references_dir,
     utc_now,
 )
 
 
+def compact_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: compact_value(item)
+            for key, item in value.items()
+            if item is not None
+        }
+    if isinstance(value, list):
+        return [compact_value(item) for item in value if item is not None]
+    return value
+
+
 def build_packet(state: dict[str, Any], state_path: Path, draft_path: Path) -> dict[str, Any]:
     ensure_draft_ready_state(state)
-    refs = references_dir()
     return {
         "packet_version": "0.1.0",
         "stage_label": "Stage 00-B",
@@ -36,9 +46,9 @@ def build_packet(state: dict[str, Any], state_path: Path, draft_path: Path) -> d
             "missing_required_fields": list(state.get("missing_required_fields") or []),
             "ready_for_brief_generation": bool(state.get("ready_for_brief_generation")),
         },
-        "answers": dict(state.get("answers") or {}),
-        "user_answers": dict(state.get("user_answers") or {}),
-        "normalized": dict(state.get("normalized") or {}),
+        "answers": compact_value(dict(state.get("answers") or {})),
+        "user_answers": compact_value(dict(state.get("user_answers") or {})),
+        "normalized": compact_value(dict(state.get("normalized") or {})),
         "target_contract": {
             "stage": "STAGE_00_INTAKE",
             "status": "draft",
@@ -62,10 +72,8 @@ def build_packet(state: dict[str, Any], state_path: Path, draft_path: Path) -> d
             "canonical_options": "skills/video-project-intake/references/first_layer_options.md",
             "canonical_question_blocks": "skills/video-project-intake/references/stage00_question_blocks.md",
         },
-        "reference_materials": {
-            "first_layer_options_markdown": load_text(refs / "first_layer_options.md").strip(),
-            "question_blocks_markdown": load_text(refs / "stage00_question_blocks.md").strip(),
-            "project_brief_schema_json": load_text(refs / "project_brief.schema.json").strip(),
+        "confirmation_contract": {
+            "final_confirmation_block": canonical_question_block("final_confirmation"),
         },
     }
 

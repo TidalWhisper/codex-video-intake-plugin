@@ -90,14 +90,17 @@ def main() -> int:
     })
     data["status"] = "generated" if all_generated else ("in_progress" if generated > 0 else "draft")
     data["allowed_next_stage"] = next_stage_after("STAGE_07_AUDIO", routing, "STAGE_08_ASSEMBLY") if all_generated else None
+    data["confirmed_by_user"] = False
+    if all_generated:
+        data["formal_promotion_status"] = "pending_confirmation"
     data["updated_at"] = datetime.now(timezone.utc).isoformat()
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     if all_generated:
         update_project_manifest_for_stage(
             path,
-            current_stage="STAGE_07_AUDIO_CONFIRMED",
+            current_stage="STAGE_07_AUDIO",
             allowed_next_stage=data["allowed_next_stage"],
-            flags={"audio_confirmed": True},
+            flags={"audio_confirmed": False},
             status="active",
         )
     print(f"PLACEHOLDER AUDIO GENERATED: {generated}/{len(jobs)}")

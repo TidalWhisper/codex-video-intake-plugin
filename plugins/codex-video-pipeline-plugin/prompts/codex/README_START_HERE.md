@@ -4,17 +4,19 @@ Codex 后续本地开发不要从某个零散任务直接开始。请先读：
 
 ```text
 CODEX_START_HERE.md
-docs/00_CODEX_MASTER_PLAN.md
+../../.codex/current-task-contract.md
 ```
 
-然后再按顺序执行：
+确认当前批次目标后，再决定是否需要使用本目录下的历史提示文件。它们不再是权威计划载体。
+
+如果需要继续使用这些提示文件，必须以前置的当前任务契约为准，不得反向覆盖当前主线。
 
 ```text
-00-master-task-comfyui-openai-image.md
-01-implement-openai-image2-provider.md
-02-implement-comfyui-core-client.md
-03-integrate-stage05-keyframe-images.md
-04-integrate-stage06-ltx-i2v.md
-05-integrate-stage07-indextts2-music.md
-06-hardening-tests.md
+prompts/codex/00-master-task-comfyui-openai-image.md
+```
+ 
+本仓库当前唯一允许的业务流程测试，不在这里执行：
+
+```text
+监督者 Agent 从 $video-production-pipeline 入口执行入口级全流程业务测试
 ```

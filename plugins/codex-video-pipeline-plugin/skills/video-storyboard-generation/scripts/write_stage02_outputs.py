@@ -33,6 +33,14 @@ def write_text(path: Path, content: str) -> None:
     path.write_text(content.rstrip() + "\n", encoding="utf-8")
 
 
+def normalize_shot_id(raw: Any, index: int) -> str:
+    text = str(raw or "").strip().upper()
+    digits = "".join(ch for ch in text if ch.isdigit())
+    if digits:
+        return f"S{int(digits):03d}"
+    return f"S{index + 1:03d}"
+
+
 def build_storyboard_payload(
     brief: dict[str, Any],
     script: dict[str, Any],
@@ -42,7 +50,9 @@ def build_storyboard_payload(
 ) -> dict[str, Any]:
     ensure_shape(llm_output)
     normalized = normal_brief(brief)
-    shots = [shot for shot in list(llm_output.get("shots") or []) if isinstance(shot, dict)]
+    shots = [dict(shot) for shot in list(llm_output.get("shots") or []) if isinstance(shot, dict)]
+    for idx, shot in enumerate(shots):
+        shot["shot_id"] = normalize_shot_id(shot.get("shot_id"), idx)
     compiled, quality_contract, quality_targets = strategy_bundle(brief, "STAGE_02")
     anchors = resolve_upstream_story_anchors({"shots": shots}, script)
     return {

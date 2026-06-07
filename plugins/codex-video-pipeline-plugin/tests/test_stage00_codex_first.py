@@ -290,6 +290,122 @@ def test_write_stage00_intake_state_advances_to_next_question(tmp_path: Path) ->
     assert ok, errors
 
 
+def test_write_stage00_intake_state_preserves_prior_answers_when_patch_contains_nulls(tmp_path: Path) -> None:
+    state_path = tmp_path / ".video_project" / "intake" / "intake_state.json"
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text(json.dumps({
+        "schema_version": "0.4.0",
+        "stage": "STAGE_00_INTAKE",
+        "status": "collecting",
+        "project_id": "video_intake_project",
+        "project_dir": str((tmp_path / ".video_project" / "intake").resolve()).replace("\\", "/"),
+        "current_question": 7,
+        "current_question_key": "voice",
+        "answers": {
+            "idea": {"raw_input": "一个暴雨夜追纸鹤的女生。"},
+            "target_duration": {"raw_input": "C"},
+            "genre": {"raw_input": "B"},
+            "style": {"raw_input": "C"},
+            "visual_spec": {"raw_input": "B2"},
+            "characters": {"raw_input": "A"},
+        },
+        "user_answers": {
+            "idea": "一个暴雨夜追纸鹤的女生。",
+            "target_duration": "C",
+            "genre": "B",
+            "style": "C",
+            "visual_spec": "B2",
+            "characters": "A",
+        },
+        "normalized": {
+            "idea": "一个暴雨夜追纸鹤的女生。",
+            "target_duration_sec": 60,
+            "target_duration_label": "60秒",
+            "genre": "悬疑",
+            "style": "日系动画风（日本动漫感）",
+            "aspect_ratio": "16:9",
+            "aspect_ratio_label": "16:9 横屏",
+            "resolution": "1080P",
+            "resolution_label": "1080P",
+            "characters_mode": "有固定主角/人物",
+            "characters_required": True,
+        },
+        "missing_required_fields": ["voice", "music", "final_output"],
+        "required_fields_complete": False,
+        "next_question_key": "voice",
+        "next_prompt_text": stage00_intake_common.canonical_question_block("voice"),
+        "ready_for_brief_generation": False,
+        "last_user_reply": "A",
+        "updated_at": stage00_intake_common.utc_now(),
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    llm_output_path = state_path.parent / "stage00_intake_turn_llm_output.json"
+    llm_output_path.write_text(json.dumps({
+        "answered_question_key": "voice",
+        "user_answer_entry": {
+            "raw_input": "A",
+            "selected_option": "A",
+            "free_text_notes": "",
+        },
+        "user_answers_patch": {
+            "idea": None,
+            "target_duration": None,
+            "genre": None,
+            "style": None,
+            "visual_spec": None,
+            "characters": None,
+            "characters_note": None,
+            "voice": "A",
+            "music": None,
+            "final_output": None,
+        },
+        "normalized_patch": {
+            "idea": None,
+            "target_duration_sec": None,
+            "target_duration_label": None,
+            "genre": None,
+            "style": None,
+            "aspect_ratio": None,
+            "aspect_ratio_label": None,
+            "resolution": None,
+            "resolution_label": None,
+            "characters_mode": None,
+            "characters_required": None,
+            "voice_mode": "不需要配音",
+            "voice_required": False,
+            "music_mode": None,
+            "music_profile": None,
+            "music_required": None,
+            "final_output": None,
+        },
+        "missing_required_fields": ["music", "final_output"],
+        "required_fields_complete": False,
+        "status": "collecting",
+        "next_question_key": "music",
+        "next_prompt_text": stage00_intake_common.canonical_question_block("music"),
+        "needs_followup": False,
+        "followup_reason": "",
+        "completion_summary": "已记录问题 7：配音选择为 A（不需要配音），进入问题 8。",
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    assert write_stage00_intake_state.main([
+        "write_stage00_intake_state.py",
+        str(state_path),
+        str(llm_output_path),
+    ]) == 0
+
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    assert state["current_question_key"] == "music"
+    assert state["user_answers"]["idea"] == "一个暴雨夜追纸鹤的女生。"
+    assert state["user_answers"]["characters"] == "A"
+    assert state["user_answers"]["voice"] == "A"
+    assert state["normalized"]["target_duration_sec"] == 60
+    assert state["normalized"]["characters_required"] is True
+    assert state["normalized"]["voice_required"] is False
+    ok, errors, warnings = validate_stage00_intake_state.validate(state, state_path)
+    assert ok, errors
+
+
 def test_run_stage00_intake_turn_codex_flow_writes_packet_llm_output_and_state(tmp_path: Path, monkeypatch) -> None:
     state_path = tmp_path / ".video_project" / "intake" / "intake_state.json"
 
@@ -426,6 +542,102 @@ def test_pipeline_stage00_intake_wrapper_prints_current_prompt_without_user_repl
     output = capsys.readouterr().out
     assert "PIPELINE_STAGE00_CURRENT_QUESTION_KEY: idea" in output
     assert "问题 1：你的故事想法/创意是什么？" in output
+
+
+def test_stage00_controller_collecting_reply_surfaces_next_prompt_in_same_call(tmp_path: Path, monkeypatch, capsys) -> None:
+    state_path = tmp_path / ".video_project" / "intake" / "intake_state.json"
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text(json.dumps({
+        "schema_version": "0.4.0",
+        "stage": "STAGE_00_INTAKE",
+        "status": "collecting",
+        "project_id": ".video_project",
+        "project_dir": str((tmp_path / ".video_project").resolve()).replace("\\", "/"),
+        "current_question": 2,
+        "current_question_key": "target_duration",
+        "answers": {
+            "idea": {
+                "raw_input": "一个年轻女生深夜独自下班，在回家路上被一盏深夜便利店的暖光轻轻治愈。",
+                "selected_option": "",
+                "free_text_notes": "深夜便利店暖光治愈",
+                "question_key": "idea",
+            },
+        },
+        "user_answers": {
+            "idea": "一个年轻女生深夜独自下班，在回家路上被一盏深夜便利店的暖光轻轻治愈。",
+        },
+        "normalized": {
+            "idea": "一个年轻女生深夜独自下班，在回家路上被一盏深夜便利店的暖光轻轻治愈。",
+        },
+        "missing_required_fields": [
+            "target_duration",
+            "genre",
+            "style",
+            "visual_spec",
+            "characters",
+            "voice",
+            "music",
+            "final_output",
+        ],
+        "required_fields_complete": False,
+        "next_question_key": "target_duration",
+        "next_prompt_text": stage00_intake_common.canonical_question_block("target_duration"),
+        "ready_for_brief_generation": False,
+        "last_user_reply": "",
+        "updated_at": stage00_intake_common.utc_now(),
+        "needs_followup": False,
+        "followup_reason": "",
+        "completion_summary": "",
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    def fake_codex_flow(argv: list[str] | None = None) -> int:
+        del argv
+        current = json.loads(state_path.read_text(encoding="utf-8"))
+        current["answers"]["target_duration"] = {
+            "raw_input": "A",
+            "selected_option": "A",
+            "free_text_notes": "",
+            "question_key": "target_duration",
+        }
+        current["user_answers"]["target_duration"] = "A"
+        current["normalized"]["target_duration_sec"] = 15
+        current["normalized"]["target_duration_label"] = "15秒"
+        current["missing_required_fields"] = [
+            "genre",
+            "style",
+            "visual_spec",
+            "characters",
+            "voice",
+            "music",
+            "final_output",
+        ]
+        current["current_question"] = 3
+        current["current_question_key"] = "genre"
+        current["next_question_key"] = "genre"
+        current["next_prompt_text"] = stage00_intake_common.canonical_question_block("genre")
+        current["last_user_reply"] = "A"
+        current["completion_summary"] = "目标时长已记录为15秒，继续询问视频题材。"
+        current["updated_at"] = stage00_intake_common.utc_now()
+        state_path.write_text(json.dumps(current, ensure_ascii=False, indent=2), encoding="utf-8")
+        return 0
+
+    monkeypatch.setattr(
+        run_stage00_controller.run_stage00_intake_turn,
+        "run_stage00_intake_turn_codex_flow_main",
+        fake_codex_flow,
+    )
+
+    assert run_stage00_controller.main([
+        "--state-json",
+        str(state_path),
+        "--user-reply",
+        "A",
+    ]) == 0
+
+    output = capsys.readouterr().out
+    assert "PIPELINE_STAGE00_STATE: collecting" in output
+    assert "PIPELINE_STAGE00_CURRENT_QUESTION_KEY: genre" in output
+    assert "问题 3：视频题材是什么？" in output
 
 
 def test_stage00_controller_confirmation_a_dispatches_lock_and_continue(tmp_path: Path, monkeypatch) -> None:

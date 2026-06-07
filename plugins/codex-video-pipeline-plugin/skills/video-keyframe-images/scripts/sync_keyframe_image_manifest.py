@@ -205,15 +205,20 @@ def main(argv: list[str] | None = None) -> int:
     data["summary"]["failed_image_count"] = failed
     if data.get("self_check", {}).get("ready_for_video_clip_generation") is True:
         data["allowed_next_stage"] = next_stage_after("STAGE_05_KEYFRAME_IMAGES", routing, "STAGE_06_VIDEO_CLIPS")
+        data["formal_promotion_status"] = "pending_confirmation"
+        data["confirmed_by_user"] = False
+        path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         update_project_manifest_for_stage(
             path,
-            current_stage="STAGE_05_KEYFRAME_IMAGES_CONFIRMED",
-            allowed_next_stage=data["allowed_next_stage"],
-            flags={"keyframe_images_confirmed": True},
+            current_stage="STAGE_05_KEYFRAME_IMAGES",
+            allowed_next_stage=None,
+            flags={"keyframe_images_confirmed": False},
             status="active",
         )
     else:
         data["allowed_next_stage"] = None
+        data["formal_promotion_status"] = "draft_only"
+        data["confirmed_by_user"] = False
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"KEYFRAME IMAGE MANIFEST SYNCED: {path}")
     print(f"GENERATED_IMAGES: {generated}")

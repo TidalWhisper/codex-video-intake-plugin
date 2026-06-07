@@ -24,7 +24,7 @@ EARLY_STAGE_SEQUENCE = [
     ("keyframe_prompts_confirmed", "STAGE_04_KEYFRAME_PROMPTS_CONFIRMED", "STAGE_05_KEYFRAME_IMAGES"),
 ]
 
-CREATOR_STEP_ORDER = ["立项", "剧本", "分镜", "关键帧", "成片"]
+CREATOR_STEP_ORDER = ["立项", "剧本", "分镜", "关键帧", "视频片段", "音频", "成片"]
 ORIGIN_KEYS = ["provider_output", "fallback_output", "manual_import", "placeholder_or_incomplete"]
 MANUAL_PROVIDER_PREFIXES = ("manual",)
 
@@ -91,6 +91,10 @@ def _stage01_script_json_path(project_dir: Path) -> Path:
     return project_dir / "01_script" / "script.json"
 
 
+def _stage01_validation_errors_path(project_dir: Path) -> Path:
+    return project_dir / "01_script" / "stage01_validation_errors.json"
+
+
 def _stage00_state_json_path(project_dir: Path) -> Path:
     return project_dir / "00_intake" / "intake_state.json"
 
@@ -152,10 +156,23 @@ def _stage04_confirm_command(project_dir: Path) -> str:
 
 
 def _stage01_generated(data: dict[str, Any], project_dir: Path) -> bool:
-    current_stage = _text(data.get("current_stage"))
-    if current_stage == "STAGE_01_SCRIPT_GENERATION":
-        return True
+    if _stage01_validation_errors_path(project_dir).exists():
+        return False
     return _stage01_script_json_path(project_dir).exists()
+
+
+def _stage02_storyboard_json_path(project_dir: Path) -> Path:
+    return project_dir / "02_storyboard" / "storyboard.json"
+
+
+def _stage02_validation_errors_path(project_dir: Path) -> Path:
+    return project_dir / "02_storyboard" / "stage02_validation_errors.json"
+
+
+def _stage02_generated(project_dir: Path) -> bool:
+    if _stage02_validation_errors_path(project_dir).exists():
+        return False
+    return _stage02_storyboard_json_path(project_dir).exists()
 
 
 def _origin_counts() -> dict[str, int]:
@@ -291,6 +308,7 @@ def _derive_stage05_state(project_dir: Path) -> dict[str, Any] | None:
     pending_ids = _list_of_str(_as_dict(data.get("quality_review")).get("next_review_image_ids"))
     generated = 0
     blocked = False
+    active = 0
     for job in jobs:
         if not isinstance(job, dict):
             continue
@@ -309,8 +327,11 @@ def _derive_stage05_state(project_dir: Path) -> dict[str, Any] | None:
         counts[origin] += 1
         if file_exists and file_size > 0:
             generated += 1
-        if _text(job.get("status")).lower() == "blocked":
+        job_status = _text(job.get("status")).lower()
+        if job_status == "blocked":
             blocked = True
+        elif job_status in {"queued", "running", "submitting", "in_progress"}:
+            active += 1
     self_check = _as_dict(data.get("self_check"))
     quality_review = _as_dict(data.get("quality_review"))
     all_exist = _bool(self_check.get("all_required_images_exist")) or _bool(self_check.get("ready_for_video_clip_generation"))
@@ -319,9 +340,16 @@ def _derive_stage05_state(project_dir: Path) -> dict[str, Any] | None:
         or _bool(quality_review.get("manual_review_cleared"))
         or _bool(self_check.get("ready_for_video_clip_generation"))
     )
+    formal_promotion_status = _text(data.get("formal_promotion_status")).lower()
+    formal_confirmation_ready = _bool(self_check.get("ready_for_video_clip_generation"))
+    user_confirmed = _bool(data.get("confirmed_by_user")) or _bool(data.get("status") == "confirmed") or formal_promotion_status == "confirmed"
     manifest_status = _text(data.get("status")).lower()
-    if all_exist and manual_review_cleared:
+    if active > 0 or manifest_status == "in_progress":
+        normalized = "in_progress"
+    elif all_exist and manual_review_cleared and formal_confirmation_ready and user_confirmed:
         normalized = "confirmed"
+    elif all_exist and manual_review_cleared:
+        normalized = "generated"
     elif all_exist and not manual_review_cleared:
         normalized = "review_required"
     else:
@@ -332,24 +360,34 @@ def _derive_stage05_state(project_dir: Path) -> dict[str, Any] | None:
             manifest_status=manifest_status,
         )
     blockers: list[str] = []
-    if not all_exist:
+    if active > 0:
+        blockers.append(f"Stage 05 仍有 {active} 个关键帧生成/重生任务在执行中。")
+    elif not all_exist:
         blockers.append("Stage 05 关键帧仍未全部生成完成。")
     if all_exist and not manual_review_cleared:
         if blocking_ids:
             blockers.append("Stage 05 仍有高风险图片待人工复核：" + "、".join(blocking_ids[:3]))
         else:
             blockers.append("Stage 05 高风险关键帧尚未清审，不能可信推进到 Stage 06。")
+    if all_exist and manual_review_cleared and not user_confirmed:
+        blockers.append("Stage 05 图片已齐且复核已清，但还没有经过正式确认门，当前不能直接推进到 Stage 06。")
     next_action = (
-        "继续生成缺失关键帧。"
+        "等待当前 Stage 05 生成/重生任务完成后，再在同一官方线程继续推进。"
+        if active > 0
+        else "继续生成缺失关键帧。"
         if not all_exist
-        else ("优先处理 Stage 05 审图工作台里的待复核图片。" if not manual_review_cleared else "可以安全推进到 Stage 06 视频片段生成。")
+        else (
+            "优先处理 Stage 05 审图工作台里的待复核图片。"
+            if not manual_review_cleared
+            else ("执行 Stage 05 正式确认后再进入 Stage 06。" if not user_confirmed else "可以安全推进到 Stage 06 视频片段生成。")
+        )
     )
     return {
         "manifest_path": as_posix(manifest_path),
         "normalized_status": normalized,
         "confirmed": normalized == "confirmed",
         "all_required_exist": all_exist,
-        "ready_for_next_stage": _bool(self_check.get("ready_for_video_clip_generation")),
+        "ready_for_next_stage": formal_confirmation_ready and user_confirmed,
         "blocking_reasons": blockers,
         "evidence_origin_summary": counts,
         "evidence_summary_text": _evidence_summary_text(counts),
@@ -361,7 +399,19 @@ def _derive_stage05_state(project_dir: Path) -> dict[str, Any] | None:
             "reason": _text(_as_dict(data.get("creator_runtime_status")).get("reason")),
         },
         "pending_review_ids": pending_ids,
-        "current_result": f"{generated}/{len(jobs)} 张关键帧已落盘，{_evidence_summary_text(counts)}。",
+        "current_result": (
+            f"{generated}/{len(jobs)} 张关键帧已落盘，仍有 {active} 个生成/重生任务在执行中。"
+            if active > 0
+            else (
+                f"{generated}/{len(jobs)} 张关键帧已落盘，且已完成正式确认，{_evidence_summary_text(counts)}。"
+                if normalized == "confirmed"
+                else (
+                    f"{generated}/{len(jobs)} 张关键帧已落盘，人工复核已清，待执行 Stage 05 正式确认门。"
+                    if all_exist and manual_review_cleared and not user_confirmed
+                    else f"{generated}/{len(jobs)} 张关键帧已落盘，{_evidence_summary_text(counts)}。"
+                )
+            )
+        ),
         "current_blocker": blockers[0] if blockers else "",
         "next_action": next_action,
         "risk_hint": _text(_as_dict(data.get("creator_runtime_status")).get("review_headline")) or (_text(quality_review.get("creator_feedback_headline"))),
@@ -410,6 +460,7 @@ def _derive_stage06_state(project_dir: Path) -> dict[str, Any] | None:
     source_stage05_ready = _bool(self_check.get("source_stage05_ready_for_video_clip_generation"))
     formal_progression_ready = _bool(self_check.get("formal_progression_ready")) or _bool(self_check.get("ready_for_audio_stage"))
     formal_promotion_status = _text(data.get("formal_promotion_status")).lower()
+    user_confirmed = _bool(data.get("confirmed_by_user")) or _bool(data.get("status") == "confirmed") or formal_promotion_status == "confirmed"
     if all_exist and ready_count == 0 and jobs:
         ready_count = len(jobs)
     if all_exist and nonprod == len(jobs) and jobs:
@@ -417,8 +468,10 @@ def _derive_stage06_state(project_dir: Path) -> dict[str, Any] | None:
         counts["provider_output"] = max(counts["provider_output"], len(jobs))
         counts["placeholder_or_incomplete"] = 0
     manifest_status = _text(data.get("status")).lower()
-    if formal_progression_ready and all_exist and nonprod == 0:
+    if formal_progression_ready and all_exist and nonprod == 0 and user_confirmed:
         normalized = "confirmed"
+    elif all_exist and formal_progression_ready and nonprod == 0 and not user_confirmed:
+        normalized = "generated"
     elif all_exist and (nonprod > 0 or not source_stage05_ready or formal_promotion_status == "draft_only"):
         normalized = "review_required"
     elif any_exists or manifest_status in {"generated", "in_progress"}:
@@ -437,20 +490,26 @@ def _derive_stage06_state(project_dir: Path) -> dict[str, Any] | None:
         blockers.append("Stage 05 仍未正式清审，当前 Stage 06 结果只能按草稿态展示。")
     if nonprod > 0:
         blockers.append("Stage 06 仍包含占位或证据不足的 clip，需要真实 provider 输出。")
+    if all_exist and source_stage05_ready and nonprod == 0 and not user_confirmed:
+        blockers.append("Stage 06 clip 已齐且满足推进条件，但还没有经过正式确认门，当前不能直接推进到 Stage 07。")
     next_action = "补齐缺失或占位 clip，并重新同步 Stage 06 manifest。"
     if all_exist and not source_stage05_ready:
         next_action = "先完成 Stage 05 审图清审，再把当前 clip 作为正式结果推进到 Stage 07。"
+    if all_exist and source_stage05_ready and nonprod == 0 and not user_confirmed:
+        next_action = "执行 Stage 06 正式确认后再进入 Stage 07。"
     if normalized == "confirmed":
         next_action = "可以安全推进到 Stage 07 音频阶段。"
     current_result = f"{ready_count}/{len(jobs)} 个正式 clip 已就绪，{_evidence_summary_text(counts)}。"
     if all_exist and not source_stage05_ready:
         current_result = f"{ready_count}/{len(jobs)} 个 clip 已生成，但 Stage 05 未正式清审，当前仅为草稿态。"
+    elif all_exist and source_stage05_ready and nonprod == 0 and not user_confirmed:
+        current_result = f"{ready_count}/{len(jobs)} 个 clip 已就绪，待执行 Stage 06 正式确认门。"
     return {
         "manifest_path": as_posix(manifest_path),
         "normalized_status": normalized,
         "confirmed": normalized == "confirmed",
         "all_required_exist": all_exist,
-        "ready_for_next_stage": formal_progression_ready,
+        "ready_for_next_stage": formal_progression_ready and user_confirmed,
         "blocking_reasons": blockers,
         "evidence_origin_summary": counts,
         "evidence_summary_text": _evidence_summary_text(counts),
@@ -502,14 +561,18 @@ def _derive_stage07_state(project_dir: Path) -> dict[str, Any] | None:
             ready_count += 1
     self_check = _as_dict(data.get("self_check"))
     all_audio = _bool(self_check.get("all_required_audio_files_exist")) or _bool(self_check.get("ready_for_assembly_stage"))
+    formal_promotion_status = _text(data.get("formal_promotion_status")).lower()
+    user_confirmed = _bool(data.get("confirmed_by_user")) or _bool(data.get("status") == "confirmed") or formal_promotion_status == "confirmed"
     if all_audio and ready_count == 0 and jobs:
         ready_count = len(jobs)
     if all_audio and counts["placeholder_or_incomplete"] == len(jobs) and jobs:
         counts["provider_output"] = max(counts["provider_output"], len(jobs))
         counts["placeholder_or_incomplete"] = 0
     manifest_status = _text(data.get("status")).lower()
-    if all_audio:
+    if all_audio and user_confirmed:
         normalized = "confirmed"
+    elif all_audio and not user_confirmed:
+        normalized = "generated"
     elif any_exists or manifest_status in {"generated", "in_progress"}:
         normalized = "generated"
     else:
@@ -517,7 +580,11 @@ def _derive_stage07_state(project_dir: Path) -> dict[str, Any] | None:
     blockers: list[str] = []
     if not all_audio:
         blockers.append("Stage 07 音频仍未补齐，成片阶段还不能正式推进。")
+    if all_audio and not user_confirmed:
+        blockers.append("Stage 07 音频已齐，但还没有经过正式确认门，当前不能直接推进到 Stage 08。")
     next_action = "补齐缺失音频并刷新 Stage 07 音频状态。"
+    if all_audio and not user_confirmed:
+        next_action = "执行 Stage 07 正式确认后再进入 Stage 08 粗剪装配。"
     if normalized == "confirmed":
         next_action = "可以安全推进到 Stage 08 粗剪装配。"
     return {
@@ -525,7 +592,7 @@ def _derive_stage07_state(project_dir: Path) -> dict[str, Any] | None:
         "normalized_status": normalized,
         "confirmed": normalized == "confirmed",
         "all_required_exist": all_audio,
-        "ready_for_next_stage": _bool(self_check.get("ready_for_assembly_stage")),
+        "ready_for_next_stage": _bool(self_check.get("ready_for_assembly_stage")) and user_confirmed,
         "blocking_reasons": blockers,
         "evidence_origin_summary": counts,
         "evidence_summary_text": _evidence_summary_text(counts),
@@ -534,7 +601,15 @@ def _derive_stage07_state(project_dir: Path) -> dict[str, Any] | None:
             "music_primary": music_primary,
             "music_fallback": music_fallback,
         },
-        "current_result": f"{ready_count}/{len(jobs)} 条音频已就绪，{_evidence_summary_text(counts)}。",
+        "current_result": (
+            f"{ready_count}/{len(jobs)} 条音频已就绪，并已完成正式确认。"
+            if normalized == "confirmed"
+            else (
+                f"{ready_count}/{len(jobs)} 条音频已就绪，待执行 Stage 07 正式确认门。"
+                if all_audio and not user_confirmed
+                else f"{ready_count}/{len(jobs)} 条音频已就绪，{_evidence_summary_text(counts)}。"
+            )
+        ),
         "current_blocker": blockers[0] if blockers else "",
         "next_action": next_action,
         "risk_hint": "",
@@ -613,18 +688,21 @@ def _derive_reference_readiness_state(project_dir: Path) -> dict[str, Any] | Non
     _, keyframe_prompts = _read_stage_manifest(project_dir, STAGE04_MANIFEST)
     if character_bible is None and keyframe_prompts is None:
         return None
-    source = character_bible if character_bible is not None else keyframe_prompts or {}
+    source = keyframe_prompts if keyframe_prompts is not None else character_bible or {}
     reference_status = _as_dict(source.get("reference_image_status"))
     readiness = _as_dict(source.get("stage05_execution_readiness"))
+    handoff = _as_dict(source.get("stage05_handoff")) or _as_dict(source.get("reference_image_handoff"))
     missing_paths = _list_of_str(reference_status.get("missing_paths") or readiness.get("missing_reference_images"))
+    handoff_ready = handoff.get("ready_for_stage05")
+    safe_to_auto_generate = _bool(handoff_ready) if handoff_ready is not None else (_bool(readiness.get("safe_to_auto_generate")) or _bool(reference_status.get("all_present")))
     if not missing_paths:
         return {
             "reference_ready": True,
-            "safe_to_auto_generate": _bool(readiness.get("safe_to_auto_generate")) or _bool(reference_status.get("all_present")),
+            "safe_to_auto_generate": safe_to_auto_generate,
             "missing_reference_images": [],
-            "current_result": "角色参考图已就绪，关键帧阶段可以按正常路径推进。",
-            "current_blocker": "",
-            "next_action": "确认当前关键帧提示词后，进入 Stage 05 自动生图。",
+            "current_result": _text(handoff.get("summary")) or "角色参考图已就绪，关键帧阶段可以按正常路径推进。",
+            "current_blocker": _text(handoff.get("block_reason")),
+            "next_action": _text(handoff.get("next_action")) or "确认当前关键帧提示词后，进入 Stage 05 自动生图。",
             "risk_hint": "",
             "actions": [{
                 "label": "打开 Stage 04 交接说明",
@@ -639,11 +717,11 @@ def _derive_reference_readiness_state(project_dir: Path) -> dict[str, Any] | Non
     bootstrap_command = _text(manual_recovery.get("suggested_bootstrap_command"))
     return {
         "reference_ready": False,
-        "safe_to_auto_generate": False,
+        "safe_to_auto_generate": safe_to_auto_generate,
         "missing_reference_images": missing_paths,
-        "current_result": f"角色参考图还缺 {len(missing_paths)} 张，系统不会冒险自动进入 Stage 05。",
-        "current_blocker": "主角参考图还没补齐，所以系统先把关键帧自动生成挡住了。",
-        "next_action": (
+        "current_result": _text(handoff.get("summary")) or f"角色参考图还缺 {len(missing_paths)} 张，系统不会冒险自动进入 Stage 05。",
+        "current_blocker": _text(handoff.get("block_reason")) or "主角参考图还没补齐，所以系统先把关键帧自动生成挡住了。",
+        "next_action": _text(handoff.get("next_action")) or (
             "先补一张清晰的主角参考图到 `03_characters/reference_images/`，再继续进入 Stage 05。"
             if not bootstrap_command
             else "先补主角参考图；如果 Stage 05 已经有一张可用关键帧，也可以直接用现有关键帧回填角色参考图。"
@@ -871,19 +949,66 @@ def _creator_steps(
     early.append(keyframe_step)
     stage08 = stage_truth.get("stage08")
     final_stage = stage08 or stage_truth.get("stage07") or stage_truth.get("stage06") or {}
+    stage06 = stage_truth.get("stage06")
+    stage07 = stage_truth.get("stage07")
+    early.append({
+        "step": "视频片段",
+        "status": stage06.get("normalized_status") if stage06 else ("current" if _bool(data.get("keyframe_images_confirmed")) else "pending"),
+        "current_result": stage06.get("current_result") if stage06 else ("Stage 05 已确认后会进入视频片段阶段。" if _bool(data.get("keyframe_images_confirmed")) else "尚未进入视频片段阶段。"),
+        "current_blocker": stage06.get("current_blocker") if stage06 else "",
+        "next_action": stage06.get("next_action") if stage06 else "先完成 Stage 05 正式确认。",
+        "risk_hint": stage06.get("risk_hint") if stage06 else "",
+    })
+    early.append({
+        "step": "音频",
+        "status": stage07.get("normalized_status") if stage07 else ("current" if _bool(data.get("video_clips_confirmed")) else "pending"),
+        "current_result": stage07.get("current_result") if stage07 else ("Stage 06 已确认后会进入音频阶段。" if _bool(data.get("video_clips_confirmed")) else "尚未进入音频阶段。"),
+        "current_blocker": stage07.get("current_blocker") if stage07 else "",
+        "next_action": stage07.get("next_action") if stage07 else "先完成 Stage 06 正式确认。",
+        "risk_hint": stage07.get("risk_hint") if stage07 else "",
+    })
     early.append({
         "step": "成片",
         "status": final_stage.get("normalized_status") if final_stage else "pending",
         "current_result": final_stage.get("current_result") if final_stage else "尚未进入后半段成片链路。",
         "current_blocker": final_stage.get("current_blocker") if final_stage else "",
-        "next_action": final_stage.get("next_action") if final_stage else "先生成视频片段和音频。",
+        "next_action": final_stage.get("next_action") if final_stage else "先完成视频片段和音频正式确认。",
         "risk_hint": final_stage.get("risk_hint") if final_stage else "",
     })
     return early
 
 
 def _derive_project_stage(data: dict[str, Any], stage_truth: dict[str, dict[str, Any]]) -> tuple[str, str | None]:
+    project_dir = Path(_text(data.get("project_dir")) or ".")
+    script_generated = _stage01_generated(data, project_dir)
+    storyboard_generated = _stage02_generated(project_dir)
+    character_generated = (project_dir / "03_characters" / "character_bible.json").exists()
+    keyframe_generated = (project_dir / "04_keyframes" / "keyframe_prompts.json").exists()
     if not stage_truth:
+        if _bool(data.get("brief_locked")) and not _bool(data.get("script_confirmed")):
+            return (
+                ("STAGE_01_SCRIPT_REVIEW", None)
+                if script_generated
+                else ("STAGE_01_SCRIPT_GENERATION", "STAGE_01_SCRIPT_GENERATION")
+            )
+        if _bool(data.get("script_confirmed")) and not _bool(data.get("storyboard_confirmed")):
+            return (
+                ("STAGE_02_STORYBOARD_REVIEW", None)
+                if storyboard_generated
+                else ("STAGE_02_STORYBOARD_GENERATION", "STAGE_02_STORYBOARD")
+            )
+        if _bool(data.get("storyboard_confirmed")) and not _bool(data.get("character_bible_confirmed")):
+            return (
+                ("STAGE_03_CHARACTER_BIBLE_REVIEW", None)
+                if character_generated
+                else ("STAGE_03_CHARACTER_BIBLE_GENERATION", "STAGE_03_CHARACTER_BIBLE")
+            )
+        if _bool(data.get("character_bible_confirmed")) and not _bool(data.get("keyframe_prompts_confirmed")):
+            return (
+                ("STAGE_04_KEYFRAME_PROMPTS_REVIEW", None)
+                if keyframe_generated
+                else ("STAGE_04_KEYFRAME_PROMPTS_GENERATION", "STAGE_04_KEYFRAME_PROMPTS")
+            )
         current_stage = _text(data.get("current_stage")) or "STAGE_00_INTAKE"
         return current_stage, data.get("allowed_next_stage")
     if _bool(data.get("qa_confirmed")) and (_bool(data.get("assembly_confirmed")) or _bool(stage_truth.get("stage08", {}).get("confirmed"))):
@@ -914,9 +1039,30 @@ def _derive_project_stage(data: dict[str, Any], stage_truth: dict[str, dict[str,
         return "STAGE_08_ASSEMBLY", None
     if stage08 and stage08.get("confirmed"):
         return "STAGE_08_ASSEMBLY_CONFIRMED", "STAGE_09_QA"
-    for flag_key, stage_name, next_stage in reversed(EARLY_STAGE_SEQUENCE):
-        if _bool(data.get(flag_key)):
-            return stage_name, next_stage
+    if _bool(data.get("brief_locked")) and not _bool(data.get("script_confirmed")):
+        return (
+            ("STAGE_01_SCRIPT_REVIEW", None)
+            if script_generated
+            else ("STAGE_01_SCRIPT_GENERATION", "STAGE_01_SCRIPT_GENERATION")
+        )
+    if _bool(data.get("script_confirmed")) and not _bool(data.get("storyboard_confirmed")):
+        return (
+            ("STAGE_02_STORYBOARD_REVIEW", None)
+            if storyboard_generated
+            else ("STAGE_02_STORYBOARD_GENERATION", "STAGE_02_STORYBOARD")
+        )
+    if _bool(data.get("storyboard_confirmed")) and not _bool(data.get("character_bible_confirmed")):
+        return (
+            ("STAGE_03_CHARACTER_BIBLE_REVIEW", None)
+            if character_generated
+            else ("STAGE_03_CHARACTER_BIBLE_GENERATION", "STAGE_03_CHARACTER_BIBLE")
+        )
+    if _bool(data.get("character_bible_confirmed")) and not _bool(data.get("keyframe_prompts_confirmed")):
+        return (
+            ("STAGE_04_KEYFRAME_PROMPTS_REVIEW", None)
+            if keyframe_generated
+            else ("STAGE_04_KEYFRAME_PROMPTS_GENERATION", "STAGE_04_KEYFRAME_PROMPTS")
+        )
     if _bool(data.get("brief_locked")):
         return "STAGE_00_BRIEF_LOCKED", "STAGE_01_SCRIPT_GENERATION"
     return "STAGE_00_INTAKE", None
@@ -1009,13 +1155,40 @@ def _recommended_entry(
             "description": "当 Stage 01 已确认但分镜还没真正落盘时，从这里重试官方 Stage 02 正式生成链路。",
         }
     stage05 = stage_truth.get("stage05")
+    stage06 = stage_truth.get("stage06")
+    stage07 = stage_truth.get("stage07")
     workbench_path = project_dir / "05_images" / "stage05_review_workbench.html"
-    if stage05 is not None:
+    if current_step_name == "音频" and stage07 is not None:
         return {
-            "label": "打开 Stage 05 审图工作台",
-            "path": as_posix(workbench_path),
+            "label": "打开 Stage 07 音频目录",
+            "path": as_posix(project_dir / "07_audio"),
             "kind": "file",
-            "description": "默认从这里看图、审图、通过或重跑，不必先读 manifest 和脚本名。",
+            "description": "先从 Stage 07 音频产物、复核说明和 voice/music 目录继续当前项目。",
+        }
+    if current_step_name == "视频片段" and stage06 is not None:
+        return {
+            "label": "打开 Stage 06 片段目录",
+            "path": as_posix(project_dir / "06_video_clips"),
+            "kind": "file",
+            "description": "先从 Stage 06 片段产物、复核说明和 clip 目录继续当前项目。",
+        }
+    if current_step_name == "关键帧" and stage05 is not None:
+        if workbench_path.exists():
+            return {
+                "label": "打开 Stage 05 审图工作台",
+                "path": as_posix(workbench_path),
+                "kind": "file",
+                "description": "默认从这里看图、审图、通过或重跑，不必先读 manifest 和脚本名。",
+            }
+        if reference_state and not reference_state.get("reference_ready"):
+            actions = reference_state.get("actions") if isinstance(reference_state.get("actions"), list) else []
+            if actions:
+                return actions[0]
+        return {
+            "label": "打开 Stage 05 图片目录",
+            "path": as_posix(project_dir / "05_images"),
+            "kind": "file",
+            "description": "Stage 05 已进入当前项目，但默认审图工作台尚未物化；先从当前图片目录和阻断说明继续。",
         }
     if current_step_name == "关键帧" and current_step_command:
         label = "确认提示词并进入 Stage 05" if "confirm_stage04_and_continue.py" in current_step_command else "确认人物设定并进入 Stage 04"

@@ -1,6 +1,6 @@
 # Stage 05 Mainline Guardrails
 
-> 本文件只保留当前 Stage05 已锁定主线的执行约束。若与 `STAGE05_REFERENCE_GUIDED_REFACTOR_PLAN_20260604.md` 冲突，以后者为准。
+> 本文件只保留当前 Stage05 已锁定主线的执行约束。当前仓库删除了历史 Stage05 改造计划后，这份 guardrails 文件自身就是 Stage05 文档侧的直接约束来源。
 
 ## 1. 当前唯一主线
 

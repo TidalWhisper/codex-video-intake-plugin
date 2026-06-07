@@ -18,7 +18,6 @@ from typing import Any
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PLUGIN_ROOT = Path(__file__).resolve().parents[3]
-REPO_ROOT = Path(__file__).resolve().parents[5]
 sys.path.insert(0, str(SCRIPT_DIR))
 sys.path.insert(0, str(PLUGIN_ROOT / "scripts"))
 
@@ -32,6 +31,7 @@ from pipeline_core.codex_flow import (  # noqa: E402
     resolve_codex_bin,
     write_codex_output_json,
 )
+from pipeline_core.project_state import update_project_manifest_for_stage  # noqa: E402
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -110,7 +110,7 @@ def main(argv: list[str] | None = None) -> int:
         llm_output_path=llm_output_path,
         output_message_path=generation_last_message_path,
         codex_bin=resolved_codex_bin,
-        cwd=REPO_ROOT,
+        cwd=PLUGIN_ROOT,
     )
 
     total_attempts = max(0, int(args.max_repair_attempts))
@@ -122,6 +122,13 @@ def main(argv: list[str] | None = None) -> int:
         ])
         if exit_code == 0:
             cleanup_failure_artifacts(script_dir, ["stage01_validation_errors.json", "stage01_repair_packet.json"])
+            update_project_manifest_for_stage(
+                script_json_path,
+                current_stage="STAGE_01_SCRIPT_GENERATION",
+                allowed_next_stage=None,
+                flags={"script_confirmed": False},
+                status="active",
+            )
             print(f"STAGE01_CODEX_FLOW_COMPLETED: {script_json_path}")
             return 0
         if attempt_index >= total_attempts:
@@ -152,7 +159,7 @@ def main(argv: list[str] | None = None) -> int:
             llm_output_path=llm_output_path,
             output_message_path=repair_last_message_path,
             codex_bin=resolved_codex_bin,
-            cwd=REPO_ROOT,
+            cwd=PLUGIN_ROOT,
         )
 
     return 1

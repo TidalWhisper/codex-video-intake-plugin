@@ -67,5 +67,5 @@ $video-production-pipeline
 
 ```text
 CODEX_START_HERE.md
-plugins/codex-video-pipeline-plugin/docs/00_CODEX_MASTER_PLAN.md
+.codex/current-task-contract.md
 ```

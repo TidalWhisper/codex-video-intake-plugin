@@ -41,4 +41,4 @@ F:/ComfyUI/ComfyUI/user/default/workflows/AI漫剧制作/AI漫剧-16宫格分镜
 - Stage05-A 路由：`config/stage05_route_registry.yaml`
 - 节点绑定：`config/workflow_node_mapping.yaml`
 - 尺寸/档位：`config/stage05_optimization_profiles.yaml`
-- 主线规则：`docs/STAGE05_REFERENCE_GUIDED_REFACTOR_PLAN_20260604.md`
+- 主线规则：`docs/STAGE05_MAINLINE_GUARDRAILS.md`

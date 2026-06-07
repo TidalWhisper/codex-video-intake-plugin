@@ -17,7 +17,6 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "scripts"))
 from pipeline_blueprints import (  # noqa: E402
     count_duration_beats,
-    extract_story_anchors,
     normal_brief,
     routing_from_brief,
     split_duration,
@@ -42,22 +41,27 @@ def ensure_locked_brief(brief: dict[str, Any]) -> None:
         raise SystemExit("ERROR: brief must allow Stage 01 generation")
 
 
-def list_must_keep_phrases(brief: dict[str, Any], anchors: dict[str, Any]) -> list[str]:
+def _ordered_unique(values: list[str]) -> list[str]:
+    ordered: list[str] = []
+    for value in values:
+        text = str(value or "").strip()
+        if text and text not in ordered:
+            ordered.append(text)
+    return ordered
+
+
+def list_must_keep_phrases(brief: dict[str, Any]) -> list[str]:
     normalized = normal_brief(brief)
-    values = [
-        str(anchors.get("subject") or "").strip(),
-        str(anchors.get("subject_age") or "").strip(),
-        str(anchors.get("scene_label") or "").strip(),
+    user_answers = brief.get("user_answers") if isinstance(brief.get("user_answers"), dict) else {}
+    return _ordered_unique([
+        str(normalized.get("idea") or "").strip(),
+        str(user_answers.get("characters_note") or "").strip(),
         str(normalized.get("genre") or "").strip(),
         str(normalized.get("style") or "").strip(),
         str(normalized.get("voice_mode") or "").strip(),
         str(normalized.get("music_profile") or "").strip(),
-    ]
-    ordered: list[str] = []
-    for value in values:
-        if value and value not in ordered:
-            ordered.append(value)
-    return ordered
+        str(normalized.get("final_output") or "").strip(),
+    ])
 
 
 def list_must_avoid(brief: dict[str, Any]) -> list[str]:
@@ -75,11 +79,13 @@ def list_must_avoid(brief: dict[str, Any]) -> list[str]:
 
 def build_packet(brief: dict[str, Any], brief_path: Path) -> dict[str, Any]:
     normalized = normal_brief(brief)
+    user_answers = brief.get("user_answers") if isinstance(brief.get("user_answers"), dict) else {}
     duration = int(normalized.get("target_duration_sec") or 30)
     beat_count = count_duration_beats(duration)
     beat_lengths = split_duration(duration, beat_count)
-    anchors = extract_story_anchors(brief, beat_count).to_dict()
     project_dir = Path(str(brief.get("project_dir") or "")).resolve() if brief.get("project_dir") else brief_path.parents[2]
+    story_premise = str(normalized.get("idea") or "").strip()
+    character_note = str(user_answers.get("characters_note") or "").strip()
     return {
         "packet_version": "0.1.0",
         "project_id": str(brief.get("project_id") or project_dir.name),
@@ -87,6 +93,7 @@ def build_packet(brief: dict[str, Any], brief_path: Path) -> dict[str, Any]:
         "source_brief": str(brief_path.resolve()).replace("\\", "/"),
         "created_at": datetime.now(timezone.utc).isoformat(),
         "creative_goal": "Generate creator-quality Stage 01 structured script content using Codex, while preserving all locked-brief constraints.",
+        "story_premise": story_premise,
         "hard_constraints": {
             "genre": str(normalized.get("genre") or ""),
             "style": str(normalized.get("style") or ""),
@@ -101,13 +108,10 @@ def build_packet(brief: dict[str, Any], brief_path: Path) -> dict[str, Any]:
             "final_output": str(normalized.get("final_output") or ""),
         },
         "anchors": {
-            "subject": str(anchors.get("subject") or ""),
-            "subject_age": str(anchors.get("subject_age") or ""),
-            "scene_candidates": [item for item in [anchors.get("scene_label"), anchors.get("location")] if item],
-            "weather": str(anchors.get("weather") or ""),
-            "time_of_day": str(anchors.get("time_of_day") or ""),
-            "key_props": anchors.get("key_props") if isinstance(anchors.get("key_props"), list) else [],
-            "must_keep_phrases": list_must_keep_phrases(brief, anchors),
+            "locked_idea_text": story_premise,
+            "character_note": character_note,
+            "raw_identity_clues": _ordered_unique([story_premise, character_note]),
+            "must_keep_phrases": list_must_keep_phrases(brief),
             "must_avoid": list_must_avoid(brief),
         },
         "beat_plan": {

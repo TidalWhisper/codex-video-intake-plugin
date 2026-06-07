@@ -37,6 +37,70 @@ def clean_json_text(raw: str) -> str:
     return text
 
 
+def _extract_last_json_object(raw: str) -> str | None:
+    text = (raw or "").strip()
+    if not text:
+        return None
+    cleaned = clean_json_text(text)
+    try:
+        json.loads(cleaned)
+        return cleaned
+    except json.JSONDecodeError:
+        pass
+
+    decoder = json.JSONDecoder()
+    best_candidate: str | None = None
+    best_len = -1
+    for idx, ch in enumerate(cleaned):
+        if ch != "{":
+            continue
+        try:
+            obj, end = decoder.raw_decode(cleaned[idx:])
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(obj, dict):
+            continue
+        candidate = cleaned[idx:idx + end].strip()
+        if len(candidate) > best_len:
+            best_candidate = candidate
+            best_len = len(candidate)
+    return best_candidate
+
+
+def _normalize_output_message_file(output_message_path: Path) -> bool:
+    if not output_message_path.exists():
+        return False
+    try:
+        candidate = _extract_last_json_object(output_message_path.read_text(encoding="utf-8"))
+    except OSError:
+        return False
+    if not candidate:
+        return False
+    output_message_path.write_text(candidate, encoding="utf-8")
+    return True
+
+
+def _recover_codex_output_message(
+    output_message_path: Path,
+    *raw_candidates: str,
+    wait_seconds: float = 3.0,
+) -> bool:
+    deadline = time.time() + max(0.0, float(wait_seconds))
+    while time.time() <= deadline:
+        if _normalize_output_message_file(output_message_path):
+            return True
+        time.sleep(0.2)
+
+    for raw in raw_candidates:
+        candidate = _extract_last_json_object(raw)
+        if not candidate:
+            continue
+        output_message_path.parent.mkdir(parents=True, exist_ok=True)
+        output_message_path.write_text(candidate, encoding="utf-8")
+        return True
+    return False
+
+
 def resolve_codex_bin(codex_bin: str) -> str:
     requested = str(codex_bin or "").strip() or "codex"
     if sys.platform != "win32":
@@ -74,6 +138,18 @@ def resolve_codex_bin(codex_bin: str) -> str:
         return resolved
 
     return requested
+
+
+def _terminate_process(process: subprocess.Popen[str], *, wait_seconds: float = 2.0) -> tuple[str, str]:
+    if process.poll() is None:
+        process.terminate()
+        try:
+            stdout, stderr = process.communicate(timeout=max(0.1, float(wait_seconds)))
+            return stdout or "", stderr or ""
+        except subprocess.TimeoutExpired:
+            process.kill()
+    stdout, stderr = process.communicate()
+    return stdout or "", stderr or ""
 
 
 def build_generation_request(
@@ -227,33 +303,50 @@ def run_codex_exec(
     last_error: str | None = None
     for attempt in range(1, attempts + 1):
         start = time.time()
+        process = subprocess.Popen(
+            cmd,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            cwd=str(cwd),
+            encoding="utf-8",
+        )
         try:
-            result = subprocess.run(
-                cmd,
-                input=request_text,
-                text=True,
-                capture_output=True,
-                cwd=str(cwd),
-                encoding="utf-8",
-                timeout=max(1, int(timeout_seconds)),
-            )
-        except subprocess.TimeoutExpired as exc:
-            elapsed = time.time() - start
-            stderr = ((exc.stderr or "") if isinstance(exc.stderr, str) else "").strip()
-            stdout = ((exc.stdout or "") if isinstance(exc.stdout, str) else "").strip()
-            details = stderr or stdout or "codex exec timed out without producing stderr/stdout"
-            raise SystemExit(
-                "ERROR: codex exec timed out after "
-                f"{int(elapsed)}s. This usually means the nested Codex CLI is unhealthy or its provider endpoint "
-                f"is unreachable. details={details}"
-            ) from exc
-        if result.returncode == 0:
-            if not output_message_path.exists():
-                raise SystemExit(f"ERROR: Codex output file was not created: {output_message_path}")
-            return
-        stderr = (result.stderr or "").strip()
-        stdout = (result.stdout or "").strip()
-        details = stderr or stdout or f"codex exec failed with exit code {result.returncode}"
+            if process.stdin is not None:
+                process.stdin.write(request_text)
+                process.stdin.close()
+        except BrokenPipeError:
+            pass
+
+        stdout = ""
+        stderr = ""
+        deadline = start + max(1, int(timeout_seconds))
+        while True:
+            if _normalize_output_message_file(output_message_path):
+                _terminate_process(process)
+                return
+            if process.poll() is not None:
+                stdout, stderr = process.communicate()
+                break
+            if time.time() >= deadline:
+                elapsed = time.time() - start
+                stdout, stderr = _terminate_process(process)
+                if _recover_codex_output_message(output_message_path, stdout, stderr):
+                    return
+                details = (stderr or stdout or "codex exec timed out without producing stderr/stdout").strip()
+                raise SystemExit(
+                    "ERROR: codex exec timed out after "
+                    f"{int(elapsed)}s. This usually means the nested Codex CLI is unhealthy or its provider endpoint "
+                    f"is unreachable. details={details}"
+                )
+            time.sleep(0.2)
+
+        if process.returncode == 0:
+            if _recover_codex_output_message(output_message_path, stdout, stderr, wait_seconds=0.0):
+                return
+            raise SystemExit(f"ERROR: Codex output file was not created: {output_message_path}")
+        details = stderr or stdout or f"codex exec failed with exit code {process.returncode}"
         last_error = details
         normalized = details.lower()
         is_transient = any(hint in normalized for hint in TRANSIENT_CODEX_ERROR_HINTS)

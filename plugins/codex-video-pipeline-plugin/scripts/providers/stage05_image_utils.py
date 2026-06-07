@@ -51,6 +51,34 @@ GAME_CG_NEGATIVE_HINTS = (
     "ui frame",
 )
 
+HOT_DRINK_HINTS = (
+    "hot drink",
+    "paper cup",
+    "coffee cup",
+    "takeaway cup",
+    "drink cup",
+    "热饮",
+    "纸杯",
+)
+
+BRAND_SUPPRESSION_HINTS = (
+    "brand",
+    "logo",
+    "wordmark",
+    "便利店",
+)
+
+CHAIN_SIGNAGE_HINTS = (
+    "convenience store",
+    "storefront",
+    "store sign",
+    "shop sign",
+    "玻璃门",
+    "店招",
+    "灯牌",
+    "便利店",
+)
+
 
 def load_json(path: Path) -> dict[str, Any]:
     try:
@@ -150,6 +178,98 @@ def _mentions_any(text: str, hints: tuple[str, ...]) -> bool:
     return any(hint.lower() in lowered for hint in hints)
 
 
+def _joined_job_text(job: dict[str, Any], *keys: str) -> str:
+    return " ".join(str(job.get(key) or "") for key in keys)
+
+
+def _shot_explicitly_mentions_hot_drink(job: dict[str, Any]) -> bool:
+    joined = _joined_job_text(job, "prompt", "scene_summary", "intent_summary")
+    story_anchor_bundle = job.get("story_anchor_bundle") if isinstance(job.get("story_anchor_bundle"), dict) else {}
+    joined = " ".join([
+        joined,
+        str(story_anchor_bundle.get("key_prop") or ""),
+        str(story_anchor_bundle.get("action") or ""),
+    ])
+    return _mentions_any(joined, HOT_DRINK_HINTS)
+
+
+def _pre_intro_hot_drink_guardrail_sentences(job: dict[str, Any], *, cjk: bool) -> list[str]:
+    if _shot_explicitly_mentions_hot_drink(job):
+        return []
+    if not any(str(item or "").strip() for item in (job.get("reference_images") or [])):
+        return []
+    if cjk:
+        return ["这一镜还没有引入热饮道具，主角手里不要出现热饮杯、咖啡杯、外带纸杯或任何饮料杯"]
+    return ["Do not place any hot drink, coffee cup, takeaway cup, or beverage cup in the protagonist's hands in this shot"]
+
+
+def _pre_intro_hot_drink_negative_hints(job: dict[str, Any]) -> list[str]:
+    if _shot_explicitly_mentions_hot_drink(job):
+        return []
+    if not any(str(item or "").strip() for item in (job.get("reference_images") or [])):
+        return []
+    return [
+        "hot drink cup",
+        "paper cup in hand",
+        "coffee cup",
+        "takeaway cup",
+        "drink in hand",
+    ]
+
+
+def _brand_guardrail_sentences(job: dict[str, Any], *, cjk: bool) -> list[str]:
+    joined = _joined_job_text(job, "prompt", "negative_prompt", "scene_summary", "intent_summary")
+    if not _mentions_any(joined, BRAND_SUPPRESSION_HINTS):
+        return []
+    chain_signage_scene = _mentions_any(joined, CHAIN_SIGNAGE_HINTS)
+    if cjk:
+        sentences = ["店招、杯身和包装都不要出现可读品牌名、商标或大面积连锁便利店识别元素，保持无品牌化处理"]
+        if chain_signage_scene:
+            sentences.append("便利店外立面不要出现红黄绿三色横条、蓝白红横条、标准化连锁店顶招或任何一眼能联想到真实连锁便利店的配色系统")
+            sentences.append("如果必须保留暖光来源，店招只允许是无字、无商标、单色或暖白模糊灯箱，不要让招牌本身成为视觉主体")
+            sentences.append("构图优先保留玻璃门后的暖光和室内层次，不要把完整顶部门头、长条白色灯箱或黑底字样一起作为画面主体；必要时让顶部门头裁出画面或虚化成不可读暗面")
+            sentences.append("玻璃门、门贴和腰线也必须去品牌化：不要出现红绿橙三色门贴、彩色玻璃贴条、连锁便利店式窗贴海报；如需安全提示，只允许低对比度中性色磨砂条")
+        return sentences
+    sentences = ["Keep storefront signs, cups, and packaging generic with no readable brand names, logos, or chain-store identity marks"]
+    if chain_signage_scene:
+        sentences.append("Do not show tricolor chain-store fascia bands, blue-white-red store stripes, or any familiar convenience-chain sign system on the facade")
+        sentences.append("If a sign must remain visible, reduce it to a plain unlettered warm light box or diffuse glow rather than a branded storefront header")
+        sentences.append("Favor warm interior light through the glass doors over a full storefront header, and crop or blur the top fascia so no bright marquee panel or dark header lettering becomes readable")
+        sentences.append("Keep the entrance glass plain or with only a subtle neutral frosted safety band, with no tri-color door decal, no colored glass-door stripe, and no chain-store window sticker band")
+        sentences.append("Do not leave colorful promo posters, sale cards, or branded sticker panels on the entrance glass; if any notice remains, keep it tiny, neutral, and unreadable")
+    return sentences
+
+
+def _brand_negative_hints(job: dict[str, Any]) -> list[str]:
+    joined = _joined_job_text(job, "prompt", "negative_prompt", "scene_summary", "intent_summary")
+    if not _mentions_any(joined, BRAND_SUPPRESSION_HINTS):
+        return []
+    hints = [
+        "readable brand logo",
+        "storefront wordmark",
+        "chain convenience store signage",
+        "branded cup label",
+    ]
+    if _mentions_any(joined, CHAIN_SIGNAGE_HINTS):
+        hints.extend(
+            [
+                "red yellow green tricolor fascia",
+                "blue white red store stripe",
+                "branded storefront header",
+                "recognizable convenience chain facade",
+                "backlit rectangular storefront marquee",
+                "dark header lettering above light box",
+                "full storefront top fascia",
+                "tri-color door decal",
+                "colored glass-door stripe",
+                "chain-store window sticker band",
+                "colorful promo poster on glass door",
+                "sale card panel on entrance glass",
+            ]
+        )
+    return hints
+
+
 def _prop_guardrail_sections(job: dict[str, Any]) -> list[str]:
     joined = " ".join(
         str(job.get(key) or "")
@@ -175,7 +295,7 @@ def _route_guardrail_sections(job: dict[str, Any]) -> list[str]:
         or ("wide shot" in camera_text and any(hint in camera_text for hint in ("shoreline", "beach", "sea", "street", "skyline")))
     ):
         return [
-            "Composition: true environmental establishing shot with coastline, sky, or surrounding location clearly visible; keep the subject smaller in frame instead of turning it into a portrait close-up",
+            "Composition: true environmental establishing shot with the surrounding location clearly visible; keep the subject smaller in frame instead of turning it into a portrait close-up",
             "Scene intent: this is part of the story world itself, not a behind-the-scenes production still, not a fashion editorial set, and not a staged studio shoot",
             "Avoid: film set, camera rig, monitor, tripod, lighting stand, boom mic, crew equipment, camera operator, indoor soundstage, interview chair setup, glamour beauty pose, face-dominant crop",
         ]
@@ -231,6 +351,8 @@ def effective_negative_prompt(job: dict[str, Any]) -> str:
         if item.strip()
     )
     existing.extend(_realistic_establishing_negative_hints(job))
+    existing.extend(_pre_intro_hot_drink_negative_hints(job))
+    existing.extend(_brand_negative_hints(job))
     seen = {item.lower() for item in existing}
     merged = list(existing)
     for hint in DEFAULT_STAGE05_NEGATIVE_HINTS:
@@ -442,15 +564,15 @@ def _qwen_camera_reinforcement_sentences(camera: str, *, cjk: bool) -> list[str]
     if "wide" in lowered or "establishing" in lowered:
         if cjk:
             sentences.append("人物在画面中保持较小比例，环境空间要比人物更突出")
-            sentences.append("不要把画面拍成人像照或大半身构图，人物高度不要超过画面高度的三分之一，海岸线、天空和海面应占据主要画面")
+            sentences.append("不要把画面拍成人像照或大半身构图，人物高度不要超过画面高度的三分之一，当前场景环境本身应占据主要画面")
         else:
             sentences.append("Keep the subject relatively small in frame so the environment reads more strongly than the portrait")
-            sentences.append("Do not turn the frame into a portrait or medium-close composition; keep the subject under one third of the frame height and let the coastline, sky, and sea dominate the image")
+            sentences.append("Do not turn the frame into a portrait or medium-close composition; keep the subject under one third of the frame height and let the surrounding scene dominate the image")
     if "establishing" in lowered:
         if cjk:
-            sentences.append("人物不要站在画面正中央成为主视觉，面部不能比环境更抢眼，应先读到海岸线、海面和天光，再读到人物")
+            sentences.append("人物不要站在画面正中央成为主视觉，面部不能比环境更抢眼，应先读到场景环境，再读到人物")
         else:
-            sentences.append("Do not place the subject as the central visual focus; the coastline, sea, and sky should read before the face or body")
+            sentences.append("Do not place the subject as the central visual focus; the surrounding environment should read before the face or body")
     return sentences
 
 
@@ -478,9 +600,9 @@ def _original_zimage_scene_guardrails(job: dict[str, Any], *, cjk: bool) -> list
         or ("wide shot" in camera_text and any(hint in camera_text for hint in ("shoreline", "beach", "sea", "street", "skyline")))
     ):
         if cjk:
-            sentences.append("把它当成故事世界里的真实场景，不要拍成幕后花絮、摄影棚测试照或时尚棚拍，海岸线、天空和周围环境要清晰可见，人物在画面中不要过大")
+            sentences.append("把它当成故事世界里的真实场景，不要拍成幕后花絮、摄影棚测试照或时尚棚拍，周围环境要清晰可见，人物在画面中不要过大")
         else:
-            sentences.append("Treat this as an in-world story scene, not a behind-the-scenes still, studio setup, or fashion set; keep the coastline, sky, and surrounding environment clearly visible with the subject not oversized in frame")
+            sentences.append("Treat this as an in-world story scene, not a behind-the-scenes still, studio setup, or fashion set; keep the surrounding environment clearly visible with the subject not oversized in frame")
     if cjk:
         sentences.append("不要出现摄影机、镜头、三脚架、监视器、灯架、boom 麦、剧组人员或任何片场设备，也不要有幕后拍摄感")
     else:
@@ -601,6 +723,10 @@ def _build_reference_guided_qwen_edit_prompt(job: dict[str, Any]) -> str:
 
     for reinforcement in _qwen_camera_reinforcement_sentences(camera, cjk=cjk):
         _append_unique_sentence(sentences, reinforcement)
+    for sentence in _pre_intro_hot_drink_guardrail_sentences(job, cjk=cjk):
+        _append_unique_sentence(sentences, sentence)
+    for sentence in _brand_guardrail_sentences(job, cjk=cjk):
+        _append_unique_sentence(sentences, sentence)
 
     if trust_base_prompt:
         pass
@@ -660,6 +786,9 @@ def _build_reference_guided_qwen_edit_prompt(job: dict[str, Any]) -> str:
 
 
 def build_provider_prompt(job: dict[str, Any]) -> str:
+    explicit_provider_prompt = str(job.get("provider_prompt") or "").strip()
+    if explicit_provider_prompt:
+        return explicit_provider_prompt
     if _is_original_zimage_ui_workflow(job):
         # The original Amazing Zimage UI workflows expect #57 to contain only
         # the prompt text. Style switching must happen through #88.
@@ -1626,10 +1755,15 @@ def _prompt_patch_plan_payload(data: dict[str, Any], manifest_path: Path) -> dic
         job = _job_by_image_id(data, image_id)
         if not isinstance(job, dict):
             return None
-        auto_repair_plan = job.get("auto_repair_plan") if isinstance(job.get("auto_repair_plan"), dict) else None
-        if not isinstance(auto_repair_plan, dict):
-            auto_repair_plan = build_auto_repair_plan(job, job.get("quality_gate") if isinstance(job.get("quality_gate"), dict) else None)
-        creator_review_card = job.get("creator_review_card") if isinstance(job.get("creator_review_card"), dict) else {}
+        gate = job.get("quality_gate") if isinstance(job.get("quality_gate"), dict) else build_quality_gate(job)
+        auto_repair_plan = build_auto_repair_plan(job, gate)
+        creator_review_card = build_creator_review_card(
+            job,
+            gate,
+            auto_repair_status=str(job.get("auto_repair_status") or "").strip() or None,
+        ) or {}
+        if job.get("repair_preview_path") and "repair_preview_path" not in creator_review_card:
+            creator_review_card["repair_preview_path"] = job.get("repair_preview_path")
         prompt_sections = [str(item).strip() for item in (auto_repair_plan.get("repair_prompt_sections") or []) if str(item).strip()]
         negative_hints = [str(item).strip() for item in (auto_repair_plan.get("repair_negative_hints") or []) if str(item).strip()]
         current_negative = [item.strip() for item in str(job.get("negative_prompt") or "").split(",") if item.strip()]
@@ -1751,6 +1885,7 @@ def update_manifest_state(data: dict[str, Any], manifest_path: Path) -> None:
     fallback_providers = [str(item).strip() for item in (strategy.get("fallback") or []) if str(item).strip()]
     generated = 0
     failed = 0
+    active = 0
     shots: dict[str, set[str]] = {}
     evidence_origin_summary = {
         "provider_output": 0,
@@ -1783,23 +1918,23 @@ def update_manifest_state(data: dict[str, Any], manifest_path: Path) -> None:
         )
         evidence_origin_summary[origin] += 1
         job["quality_gate"] = build_quality_gate(job)
+        job["auto_repair_plan"] = build_auto_repair_plan(job, job["quality_gate"])
         creator_review_card = build_creator_review_card(
             job,
             job["quality_gate"],
             auto_repair_status=str(job.get("auto_repair_status") or "").strip() or None,
         )
         if creator_review_card:
-            existing_card = job.get("creator_review_card") if isinstance(job.get("creator_review_card"), dict) else {}
-            creator_review_card.update(existing_card)
-            if "auto_repair_status" not in creator_review_card and job.get("auto_repair_status"):
-                creator_review_card["auto_repair_status"] = job.get("auto_repair_status")
             if job.get("repair_preview_path") and "repair_preview_path" not in creator_review_card:
                 creator_review_card["repair_preview_path"] = job.get("repair_preview_path")
             job["creator_review_card"] = creator_review_card
         if exists:
             generated += 1
-        elif job.get("status") in {"failed", "blocked"}:
+        job_status = str(job.get("status") or "").strip().lower()
+        if job_status in {"failed", "blocked"}:
             failed += 1
+        elif job_status in {"queued", "running", "submitting", "in_progress"}:
+            active += 1
     expected = len(jobs)
     all_exist = expected > 0 and generated == expected
     quality_review = summarize_quality_review(jobs)
@@ -1816,6 +1951,14 @@ def update_manifest_state(data: dict[str, Any], manifest_path: Path) -> None:
     provider_status = data.get("creator_runtime_status")
     if not isinstance(provider_status, dict):
         provider_status = {}
+    if active > 0:
+        provider_status.update({
+            "headline": "Stage 05 关键帧仍在生成中。",
+            "detail": f"当前已有 {generated} / {expected} 张关键帧落盘，仍有 {active} 个生成任务在提交或执行中。",
+            "source_provider": "comfyui_txt2img",
+            "active_provider": "comfyui_txt2img",
+            "created_at": utc_now(),
+        })
     if isinstance(data.get("provider_decisions"), list):
         latest_decision = data["provider_decisions"][-1] if data["provider_decisions"] else None
         if isinstance(latest_decision, dict):
@@ -1852,6 +1995,8 @@ def update_manifest_state(data: dict[str, Any], manifest_path: Path) -> None:
             "Manual review required before Stage 06 for: "
             + ", ".join(str(item) for item in quality_review["blocking_image_ids"])
         )
+    if active > 0:
+        notes.append(f"Stage 05 generation is still active for {active} keyframe job(s).")
     if quality_review.get("next_review_image_ids"):
         notes.append(
             "Review priority queue starts with: "
@@ -1865,7 +2010,9 @@ def update_manifest_state(data: dict[str, Any], manifest_path: Path) -> None:
         "ready_for_video_clip_generation": all_exist and manual_review_cleared,
         "notes": notes,
     })
-    if all_exist:
+    if active > 0:
+        data["status"] = "in_progress"
+    elif all_exist:
         data["status"] = "generated"
     elif generated > 0 or failed > 0:
         data["status"] = "in_progress"

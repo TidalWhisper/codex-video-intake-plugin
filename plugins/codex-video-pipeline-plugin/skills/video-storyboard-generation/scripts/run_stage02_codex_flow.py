@@ -9,11 +9,10 @@ from typing import Any
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PLUGIN_ROOT = Path(__file__).resolve().parents[3]
-REPO_ROOT = Path(__file__).resolve().parents[5]
 sys.path.insert(0, str(SCRIPT_DIR))
 sys.path.insert(0, str(PLUGIN_ROOT / "scripts"))
 
-from build_stage02_prompt_packet import build_packet, ensure_locked_brief  # noqa: E402
+from build_stage02_prompt_packet import build_packet, ensure_confirmed_script, ensure_locked_brief  # noqa: E402
 import new_storyboard_template  # noqa: E402
 from pipeline_core.codex_flow import (  # noqa: E402
     build_generation_request,
@@ -23,7 +22,7 @@ from pipeline_core.codex_flow import (  # noqa: E402
     resolve_codex_bin,
     write_codex_output_json,
 )
-from pipeline_core.project_state import load_json_file  # noqa: E402
+from pipeline_core.project_state import load_json_file, update_project_manifest_for_stage  # noqa: E402
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -77,6 +76,7 @@ def main(argv: list[str] | None = None) -> int:
     brief = load_json(brief_path)
     script = load_json(script_path)
     ensure_locked_brief(brief)
+    ensure_confirmed_script(script)
 
     prompt_packet_path = storyboard_dir / "stage02_prompt_packet.json"
     prompt_packet = build_packet(brief, script, brief_path, script_path)
@@ -104,7 +104,7 @@ def main(argv: list[str] | None = None) -> int:
         llm_output_path=llm_output_path,
         output_message_path=generation_last_message_path,
         codex_bin=resolved_codex_bin,
-        cwd=REPO_ROOT,
+        cwd=PLUGIN_ROOT,
     )
 
     total_attempts = max(0, int(args.max_repair_attempts))
@@ -117,6 +117,13 @@ def main(argv: list[str] | None = None) -> int:
         ])
         if exit_code == 0:
             cleanup_failure_artifacts(storyboard_dir, ["stage02_validation_errors.json", "stage02_repair_packet.json"])
+            update_project_manifest_for_stage(
+                storyboard_json_path,
+                current_stage="STAGE_02_STORYBOARD_GENERATION",
+                allowed_next_stage=None,
+                flags={"storyboard_confirmed": False},
+                status="active",
+            )
             print(f"STAGE02_CODEX_FLOW_COMPLETED: {storyboard_json_path}")
             return 0
         if attempt_index >= total_attempts:
@@ -141,7 +148,7 @@ def main(argv: list[str] | None = None) -> int:
             llm_output_path=llm_output_path,
             output_message_path=repair_last_message_path,
             codex_bin=resolved_codex_bin,
-            cwd=REPO_ROOT,
+            cwd=PLUGIN_ROOT,
         )
 
     print(f"STAGE02_CODEX_FLOW_FAILED: {storyboard_json_path}", file=sys.stderr)

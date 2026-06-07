@@ -5,6 +5,17 @@ from typing import Any
 
 RISK_TAG_HINTS: dict[str, tuple[str, ...]] = {
     "missing_character_reference": (),
+    "storefront_branding": (
+        "convenience store",
+        "storefront",
+        "store sign",
+        "shop sign",
+        "glass door",
+        "灯牌",
+        "店招",
+        "玻璃门",
+        "便利店",
+    ),
     "umbrella_prop_contact": (
         "umbrella",
         "oil-paper umbrella",
@@ -81,6 +92,7 @@ RISK_TAG_HINTS: dict[str, tuple[str, ...]] = {
 
 RISK_TAG_REASONS: dict[str, str] = {
     "missing_character_reference": "Character-locked continuity is required, but no Stage 03 reference image is available for this shot. Start/end keyframes can drift into different people before Stage 06.",
+    "storefront_branding": "Convenience-store storefront scenes can still hallucinate chain-sign identity marks even when the prompt says no branding. Review signage and facade treatment carefully before Stage 06.",
     "umbrella_prop_contact": "Umbrella prop-contact scenes generated without structure guidance are still prone to anatomy drift, handle-contact errors, and duplicate umbrella artifacts. Review carefully before Stage 06.",
     "weapon_hand_contact": "Weapon-hand contact scenes generated without structure guidance are still prone to grip realism issues, limb-count errors, and blade-hand alignment drift. Review carefully before Stage 06.",
     "fan_hand_contact": "Hand-fan scenes generated without structure guidance are still prone to finger-count errors, wrist articulation drift, and fan-handle contact failures. Review carefully before Stage 06.",
@@ -92,6 +104,7 @@ RISK_TAG_REASONS: dict[str, str] = {
 
 RISK_TAG_CREATOR_SUMMARY: dict[str, str] = {
     "missing_character_reference": "这类镜头缺少角色参考图，最容易出现前后关键帧直接换人。",
+    "storefront_branding": "这类便利店镜头最容易偷偷长出连锁店招、三色横条和可读品牌字样。",
     "umbrella_prop_contact": "这类镜头最容易出现多手、双伞、握伞关系漂移。",
     "weapon_hand_contact": "这类镜头最容易出现持械手型错误、手臂数量异常、刀柄贴合不自然。",
     "fan_hand_contact": "这类镜头最容易出现扇柄握持不自然、手指数量错误、扇面重复。",
@@ -106,6 +119,14 @@ RISK_TAG_REPAIR_SUGGESTIONS: dict[str, tuple[str, ...]] = {
         "先补一张主角参考图，或把同一人物的脸型、发型、服装、包和主道具写成固定 identity anchor。",
         "明确 primary protagonist remains the same person in every frame，secondary人物不能抢成主角。",
         "如果必须先跑无参考图版本，至少逐张对比 start / mid / end，确认是不是同一个人再进 Stage 06。",
+    ),
+    "storefront_branding": (
+        "把便利店外立面改成无字、无商标、无三色连锁横条的普通暖色灯箱，不要让人一眼联想到真实连锁品牌。",
+        "明确禁止红黄绿三色横条、蓝白红横条、可读罗马字母招牌和任何标准化连锁便利店顶招。",
+        "如果镜头只需要暖光来源，就把招牌弱化成模糊暖白发光面，不要让店招本身成为视觉主体。",
+        "优先让暖光从玻璃门和室内溢出，不要把完整顶部门头、亮白长灯箱和上方深色字样一起摆成正面门头结构；必要时直接裁掉或虚化顶招区域。",
+        "玻璃门上的红绿橙门贴、彩色腰线和窗贴海报也要一起去掉，只保留干净玻璃或低对比度中性色磨砂提示条。",
+        "入口玻璃上的彩色促销海报、价签板和贴纸面板也不要留下；如果必须有提示信息，只允许极小、低对比度、不可读的中性提示块。",
     ),
     "umbrella_prop_contact": (
         "强调 single subject, one umbrella only, exactly two hands visible。",
@@ -149,6 +170,13 @@ RISK_TAG_REPAIR_PROMPT_SECTIONS: dict[str, tuple[str, ...]] = {
         "Repair priority: keep the same protagonist face shape, hairstyle, outfit silhouette, body proportions, and carried accessories across all frames.",
         "Identity correction: primary protagonist remains the same person in every frame; secondary subjects must not replace or visually overpower the protagonist.",
     ),
+    "storefront_branding": (
+        "Repair priority: storefront facade must stay generic and unbranded, with no readable shop name, no logo, no chain-store color band, and no familiar convenience-store sign system.",
+        "Sign correction: if a sign is visible, keep it as a plain warm light box or diffuse glow only, with no red-yellow-green tricolor stripe, no blue-white-red stripe, and no roman-letter store header.",
+        "Composition correction: favor warm interior spill through the glass doors, and crop or blur the upper storefront fascia so no bright marquee panel or dark header lettering reads like a full chain-store facade.",
+        "Door/glass correction: keep entrance glass plain or with only a subtle neutral frosted safety band, with no tri-color door decal, no colored glass-door stripe, and no chain-store window sticker band.",
+        "Poster correction: remove colorful promo posters, sale-card panels, and branded sticker blocks from the entrance glass; any remaining notice must stay tiny, neutral, and unreadable.",
+    ),
     "umbrella_prop_contact": (
         "Repair priority: single subject only, one umbrella only, exactly two arms and two hands, natural umbrella-handle grip, no duplicate canopy, no floating umbrella.",
         "Composition correction: keep the umbrella contact clearly readable and avoid extra background umbrellas or mirrored accessories.",
@@ -181,6 +209,21 @@ RISK_TAG_REPAIR_PROMPT_SECTIONS: dict[str, tuple[str, ...]] = {
 
 RISK_TAG_REPAIR_NEGATIVE_HINTS: dict[str, tuple[str, ...]] = {
     "missing_character_reference": ("different face", "different hairstyle", "different outfit", "changed body shape", "identity swap"),
+    "storefront_branding": (
+        "readable storefront wordmark",
+        "chain convenience store signage",
+        "red yellow green tricolor fascia",
+        "blue white red store stripe",
+        "branded convenience facade",
+        "backlit rectangular storefront marquee",
+        "dark header lettering above light box",
+        "full storefront top fascia",
+        "tri-color door decal",
+        "colored glass-door stripe",
+        "chain-store window sticker band",
+        "colorful promo poster on glass door",
+        "sale card panel on entrance glass",
+    ),
     "umbrella_prop_contact": ("extra hands", "extra umbrella", "duplicate umbrella canopy", "floating umbrella", "broken grip"),
     "weapon_hand_contact": ("extra weapon", "duplicate blade", "floating sword", "broken wrist", "extra fingers"),
     "fan_hand_contact": ("duplicate fan", "extra fingers", "broken wrist", "floating fan"),
@@ -195,6 +238,11 @@ RISK_TAG_REVIEW_CHECKLIST: dict[str, tuple[str, ...]] = {
         "把 start / mid / end 三张图并排看，确认是不是同一个主角，不要只看单张是否好看。",
         "确认脸型、发型、服装轮廓、包和主道具关系跨帧一致，没有突然换人或换装。",
         "如果画面里有第二个人，确认主角仍然是同一人，不能让陌生人抢成主角。",
+    ),
+    "storefront_branding": (
+        "先看店外立面或店内顶部有没有可读品牌字样、店招词头或明显 logo。",
+        "再看有没有红黄绿三色横条、蓝白红横条或一眼能联想到真实连锁便利店的标准化配色。",
+        "如果镜头只需要暖光氛围，确认店招已经退成无字灯箱或模糊光面，而不是画面主视觉。",
     ),
     "umbrella_prop_contact": (
         "确认画面里只有一把伞，没有重复伞面或背景多出第二把伞。",
@@ -235,6 +283,7 @@ RISK_TAG_REVIEW_CHECKLIST: dict[str, tuple[str, ...]] = {
 
 RISK_TAG_REVIEW_FOCUS: dict[str, str] = {
     "missing_character_reference": "先横向比对 start / mid / end 是不是同一个人，再看发型、服装和主道具有没有跨帧漂移。",
+    "storefront_branding": "先查有没有可读店招，再查有没有连锁便利店标准配色横条，最后确认暖光是否只是氛围而不是品牌露出。",
     "umbrella_prop_contact": "先查伞的数量，再查手的数量，最后查握伞手和伞柄是否贴合。",
     "weapon_hand_contact": "先查武器是否重复，再查持械手型，最后查刀柄贴合。",
     "fan_hand_contact": "先查扇面是否重复，再查手指数量，最后查扇柄接触。",
@@ -246,6 +295,7 @@ RISK_TAG_REVIEW_FOCUS: dict[str, str] = {
 
 RISK_TAG_PRIORITY_SCORES: dict[str, int] = {
     "missing_character_reference": 98,
+    "storefront_branding": 88,
     "umbrella_prop_contact": 96,
     "weapon_hand_contact": 93,
     "two_subject_contact": 91,
@@ -261,7 +311,19 @@ PROMPT_ONLY_CONTROL_MODES = {"", "prompt_only", "text_only"}
 STRUCTURE_GUIDED_CONTROL_MODES = {"pose_guided", "reference_guided", "controlnet_guided"}
 MANUAL_REVIEW_CLEAR_STATES = {"approved", "waived", "not_required"}
 ALWAYS_MANUAL_REVIEW_ROUTE_HINTS = {"interaction_handoff"}
+ALWAYS_MANUAL_REVIEW_RISK_TAGS = {"storefront_branding"}
+REFERENCE_GUIDED_AUTO_REPAIR_RISK_TAGS = {"storefront_branding"}
 MANUAL_REVIEW_APPROVED_STATES = {"approved", "waived"}
+
+
+def _is_codex_contract_job(job: dict[str, Any], gate: dict[str, Any] | None = None) -> bool:
+    sources = [
+        str(job.get("semantic_source") or "").strip().lower(),
+        str(job.get("stage05_semantic_source") or "").strip().lower(),
+    ]
+    if isinstance(gate, dict):
+        sources.append(str(gate.get("semantic_source") or "").strip().lower())
+    return any(source == "codex_contract" for source in sources)
 
 
 def _joined_job_text(job: dict[str, Any]) -> str:
@@ -292,17 +354,33 @@ def metadata_risk_tags_for_job(job: dict[str, Any]) -> list[str]:
     tags: list[str] = []
     missing_reference_images = job.get("missing_reference_images")
     route_hint = str(job.get("stage06_route_hint") or "").strip().lower()
+    joined = _joined_job_text(job)
     if (
         isinstance(missing_reference_images, list)
         and any(str(item or "").strip() for item in missing_reference_images)
         and (job.get("stage06_requires_mid_guide") is True or route_hint == "interaction_handoff")
     ):
         tags.append("missing_character_reference")
+    storefront_cues = ("convenience store", "storefront", "店招", "便利店", "glass door", "玻璃门")
+    brand_guardrail_cues = ("brand", "logo", "wordmark", "商标", "无品牌")
+    if any(cue in joined for cue in storefront_cues) and any(cue in joined for cue in brand_guardrail_cues):
+        tags.append("storefront_branding")
     return tags
 
 
 def control_mode_for_job(job: dict[str, Any]) -> str:
     return str(job.get("comfyui_control_mode") or "prompt_only").strip().lower() or "prompt_only"
+
+
+def auto_repair_enabled_for_gate(*, risk_tags: list[str], control_mode: str, route_hint: str) -> bool:
+    return bool(risk_tags) and (
+        control_mode in PROMPT_ONLY_CONTROL_MODES
+        or route_hint in ALWAYS_MANUAL_REVIEW_ROUTE_HINTS
+        or (
+            control_mode in STRUCTURE_GUIDED_CONTROL_MODES
+            and any(tag in REFERENCE_GUIDED_AUTO_REPAIR_RISK_TAGS for tag in risk_tags)
+        )
+    )
 
 
 def manual_review_reason_for_tags(risk_tags: list[str], *, control_mode: str) -> str | None:
@@ -412,24 +490,31 @@ def review_priority_for_tags(risk_tags: list[str]) -> dict[str, Any]:
 def build_quality_gate(job: dict[str, Any]) -> dict[str, Any]:
     existing = job.get("quality_gate")
     gate = dict(existing) if isinstance(existing, dict) else {}
+    is_codex_contract = _is_codex_contract_job(job, gate)
     seed_tags = gate.get("risk_tags") if isinstance(gate.get("risk_tags"), list) else (scene_risk_tags_for_job(job) + metadata_risk_tags_for_job(job))
     risk_tags = [str(tag).strip() for tag in seed_tags if str(tag).strip()]
     control_mode = str(gate.get("control_mode") or control_mode_for_job(job)).strip().lower() or "prompt_only"
     route_hint = str(job.get("stage06_route_hint") or "").strip().lower()
-    requires_manual_review = bool(risk_tags) and (
-        control_mode not in STRUCTURE_GUIDED_CONTROL_MODES
-        or route_hint in ALWAYS_MANUAL_REVIEW_ROUTE_HINTS
-    )
+    if is_codex_contract and "requires_manual_review" in gate:
+        requires_manual_review = bool(gate.get("requires_manual_review"))
+    else:
+        requires_manual_review = bool(risk_tags) and (
+            control_mode not in STRUCTURE_GUIDED_CONTROL_MODES
+            or route_hint in ALWAYS_MANUAL_REVIEW_ROUTE_HINTS
+            or any(tag in ALWAYS_MANUAL_REVIEW_RISK_TAGS for tag in risk_tags)
+        )
     review_status = str(gate.get("manual_review_status") or "").strip().lower()
     if requires_manual_review:
-        if review_status not in MANUAL_REVIEW_APPROVED_STATES:
-            review_status = "pending"
+        if not (is_codex_contract and review_status):
+            if review_status not in MANUAL_REVIEW_APPROVED_STATES:
+                review_status = "pending"
     else:
         review_status = "not_required"
     gate["risk_tags"] = risk_tags
     gate["control_mode"] = control_mode
     gate["requires_manual_review"] = requires_manual_review
     gate["manual_review_status"] = review_status
+    gate["semantic_source"] = str(gate.get("semantic_source") or job.get("semantic_source") or "").strip() or None
     gate["reason"] = str(gate.get("reason") or manual_review_reason_for_tags(risk_tags, control_mode=control_mode) or "").strip() or None
     gate["creator_risk_summary"] = (
         str(gate.get("creator_risk_summary") or creator_risk_summary_for_tags(risk_tags) or "").strip() or None
@@ -449,7 +534,14 @@ def build_quality_gate(job: dict[str, Any]) -> dict[str, Any]:
         else review_checklist_for_tags(risk_tags)
     )
     gate["review_focus"] = str(gate.get("review_focus") or review_focus_for_tags(risk_tags) or "").strip() or None
-    gate["auto_repair_recommended"] = bool(risk_tags) and control_mode in PROMPT_ONLY_CONTROL_MODES
+    if is_codex_contract and "auto_repair_recommended" in gate:
+        gate["auto_repair_recommended"] = bool(gate.get("auto_repair_recommended"))
+    else:
+        gate["auto_repair_recommended"] = auto_repair_enabled_for_gate(
+            risk_tags=risk_tags,
+            control_mode=control_mode,
+            route_hint=route_hint,
+        )
     return gate
 
 
@@ -458,6 +550,9 @@ def quality_gate_is_cleared(gate: dict[str, Any]) -> bool:
 
 
 def build_auto_repair_plan(job: dict[str, Any], gate: dict[str, Any] | None = None) -> dict[str, Any]:
+    explicit_plan = job.get("auto_repair_plan")
+    if _is_codex_contract_job(job, gate) and isinstance(explicit_plan, dict):
+        return dict(explicit_plan)
     if isinstance(gate, dict):
         normalized_job = dict(job)
         normalized_job["quality_gate"] = gate
@@ -467,15 +562,24 @@ def build_auto_repair_plan(job: dict[str, Any], gate: dict[str, Any] | None = No
     risk_tags = [str(tag).strip() for tag in (gate.get("risk_tags") or []) if str(tag).strip()]
     route_hint = str(job.get("stage06_route_hint") or "").strip().lower()
     control_mode = str(gate.get("control_mode") or "").strip().lower()
-    enabled = bool(risk_tags) and (
-        control_mode in PROMPT_ONLY_CONTROL_MODES
-        or route_hint in ALWAYS_MANUAL_REVIEW_ROUTE_HINTS
+    enabled = auto_repair_enabled_for_gate(
+        risk_tags=risk_tags,
+        control_mode=control_mode,
+        route_hint=route_hint,
+    )
+    reference_guided_repair = (
+        enabled
+        and control_mode in STRUCTURE_GUIDED_CONTROL_MODES
+        and (
+            route_hint in ALWAYS_MANUAL_REVIEW_ROUTE_HINTS
+            or any(tag in REFERENCE_GUIDED_AUTO_REPAIR_RISK_TAGS for tag in risk_tags)
+        )
     )
     return {
         "enabled": enabled,
         "mode": (
             "two_pass_reference_guided_repair"
-            if enabled and route_hint in ALWAYS_MANUAL_REVIEW_ROUTE_HINTS and control_mode in STRUCTURE_GUIDED_CONTROL_MODES
+            if reference_guided_repair
             else "two_pass_prompt_repair"
             if enabled
             else "none"
@@ -496,6 +600,12 @@ def build_creator_review_card(
     *,
     auto_repair_status: str | None = None,
 ) -> dict[str, Any] | None:
+    explicit_card = job.get("creator_review_card")
+    if _is_codex_contract_job(job, gate) and isinstance(explicit_card, dict):
+        card = dict(explicit_card)
+        if auto_repair_status and "auto_repair_status" not in card:
+            card["auto_repair_status"] = auto_repair_status
+        return card
     if isinstance(gate, dict):
         normalized_job = dict(job)
         normalized_job["quality_gate"] = gate

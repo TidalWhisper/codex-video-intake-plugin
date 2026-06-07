@@ -187,20 +187,22 @@ def main() -> int:
         self_check["notes"].append(
             "formal_progression_blocker:source Stage 05 still requires review or missing evidence; Stage 06 remains draft_only."
         )
-    data["formal_promotion_status"] = "ready_for_formal_progression" if all_clips and stage05_ready else ("draft_only" if generated > 0 else "pending")
+    data["formal_promotion_status"] = "pending_confirmation" if all_clips and stage05_ready else ("draft_only" if generated > 0 else "pending")
     data["status"] = "generated" if all_clips else ("in_progress" if generated > 0 else "draft")
     data["updated_at"] = datetime.now(timezone.utc).isoformat()
     if all_clips and stage05_ready:
         data["allowed_next_stage"] = next_stage_after("STAGE_06_VIDEO_CLIPS", routing, "STAGE_07_AUDIO")
+        data["confirmed_by_user"] = False
         update_project_manifest_for_stage(
             path,
-            current_stage="STAGE_06_VIDEO_CLIPS_CONFIRMED",
+            current_stage="STAGE_06_VIDEO_CLIPS",
             allowed_next_stage=data["allowed_next_stage"],
-            flags={"video_clips_confirmed": True},
+            flags={"video_clips_confirmed": False},
             status="active",
         )
     else:
         data["allowed_next_stage"] = None
+        data["confirmed_by_user"] = False
         update_project_manifest_for_stage(
             path,
             current_stage="STAGE_06_VIDEO_CLIPS",

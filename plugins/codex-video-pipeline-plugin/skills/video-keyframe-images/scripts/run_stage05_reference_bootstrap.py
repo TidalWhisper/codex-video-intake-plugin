@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -15,6 +16,7 @@ from pipeline_core.reference_image_readiness import (  # noqa: E402
     build_reference_image_status,
     build_stage05_execution_readiness,
 )
+from pipeline_core.stage05_semantic_contract import apply_contract_overrides, bootstrap_contract  # noqa: E402
 from stage05_image_utils import load_json, write_json  # noqa: E402
 
 THIS_DIR = Path(__file__).resolve().parent
@@ -28,6 +30,23 @@ import sync_keyframe_image_manifest  # noqa: E402
 
 def _normalize_path_text(value: Any) -> str:
     return str(value or "").strip().replace("\\", "/")
+
+
+SHOT_SCOPED_REFERENCE_PATTERN = re.compile(
+    r"(?i)(from\s*s\d+\s*onward|s\d+\s*起|从\s*s\d+\s*开始)"
+)
+
+
+def _strip_shot_scoped_reference_clauses(text: str) -> str:
+    if not text:
+        return ""
+    clauses = re.split(r"\s*[,，;；]\s*", text)
+    kept = [clause.strip() for clause in clauses if clause.strip() and not SHOT_SCOPED_REFERENCE_PATTERN.search(clause)]
+    if kept:
+        return ", ".join(kept)
+    cleaned = SHOT_SCOPED_REFERENCE_PATTERN.sub("", text)
+    cleaned = re.sub(r"\s{2,}", " ", cleaned)
+    return cleaned.strip(" ,，;；")
 
 
 def _project_dir_for_manifest(manifest_path: Path) -> Path:
@@ -89,7 +108,10 @@ def _bootstrap_prompt(
     reference_plan_item: dict[str, Any],
     character_entry: dict[str, Any],
     stage05_manifest: dict[str, Any],
+    *,
+    bootstrap_overrides: dict[str, Any] | None = None,
 ) -> tuple[str, str, str, str]:
+    bootstrap_overrides = dict(bootstrap_overrides) if isinstance(bootstrap_overrides, dict) else {}
     story_anchors = character_entry.get("story_anchors") if isinstance(character_entry.get("story_anchors"), dict) else {}
     manifest_story_anchors = stage05_manifest.get("story_anchors") if isinstance(stage05_manifest.get("story_anchors"), dict) else {}
     character_name = str(reference_plan_item.get("name") or character_entry.get("name") or "主角").strip() or "主角"
@@ -98,11 +120,13 @@ def _bootstrap_prompt(
         or character_entry.get("visual_consistency_prompt")
         or ""
     ).strip()
+    visual_consistency = _strip_shot_scoped_reference_clauses(visual_consistency)
     negative_consistency = str(
         reference_plan_item.get("negative_consistency_prompt")
         or character_entry.get("negative_consistency_prompt")
         or ""
     ).strip()
+    negative_consistency = _strip_shot_scoped_reference_clauses(negative_consistency)
     scene_label = str(
         story_anchors.get("scene_label")
         or manifest_story_anchors.get("scene_label")
@@ -128,7 +152,31 @@ def _bootstrap_prompt(
     lighting = "clean soft light, readable face, stable hair detail, clear dress silhouette"
     camera = "front left three-quarter medium full-body reference shot"
     style = "single-character reference image, stable identity anchor, clean readable design"
-    return prompt, negative_consistency, lighting, f"{camera}; {style}"
+    resolved = apply_contract_overrides(
+        {
+            "provider_prompt": prompt,
+            "negative_prompt": negative_consistency,
+            "lighting_prompt": lighting,
+            "camera_and_style_prompt": f"{camera}; {style}",
+        },
+        bootstrap_overrides,
+        allowed_keys=[
+            "provider_prompt",
+            "prompt",
+            "negative_prompt",
+            "lighting_prompt",
+            "camera_and_style_prompt",
+        ],
+    )
+    provider_prompt = str(
+        resolved.get("provider_prompt") or resolved.get("prompt") or prompt
+    ).strip()
+    return (
+        provider_prompt,
+        str(resolved.get("negative_prompt") or negative_consistency).strip(),
+        str(resolved.get("lighting_prompt") or lighting).strip(),
+        str(resolved.get("camera_and_style_prompt") or f"{camera}; {style}").strip(),
+    )
 
 
 def _reference_bootstrap_manifest_path(manifest_path: Path, target_reference_path: str) -> Path:
@@ -141,6 +189,10 @@ def _reference_bootstrap_output_path(manifest_path: Path, target_reference_path:
     return manifest_path.parents[1] / "03_characters" / "reference_images" / "_candidates" / f"{stem}_stage05a.png"
 
 
+def _reference_bootstrap_receipt_path(target_path: Path) -> Path:
+    return target_path.with_name(f"{target_path.stem}_stage05a_receipt.json")
+
+
 def _build_reference_bootstrap_manifest(
     stage05_manifest: dict[str, Any],
     manifest_path: Path,
@@ -148,6 +200,7 @@ def _build_reference_bootstrap_manifest(
     target_reference_path: str,
     reference_bootstrap: dict[str, Any],
     prompt: str,
+    provider_prompt: str | None,
     negative_prompt: str,
     lighting_prompt: str,
     camera_and_style_prompt: str,
@@ -160,9 +213,11 @@ def _build_reference_bootstrap_manifest(
         "image_id": "IMG_STAGE05A_PRIMARY_REFERENCE",
         "shot_id": "STAGE05A",
         "frame_role": "reference",
+        "semantic_source": str(reference_bootstrap.get("semantic_source") or "").strip() or "legacy_python_fallback",
         "stage05_mode": "reference_bootstrap",
         "source_prompt_ref": f"{bootstrap_manifest_path.name}#IMG_STAGE05A_PRIMARY_REFERENCE",
         "prompt": prompt,
+        "provider_prompt": str(provider_prompt or "").strip() or None,
         "negative_prompt": negative_prompt,
         "consistency_prompt": prompt,
         "identity_anchor_prompt": prompt,
@@ -386,11 +441,37 @@ def main(argv: list[str] | None = None) -> int:
 
     manifest_path = Path(args.manifest_json).resolve()
     stage05_manifest = load_json(manifest_path)
+    stage05_semantic_contract = (
+        stage05_manifest.get("stage05_semantic_contract")
+        if isinstance(stage05_manifest.get("stage05_semantic_contract"), dict)
+        else {}
+    )
+    bootstrap_overrides = bootstrap_contract(stage05_semantic_contract)
     reference_bootstrap = (
         stage05_manifest.get("reference_bootstrap")
         if isinstance(stage05_manifest.get("reference_bootstrap"), dict)
         else {}
     )
+    if bootstrap_overrides:
+        reference_bootstrap = apply_contract_overrides(
+            reference_bootstrap,
+            bootstrap_overrides,
+            allowed_keys=[
+                "workflow_mapping_key",
+                "workflow_name",
+                "comfyui_model_id",
+                "preferred_workflow_candidate",
+                "preferred_workflow_source_ref",
+                "preferred_workflow_format",
+                "style_preset_key",
+                "style_preset_label",
+                "style_positive_anchor",
+                "style_negative_anchor",
+                "style_selector",
+                "target_reference_image_path",
+                "semantic_source",
+            ],
+        )
     target_reference_path = (
         _normalize_path_text(args.target_reference)
         or _normalize_path_text(reference_bootstrap.get("target_reference_image_path"))
@@ -412,13 +493,18 @@ def main(argv: list[str] | None = None) -> int:
         reference_plan_item,
         character_entry,
         stage05_manifest,
+        bootstrap_overrides=bootstrap_overrides,
     )
+    explicit_provider_prompt = str(
+        bootstrap_overrides.get("provider_prompt") or bootstrap_overrides.get("prompt") or ""
+    ).strip() or None
     bootstrap_manifest, bootstrap_manifest_path = _build_reference_bootstrap_manifest(
         stage05_manifest,
         manifest_path,
         target_reference_path=target_reference_path,
         reference_bootstrap=reference_bootstrap,
         prompt=prompt,
+        provider_prompt=explicit_provider_prompt,
         negative_prompt=negative_prompt,
         lighting_prompt=lighting_prompt,
         camera_and_style_prompt=camera_and_style_prompt,
@@ -445,6 +531,15 @@ def main(argv: list[str] | None = None) -> int:
 
     target_path = (_project_dir_for_manifest(manifest_path) / target_reference_path).resolve()
     _copy_reference_image(output_path, target_path)
+    write_json(
+        _reference_bootstrap_receipt_path(target_path),
+        {
+            "target_reference_path": str(target_path).replace("\\", "/"),
+            "source_bootstrap_manifest": str(bootstrap_manifest_path).replace("\\", "/"),
+            "sanitized_shot_scoped_reference_guidance": True,
+            "created_at": stage05_manifest.get("created_at") or utc_now(),
+        },
+    )
 
     refreshed_character_bible = _refresh_character_bible(character_bible_path)
     prompts_path = _keyframe_prompts_path_for_manifest(stage05_manifest, manifest_path)

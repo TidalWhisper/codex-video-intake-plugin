@@ -6,6 +6,7 @@
   "required": [
     "characters",
     "reference_image_required",
+    "reference_image_handoff",
     "self_check"
   ],
   "properties": {
@@ -30,7 +31,8 @@
           "emotional_arc",
           "voice_profile",
           "visual_consistency_prompt",
-          "negative_consistency_prompt"
+          "negative_consistency_prompt",
+          "performance_profile"
         ],
         "properties": {
           "character_id": {"type": "string"},
@@ -70,6 +72,13 @@
           "performance_profile": {
             "type": "object",
             "additionalProperties": false,
+            "required": [
+              "baseline_expression",
+              "movement_style",
+              "gesture_rules",
+              "dialogue_delivery",
+              "continuity_anchor"
+            ],
             "properties": {
               "baseline_expression": {"type": "string"},
               "movement_style": {"type": "string"},
@@ -86,6 +95,25 @@
     },
     "reference_image_required": {
       "type": "boolean"
+    },
+    "reference_image_handoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ready_for_stage05",
+        "summary",
+        "next_action",
+        "capture_focus"
+      ],
+      "properties": {
+        "ready_for_stage05": {"type": "boolean"},
+        "summary": {"type": "string"},
+        "next_action": {"type": "string"},
+        "capture_focus": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
     },
     "self_check": {
       "type": "object",

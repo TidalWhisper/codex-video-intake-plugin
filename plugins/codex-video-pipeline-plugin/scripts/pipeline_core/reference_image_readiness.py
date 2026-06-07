@@ -8,12 +8,14 @@ def _clean_text(value: Any) -> str:
     return str(value or "").strip()
 
 
-def build_reference_image_plan(project_id: str, characters: list[dict[str, Any]]) -> dict[str, Any]:
+def build_reference_image_plan(project_id: str, characters: list[dict[str, Any]], *, required: bool) -> dict[str, Any]:
     plan = {
         "project_id": project_id,
-        "required": True,
+        "required": bool(required),
         "reference_images": [],
     }
+    if not required:
+        return plan
     for character in characters:
         if not isinstance(character, dict):
             continue
@@ -39,6 +41,7 @@ def _resolve_target_path(stage03_dir: Path, target_path: str) -> Path:
 
 
 def build_reference_image_status(stage03_dir: Path, reference_plan: dict[str, Any]) -> dict[str, Any]:
+    required = bool(reference_plan.get("required", True))
     reference_images = reference_plan.get("reference_images") if isinstance(reference_plan.get("reference_images"), list) else []
     target_paths: list[str] = []
     existing_paths: list[str] = []
@@ -64,11 +67,11 @@ def build_reference_image_status(stage03_dir: Path, reference_plan: dict[str, An
             "file_exists": exists,
         })
     return {
-        "required": bool(reference_plan.get("required", True)),
+        "required": required,
         "target_paths": target_paths,
         "existing_paths": existing_paths,
         "missing_paths": missing_paths,
-        "all_present": bool(target_paths) and not missing_paths if target_paths else False,
+        "all_present": True if not required else (bool(target_paths) and not missing_paths if target_paths else False),
         "item_count": len(target_paths),
         "missing_count": len(missing_paths),
         "items": detailed_items,
@@ -80,21 +83,22 @@ def build_stage05_execution_readiness(
     continuity_mode: str,
     reference_image_required: bool,
     reference_image_status: dict[str, Any],
+    stage05_ready_from_codex: bool | None = None,
+    blocker_reasons: list[str] | None = None,
 ) -> dict[str, Any]:
     missing_paths = [
         _clean_text(item)
         for item in (reference_image_status.get("missing_paths") or [])
         if _clean_text(item)
     ]
-    safe_to_auto_generate = True
-    blocker_reasons: list[str] = []
+    computed_blockers: list[str] = []
     if continuity_mode == "character_locked" and reference_image_required and missing_paths:
-        safe_to_auto_generate = False
-        blocker_reasons.append("missing_character_reference_images")
+        computed_blockers.append("missing_character_reference_images")
+    safe_to_auto_generate = stage05_ready_from_codex if stage05_ready_from_codex is not None else not computed_blockers
     return {
         "continuity_mode": continuity_mode,
         "reference_image_required": bool(reference_image_required),
         "safe_to_auto_generate": safe_to_auto_generate,
-        "blocker_reasons": blocker_reasons,
+        "blocker_reasons": list(blocker_reasons) if blocker_reasons is not None else computed_blockers,
         "missing_reference_images": missing_paths,
     }
