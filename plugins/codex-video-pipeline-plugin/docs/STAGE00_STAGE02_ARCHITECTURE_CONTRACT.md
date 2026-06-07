@@ -303,15 +303,15 @@ Must prove that Stage02 prompt-packet construction preserves:
 
 ### Gate 4: Repository change gate
 
-Every repository modification must pass the executable gate stack.
+The repository change gate is now only the fast hygiene gate at commit time.
 
-At minimum, the gate stack must block:
+At minimum, it must block:
 
 - generated/temp files
-- syntax-broken Python
-- Stage00 -> Stage01 official-entry regressions
-- Stage01 formal-source regressions
-- Stage01 -> Stage02 contract regressions
+
+Targeted compile checks, contract checks, and entry/regression tests should be
+run intentionally when a change touches this chain; they are no longer assumed
+to run automatically inside the commit gate.
 
 ## Change Policy
 

@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## Unreleased
+
+- 清理并收口根入口文档、插件入口文档和当前任务契约，使其反映当前真实插件结构。
+- 将历史批次计划和监督日志降级为归档背景，不再作为启动必读入口。
+- 同步 Stage00-Stage02 文档里关于 `repo_change_gate.py` 的说明，避免继续误写成慢速全套回归 gate。
+
 ## 1.1.3
 
 - 修正目录结构，避免 `codex-video-intake-plugin/plugins/codex-video-intake-plugin` 套娃式重名。
@@ -7,10 +13,3 @@
 - 内层真正插件目录改为 `plugins/codex-video-pipeline-plugin/`。
 - 插件显示名改为 `Codex Video Pipeline`。
 - 更新 install_personal_plugin.cmd / verify_package.cmd / run_all_tests.py 以适配新结构。
-- 保留 Stage 00-09 全部流程框架与后续 GPT Image 2 / ComfyUI 开发计划。
-
-## 1.1.4
-
-- 删除历史计划、进度、反馈类文档，不再把它们作为当前实现依据。
-- 重建仓库级 `.codex/current-task-contract.md` 作为唯一权威上下文。
-- 收紧入口规则：测试仅允许由监督者 Agent 从 `$video-production-pipeline` 入口执行。

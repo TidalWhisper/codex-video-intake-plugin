@@ -9,15 +9,15 @@
 ```text
 plugins/codex-video-pipeline-plugin/
 ├─ .codex-plugin/
-├─ skills/
 ├─ docs/
-├─ config/
-├─ workflows/
-├─ templates/
-└─ tests/
+├─ prompts/
+├─ scripts/
+├─ skills/
+├─ tests/
+└─ workflows/
 ```
 
-外层 `codex-video-intake-plugin/` 是本地安装包 / marketplace wrapper，不是真正的插件本体。
+外层 `codex-video-intake-plugin/` 是安装包 / marketplace wrapper，不是真正的插件本体。
 
 ## 推荐入口
 
@@ -25,41 +25,50 @@ plugins/codex-video-pipeline-plugin/
 $video-production-pipeline
 ```
 
-如果你想直接查看“当前项目卡在哪、下一步该点哪里”，可以运行：
+## 当前插件真实能力
+
+当前仓库已经包含：
+
+- Stage 00-09 流程框架
+- manifest / validator / project_state / creator-facing 状态产物
+- Stage00-Stage04 正式 stage runner
+- Stage05 reference-guided keyframe image 主线
+- Stage06 / Stage07 显式确认与继续执行脚本
+- provider 配置与健康检查脚手架
+- OpenAI GPT Image 2 / ComfyUI txt2img / LTX I2V / IndexTTS2 / Music runners
+- `workflows/comfyui/` 下的仓库内置 workflow JSON
+
+## 当前本地依赖边界
+
+仓库虽然已经内置 workflow 文件和运行脚手架，但本机仍需要准备：
+
+- `config/providers.yaml`
+- `config/workflow_node_mapping.yaml`
+- 可访问的本地 ComfyUI
+- 对应模型、节点和工作流运行环境
+
+## creator-facing 恢复入口
+
+如果你想直接看“当前项目卡在哪、下一步该点哪里”，可以运行：
 
 ```bash
 python skills/video-production-pipeline/scripts/show_creator_home.py
 ```
 
-它会自动同步最新项目状态，并给出：
+它会同步当前项目状态，并输出这些恢复面：
 
-- `creator_home.html`：普通创作者主页
-- `reference_image_start_here.md`：角色参考图补齐入口
-- `stage05_review_workbench.html`：Stage 05 默认审图工作台
+- `creator_home.html`
+- `03_characters/reference_image_start_here.md`
+- `04_keyframes/stage05_start_here.md`
+- `05_images/stage05_review_workbench.html`
 
-## 当前状态
-
-已包含：
-
-- Stage 00-09 流程框架
-- manifest / validator
-- provider 配置与健康检查
-- OpenAI GPT Image 2 图片生成 runner
-- ComfyUI txt2img / LTX I2V / IndexTTS2 / Music runners
-- Stage 05 → Stage 09 provider-backed 自动化测试
-
-当前仍有本机依赖，但已完成一次最小真实样本冒烟：
+## 继续开发前建议先读
 
 ```text
-仓库内不内置可直接复用的真实 ComfyUI workflow_api.json
-config/providers.yaml 与 config/workflow_node_mapping.yaml 仍需本机配置
-2026-05-28 已在 video_projects/real_smoke_20260528_stage0509/ 跑通一条真实 Stage 05-09 样本链路
-Stage 07 默认 ComfyUI 音乐 workflow 已切到 AceStep，当前机器仍保留 local_music_library fallback
-```
-
-后续开发请先读：
-
-```text
-CODEX_START_HERE.md
 ../../.codex/current-task-contract.md
+CODEX_START_HERE.md
+docs/PROVIDER_INTEGRATION_CONTRACTS.md
+docs/CODEX_LOCAL_TASK_RUNBOOK.md
+docs/STAGE00_STAGE02_ARCHITECTURE_CONTRACT.md
+docs/STAGE05_MAINLINE_GUARDRAILS.md
 ```
